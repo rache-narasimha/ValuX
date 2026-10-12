@@ -1,0 +1,1413 @@
+{
+  "version": 2,
+  "template": "Valuation_Report_Master_Template_Phase2.docx",
+  "property_categories": [
+    "residential_plot",
+    "commercial_plot",
+    "industrial_plot",
+    "residential_land_building",
+    "commercial_land_building",
+    "industrial_land_building"
+  ],
+  "construction_statuses": [
+    "existing",
+    "under_construction",
+    "proposed",
+    "purchase_loan"
+  ],
+  "groups": [
+    {
+      "id": "report",
+      "label": "Report"
+    },
+    {
+      "id": "documents",
+      "label": "Documents"
+    },
+    {
+      "id": "parties",
+      "label": "Parties"
+    },
+    {
+      "id": "property",
+      "label": "Property"
+    },
+    {
+      "id": "boundaries",
+      "label": "Boundaries"
+    },
+    {
+      "id": "dimensions",
+      "label": "Dimensions"
+    },
+    {
+      "id": "site",
+      "label": "Site"
+    },
+    {
+      "id": "land",
+      "label": "Land"
+    },
+    {
+      "id": "building",
+      "label": "Building"
+    },
+    {
+      "id": "construction",
+      "label": "Construction"
+    },
+    {
+      "id": "floors",
+      "label": "Floors"
+    },
+    {
+      "id": "extra_items",
+      "label": "Extra Items"
+    },
+    {
+      "id": "amenities",
+      "label": "Amenities"
+    },
+    {
+      "id": "miscellaneous",
+      "label": "Miscellaneous"
+    },
+    {
+      "id": "services",
+      "label": "Services"
+    },
+    {
+      "id": "valuation",
+      "label": "Valuation"
+    },
+    {
+      "id": "valuation_abstract",
+      "label": "Valuation Abstract"
+    },
+    {
+      "id": "media",
+      "label": "Media"
+    }
+  ],
+  "fields": [
+    {
+      "id": "report.valuation_date",
+      "label": "Date of valuation",
+      "group": "Report",
+      "type": "date",
+      "required": true
+    },
+    {
+      "id": "property.summary_description",
+      "label": "Property description for cover letter",
+      "group": "Property",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "valuation.present_market_value",
+      "label": "Present market value",
+      "group": "Valuation",
+      "type": "currency",
+      "required": true,
+      "calculated": true
+    },
+    {
+      "id": "valuation.realizable_value",
+      "label": "Realizable value",
+      "group": "Valuation",
+      "type": "currency",
+      "required": true,
+      "calculated": true,
+      "formula": "present_market_value * 0.90"
+    },
+    {
+      "id": "valuation.distress_value",
+      "label": "Distress value",
+      "group": "Valuation",
+      "type": "currency",
+      "required": true,
+      "calculated": true,
+      "formula": "present_market_value * 0.80"
+    },
+    {
+      "id": "valuation.government_value",
+      "label": "Government value",
+      "group": "Valuation",
+      "type": "currency",
+      "required": false
+    },
+    {
+      "id": "report.purpose",
+      "label": "Purpose of valuation",
+      "group": "Report",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "report.inspection_date",
+      "label": "Date of inspection",
+      "group": "Report",
+      "type": "date",
+      "required": true
+    },
+    {
+      "id": "report.valuation_date_detail",
+      "label": "Date of valuation",
+      "group": "Report",
+      "type": "date",
+      "required": true,
+      "source": "report.valuation_date"
+    },
+    {
+      "id": "documents.deed_type",
+      "label": "Deed type",
+      "group": "Documents",
+      "type": "select",
+      "required": true,
+      "options": [
+        "Sale Deed",
+        "Rectification Deed",
+        "Partition Deed",
+        "Relinquishment Deed",
+        "Approved Plan",
+        "Legal Scrutiny Report",
+        "Tax Paid Receipt",
+        "Custom"
+      ]
+    },
+    {
+      "id": "documents.deed_details",
+      "label": "Deed number and date",
+      "group": "Documents",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "documents.approved_plan",
+      "label": "Approved plan details",
+      "group": "Documents",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "documents.legal_scrutiny",
+      "label": "Legal scrutiny report",
+      "group": "Documents",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "documents.tax_receipt",
+      "label": "Tax paid receipt",
+      "group": "Documents",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "owner.details",
+      "label": "4(a) Owner name, address and phone",
+      "group": "Parties",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "purchaser.details",
+      "label": "4(b) Purchaser name, address and phone",
+      "group": "Parties",
+      "type": "textarea",
+      "required": false
+    },
+    {
+      "id": "property.description",
+      "label": "Brief description of property",
+      "group": "Property",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "property.plot_survey_number",
+      "label": "Plot and survey number",
+      "group": "Property",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "property.door_number",
+      "label": "Door number",
+      "group": "Property",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "property.village",
+      "label": "Village or locality",
+      "group": "Property",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "property.ward_taluka",
+      "label": "Ward or taluka",
+      "group": "Property",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "property.mandal_district",
+      "label": "Mandal and district",
+      "group": "Property",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "property.postal_address",
+      "label": "Postal address",
+      "group": "Property",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "property.city",
+      "label": "City or town",
+      "group": "Property",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "property.area.residential",
+      "label": "Residential area",
+      "group": "Property",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "id": "property.area.commercial",
+      "label": "Commercial area",
+      "group": "Property",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "id": "property.area.industrial",
+      "label": "Industrial area",
+      "group": "Property",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "id": "property.area_quality",
+      "label": "Area classification",
+      "group": "Property",
+      "type": "select",
+      "required": false,
+      "options": ["High", "Middle", "Poor"]
+    },
+    {
+      "id": "property.urban_classification",
+      "label": "Urban classification",
+      "group": "Property",
+      "type": "select",
+      "required": false,
+      "options": ["Urban", "Semi Urban", "Rural"]
+    },
+    {
+      "id": "property.local_authority_limit",
+      "label": "Local authority limit",
+      "group": "Property",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "property.government_enactment",
+      "label": "Government enactment coverage",
+      "group": "Property",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "property.agricultural_conversion",
+      "label": "Agricultural conversion",
+      "group": "Property",
+      "type": "text",
+      "required": false,
+      "conditional": "property.category == agricultural"
+    },
+    {
+      "id": "property.boundary.north.deed",
+      "label": "North boundary as per deed",
+      "group": "Boundaries",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "property.boundary.north.actual",
+      "label": "North boundary as per actual",
+      "group": "Boundaries",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "property.boundary.south.deed",
+      "label": "South boundary as per deed",
+      "group": "Boundaries",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "property.boundary.south.actual",
+      "label": "South boundary as per actual",
+      "group": "Boundaries",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "property.boundary.east.deed",
+      "label": "East boundary as per deed",
+      "group": "Boundaries",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "property.boundary.east.actual",
+      "label": "East boundary as per actual",
+      "group": "Boundaries",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "property.boundary.west.deed",
+      "label": "West boundary as per deed",
+      "group": "Boundaries",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "property.boundary.west.actual",
+      "label": "West boundary as per actual",
+      "group": "Boundaries",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "property.dimension.north.deed",
+      "label": "North dimension as per deed",
+      "group": "Dimensions",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "property.dimension.north.actual",
+      "label": "North dimension as per actual",
+      "group": "Dimensions",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "property.dimension.south.deed",
+      "label": "South dimension as per deed",
+      "group": "Dimensions",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "property.dimension.south.actual",
+      "label": "South dimension as per actual",
+      "group": "Dimensions",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "property.dimension.east.deed",
+      "label": "East dimension as per deed",
+      "group": "Dimensions",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "property.dimension.east.actual",
+      "label": "East dimension as per actual",
+      "group": "Dimensions",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "property.dimension.west.deed",
+      "label": "West dimension as per deed",
+      "group": "Dimensions",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "property.dimension.west.actual",
+      "label": "West dimension as per actual",
+      "group": "Dimensions",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "property.coordinates",
+      "label": "Latitude and longitude",
+      "group": "Property",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "property.site_extent",
+      "label": "Site extent",
+      "group": "Land",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "property.valuation_extent",
+      "label": "Extent considered for valuation",
+      "group": "Land",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "property.road_affected_area",
+      "label": "Road affected area",
+      "group": "Property",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "property.occupancy",
+      "label": "Occupancy and rent details",
+      "group": "Property",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.classification",
+      "label": "Locality classification",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.surrounding_development",
+      "label": "Development of surrounding area",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.flooding",
+      "label": "Flooding or submerging possibility",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.civic_amenities",
+      "label": "Distance to civic amenities",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.topography",
+      "label": "Topographical condition",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.shape",
+      "label": "Shape of land",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.permitted_use",
+      "label": "Permitted use",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.usage_restriction",
+      "label": "Usage restriction",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.layout_approval",
+      "label": "Town-planning layout approval",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.plot_position",
+      "label": "Corner or intermediate plot",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.road_facilities",
+      "label": "Road facilities",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.road_type",
+      "label": "Road type",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.road_width",
+      "label": "Road width",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.land_locked",
+      "label": "Landlocked property",
+      "group": "Site",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "id": "site.water_potential",
+      "label": "Water potential",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.sewerage",
+      "label": "Underground sewerage",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.power_supply",
+      "label": "Power supply",
+      "group": "Site",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "id": "site.advantage_1",
+      "label": "Site advantage 1",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.advantage_2",
+      "label": "Site advantage 2",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.special_remarks",
+      "label": "Special remarks",
+      "group": "Site",
+      "type": "textarea",
+      "required": false
+    },
+    {
+      "id": "site.special_remark_1",
+      "label": "Additional remark 1",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "site.special_remark_2",
+      "label": "Additional remark 2",
+      "group": "Site",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "land.north_south_size",
+      "label": "North south size",
+      "group": "Land",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "land.east_west_size",
+      "label": "East west size",
+      "group": "Land",
+      "type": "text",
+      "required": false
+    },
+    {
+      "id": "land.total_extent",
+      "label": "Total plot extent",
+      "group": "Land",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "land.prevailing_market_rate",
+      "label": "Prevailing market rate",
+      "group": "Land",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "land.guideline_rate",
+      "label": "Government guideline rate",
+      "group": "Land",
+      "type": "text",
+      "required": true
+    },
+    {
+      "id": "land.adopted_rate",
+      "label": "Adopted land rate",
+      "group": "Land",
+      "type": "currency_rate",
+      "required": true
+    },
+    {
+      "id": "land.estimated_value",
+      "label": "Estimated land value",
+      "group": "Land",
+      "type": "currency",
+      "required": true,
+      "calculated": true,
+      "formula": "valuation_extent * adopted_rate"
+    },
+    {
+      "id": "building.type",
+      "label": "Building use type",
+      "group": "Building",
+      "type": "select",
+      "required": false,
+      "options": ["Residential", "Commercial", "Industrial"],
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "building.construction_type",
+      "label": "Construction type",
+      "group": "Building",
+      "type": "select",
+      "required": false,
+      "options": ["Load Bearing", "RCC Framed", "Steel Framed"],
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "building.year_age_residual",
+      "label": "Construction year age and residual life",
+      "group": "Building",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "building.floor_summary",
+      "label": "Floor and height summary",
+      "group": "Building",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "calculated": true
+    },
+    {
+      "id": "building.plinth_summary",
+      "label": "Floor-wise plinth area",
+      "group": "Building",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "calculated": true
+    },
+    {
+      "id": "building.condition",
+      "label": "Building condition",
+      "group": "Building",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "building.plan_validity",
+      "label": "Approved plan date and validity",
+      "group": "Building",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "building.plan_authority",
+      "label": "Plan issuing authority",
+      "group": "Building",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "building.plan_verified",
+      "label": "Plan authenticity verified",
+      "group": "Building",
+      "type": "boolean",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "building.plan_comments",
+      "label": "Plan authenticity comments",
+      "group": "Building",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.foundation",
+      "label": "Foundation",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.basement",
+      "label": "Basement",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.superstructure",
+      "label": "Superstructure",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.joinery",
+      "label": "Joinery",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.rcc_works",
+      "label": "Rcc Works",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.plastering",
+      "label": "Plastering",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.flooring",
+      "label": "Flooring",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.special_finish",
+      "label": "Special Finish",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.roofing",
+      "label": "Roofing",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.drainage",
+      "label": "Drainage",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.compound_wall_height",
+      "label": "Compound wall height",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.compound_wall_length",
+      "label": "Compound wall length",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.compound_wall_type",
+      "label": "Compound wall construction",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.wiring",
+      "label": "Type of wiring",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.fittings_class",
+      "label": "Class of electrical fittings",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.light_points",
+      "label": "Number of light points",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.fan_points",
+      "label": "Fan points",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.spare_plugs",
+      "label": "Spare plug points",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.electrical_other",
+      "label": "Other electrical item",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.water_closets",
+      "label": "Water closets",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.wash_basins",
+      "label": "Wash basins",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.urinals",
+      "label": "Urinals",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.bath_tubs",
+      "label": "Bath tubs",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.water_meters_taps",
+      "label": "Water meters and taps",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "construction.other_fixtures",
+      "label": "Other plumbing fixtures",
+      "group": "Construction",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "building.floors.1.name",
+      "label": "Floor 1 name",
+      "group": "Floors",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "repeatable_group": "building.floors",
+      "calculated": false
+    },
+    {
+      "id": "building.floors.1.plinth_area",
+      "label": "Floor 1 plinth area",
+      "group": "Floors",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "repeatable_group": "building.floors",
+      "calculated": false
+    },
+    {
+      "id": "building.floors.1.roof_height",
+      "label": "Floor 1 roof height",
+      "group": "Floors",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "repeatable_group": "building.floors",
+      "calculated": false
+    },
+    {
+      "id": "building.floors.1.age",
+      "label": "Floor 1 age",
+      "group": "Floors",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "repeatable_group": "building.floors",
+      "calculated": false
+    },
+    {
+      "id": "building.floors.1.replacement_rate",
+      "label": "Floor 1 replacement rate",
+      "group": "Floors",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "repeatable_group": "building.floors",
+      "calculated": false
+    },
+    {
+      "id": "building.floors.1.replacement_cost",
+      "label": "Floor 1 replacement cost",
+      "group": "Floors",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "repeatable_group": "building.floors",
+      "calculated": true
+    },
+    {
+      "id": "building.floors.1.depreciation",
+      "label": "Floor 1 depreciation",
+      "group": "Floors",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "repeatable_group": "building.floors",
+      "calculated": true
+    },
+    {
+      "id": "building.floors.1.net_value",
+      "label": "Floor 1 net value",
+      "group": "Floors",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "repeatable_group": "building.floors",
+      "calculated": true
+    },
+    {
+      "id": "building.floors.2.name",
+      "label": "Floor 2 name",
+      "group": "Floors",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "repeatable_group": "building.floors",
+      "calculated": false
+    },
+    {
+      "id": "building.floors.2.plinth_area",
+      "label": "Floor 2 plinth area",
+      "group": "Floors",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "repeatable_group": "building.floors",
+      "calculated": false
+    },
+    {
+      "id": "building.floors.2.roof_height",
+      "label": "Floor 2 roof height",
+      "group": "Floors",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "repeatable_group": "building.floors",
+      "calculated": false
+    },
+    {
+      "id": "building.floors.2.age",
+      "label": "Floor 2 age",
+      "group": "Floors",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "repeatable_group": "building.floors",
+      "calculated": false
+    },
+    {
+      "id": "building.floors.2.replacement_rate",
+      "label": "Floor 2 replacement rate",
+      "group": "Floors",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "repeatable_group": "building.floors",
+      "calculated": false
+    },
+    {
+      "id": "building.floors.2.replacement_cost",
+      "label": "Floor 2 replacement cost",
+      "group": "Floors",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "repeatable_group": "building.floors",
+      "calculated": true
+    },
+    {
+      "id": "building.floors.2.depreciation",
+      "label": "Floor 2 depreciation",
+      "group": "Floors",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "repeatable_group": "building.floors",
+      "calculated": true
+    },
+    {
+      "id": "building.floors.2.net_value",
+      "label": "Floor 2 net value",
+      "group": "Floors",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building",
+      "repeatable_group": "building.floors",
+      "calculated": true
+    },
+    {
+      "id": "extra.item_1",
+      "label": "Extra Items item 1",
+      "group": "Extra Items",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "extra.item_2",
+      "label": "Extra Items item 2",
+      "group": "Extra Items",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "extra.item_3",
+      "label": "Extra Items item 3",
+      "group": "Extra Items",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "extra.item_4",
+      "label": "Extra Items item 4",
+      "group": "Extra Items",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "extra.item_5",
+      "label": "Extra Items item 5",
+      "group": "Extra Items",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "amenity.item_1",
+      "label": "Amenities item 1",
+      "group": "Amenities",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "amenity.item_2",
+      "label": "Amenities item 2",
+      "group": "Amenities",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "amenity.item_3",
+      "label": "Amenities item 3",
+      "group": "Amenities",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "amenity.item_4",
+      "label": "Amenities item 4",
+      "group": "Amenities",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "amenity.item_5",
+      "label": "Amenities item 5",
+      "group": "Amenities",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "amenity.item_6",
+      "label": "Amenities item 6",
+      "group": "Amenities",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "amenity.item_7",
+      "label": "Amenities item 7",
+      "group": "Amenities",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "amenity.item_8",
+      "label": "Amenities item 8",
+      "group": "Amenities",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "amenity.item_9",
+      "label": "Amenities item 9",
+      "group": "Amenities",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "amenity.item_10",
+      "label": "Amenities item 10",
+      "group": "Amenities",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "misc.item_1",
+      "label": "Miscellaneous item 1",
+      "group": "Miscellaneous",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "misc.item_2",
+      "label": "Miscellaneous item 2",
+      "group": "Miscellaneous",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "misc.item_3",
+      "label": "Miscellaneous item 3",
+      "group": "Miscellaneous",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "misc.item_4",
+      "label": "Miscellaneous item 4",
+      "group": "Miscellaneous",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "service.item_1",
+      "label": "Services item 1",
+      "group": "Services",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "service.item_2",
+      "label": "Services item 2",
+      "group": "Services",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "service.item_3",
+      "label": "Services item 3",
+      "group": "Services",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "service.item_4",
+      "label": "Services item 4",
+      "group": "Services",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "service.item_5",
+      "label": "Services item 5",
+      "group": "Services",
+      "type": "text",
+      "required": false,
+      "conditional": "property.has_building"
+    },
+    {
+      "id": "abstract.land",
+      "label": "Land value",
+      "group": "Valuation Abstract",
+      "type": "currency",
+      "required": false,
+      "calculated": true
+    },
+    {
+      "id": "abstract.building",
+      "label": "Building value",
+      "group": "Valuation Abstract",
+      "type": "currency",
+      "required": false,
+      "calculated": true
+    },
+    {
+      "id": "abstract.extra",
+      "label": "Extra items value",
+      "group": "Valuation Abstract",
+      "type": "currency",
+      "required": false,
+      "calculated": true
+    },
+    {
+      "id": "abstract.amenities",
+      "label": "Amenities value",
+      "group": "Valuation Abstract",
+      "type": "currency",
+      "required": false,
+      "calculated": true
+    },
+    {
+      "id": "abstract.miscellaneous",
+      "label": "Miscellaneous value",
+      "group": "Valuation Abstract",
+      "type": "currency",
+      "required": false,
+      "calculated": true
+    },
+    {
+      "id": "abstract.services",
+      "label": "Services value",
+      "group": "Valuation Abstract",
+      "type": "currency",
+      "required": false,
+      "calculated": true
+    },
+    {
+      "id": "abstract.machinery",
+      "label": "Machinery value",
+      "group": "Valuation Abstract",
+      "type": "currency",
+      "required": false,
+      "calculated": true
+    },
+    {
+      "id": "abstract.total",
+      "label": "Total value",
+      "group": "Valuation Abstract",
+      "type": "currency",
+      "required": false,
+      "calculated": true
+    },
+    {
+      "id": "abstract.present_market_value",
+      "label": "Present market value",
+      "group": "Valuation Abstract",
+      "type": "currency",
+      "required": false,
+      "calculated": true
+    }
+  ],
+  "media": {
+    "photos": {
+      "max_per_page": 9,
+      "columns": 3
+    },
+    "map": {
+      "position": "last"
+    }
+  },
+  "fixed_rules": {
+    "realizable_percent": 90,
+    "distress_percent": 80,
+    "highlight_only": "present_market_value",
+    "cover_fair_market_value_color": "#0070C0",
+    "depreciation_formula_status": "pending_user_confirmation"
+  }
+}

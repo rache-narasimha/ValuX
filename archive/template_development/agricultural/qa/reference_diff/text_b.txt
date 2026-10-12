@@ -1,0 +1,352 @@
+Format-B
+{{VALUER_NAME_ADDRESS}}
+To
+{{BANK_NAME_UPPER}}
+BRANCH: {{BRANCH_NAME}}
+VALUATION REPORT (IN RESPECT OF AGRICULTURAL LANDS)
+(To be filled in by the Approved Valuer)
+I.
+GENERAL
+1.
+Purpose for which the valuation is made
+:
+{{VALUATION_PURPOSE}}
+2.
+a)
+Date of inspection
+:
+{{INSPECTION_DATE}}
+b)
+Date on which the valuation is made
+:
+{{VALUATION_DATE}}
+3.
+List of documents produced for perusal
+{{DOCUMENT_1_TYPE}}
+:
+{{DOCUMENT_1_DETAILS}}
+{{DOCUMENT_2_TYPE}}
+:
+{{DOCUMENT_2_DETAILS}}
+{{DOCUMENT_3_TYPE}}
+:
+{{DOCUMENT_3_DETAILS}}
+4.
+Name of the owner(s) and his / their address (es) with Phone no. (details of share of each owner in case of joint ownership)
+:
+{{OWNER_DETAILS}}
+5.
+Brief description of the property
+:
+{{PROPERTY_DESCRIPTION}}
+6.
+Location of property
+a)
+Plot No. / Survey No.
+:
+{{SURVEY_NUMBER}}
+b)
+Door No.
+:
+{{DOOR_NUMBER}}
+c)
+T. S. No. / Village
+:
+{{VILLAGE}}
+d)
+Ward / Taluka
+:
+{{TALUKA}}
+e)
+Mandal / District
+:
+{{MANDAL_DISTRICT}}
+7.
+Postal address of the property
+:
+{{POSTAL_ADDRESS}}
+8.
+Coming under Corporation limit / Village Panchayat / Municipality
+:
+{{LOCAL_AUTHORITY}}
+9.
+Whether covered under any State / Central Govt. enactments (e.g. Urban Land Ceiling Act) or notified under agency area / scheduled area / cantonment area
+:
+{{ENACTMENT_STATUS}}
+10.
+Is any conversion to house site plots comtemplated?
+:
+{{CONVERSION_CONTEMPLATED}}
+11.
+Boundaries of the property (As per deed)
+:
+As per actual
+North : {{BOUNDARY_DEED_NORTH}}
+:
+{{BOUNDARY_ACTUAL_NORTH}}
+South : {{BOUNDARY_DEED_SOUTH}}
+:
+{{BOUNDARY_ACTUAL_SOUTH}}
+East : {{BOUNDARY_DEED_EAST}}
+:
+{{BOUNDARY_ACTUAL_EAST}}
+West : {{BOUNDARY_DEED_WEST}}
+:
+{{BOUNDARY_ACTUAL_WEST}}
+12.
+Dimensions of the site
+:
+A
+B
+As per the Deed
+Actuals
+North
+:
+{{DIM_DEED_N}}
+{{DIM_ACTUAL_N}}
+South
+:
+{{DIM_DEED_S}}
+{{DIM_ACTUAL_S}}
+East
+:
+{{DIM_DEED_E}}
+{{DIM_ACTUAL_E}}
+West
+:
+{{DIM_DEED_W}}
+{{DIM_ACTUAL_W}}
+13
+Extent of the site
+:
+{{SITE_EXTENT}}
+13.a
+Latitude, Longitude and Coordinates of the site
+{{COORDINATES}}
+14
+Extent of the site considered for valuation (least of 12 A & 12 B)
+:
+{{VALUATION_EXTENT}}
+15
+Whether occupied by the owner / lessee?  If cultivated by lessee, since how long and type of tenancy agreement?
+:
+{{OCCUPATION_DETAILS}}
+16
+Income received (per year)
+:
+{{ANNUAL_INCOME}}
+II.
+CHARACTERISTICS OF THE SITE
+:
+1.
+Whether the land under consideration is suitable for cultivation
+:
+{{CULTIVATION_SUITABLE}}
+2.
+Irrigation facilities – canal / well / bore / rain-fed
+:
+{{IRRIGATION_FACILITIES}}
+3.
+Possibility of frequent flooding / sub-merging
+:
+{{FLOODING_RISK}}
+4.
+Level of land with topographical conditions.
+:
+{{TOPOGRAPHY}}
+5.
+Shape of land
+:
+{{LAND_SHAPE}}
+6.
+Is it a Land – locked land?
+:
+{{LAND_LOCKED}}
+7.
+Whether any cottages / buildings exist in the Land?
+:
+{{EXISTING_BUILDINGS}}
+8.
+Whether fencing and gates are arranged?
+:
+{{FENCING_GATES}}
+9.
+General conditions of the land
+:
+{{LAND_CONDITION}}
+10.
+Quality of soil of the sand
+:
+{{SOIL_QUALITY}}
+11.
+Whether the land is situated on a Main / National Highway Road? If not, distance from the Main / Highway Road.
+:
+{{ROAD_ACCESS}}
+12.
+Types of crops grown
+:
+{{CROPS_GROWN}}
+13.
+Water supply & electricity facilities.
+:
+{{WATER_ELECTRICITY}}
+14.
+Advantage of the site
+:
+1.
+:
+{{ADVANTAGE_1}}
+2.
+:
+{{ADVANTAGE_2}}
+15.
+Disadvantages of the land
+:
+1.
+:
+{{DISADVANTAGE_1}}
+2.
+:
+{{DISADVANTAGE_2}}
+16.
+Special remarks, if any, like threat of acquisition of land for public service purposes, road widening or applicability of CRZ provisions etc. (Distance from sea-coast / tidal level must be incorporated)
+:
+{{SPECIAL_REMARKS}}
+III. VALUATION OF AGRICULTURAL LAND
+1.
+Size of land
+:
+North & South
+:
+{{SIZE_NORTH_SOUTH}}
+East & West
+:
+{{SIZE_EAST_WEST}}
+2.
+Total extent of the land
+:
+{{TOTAL_EXTENT}}
+3.
+Prevailing market rate (per acre) (Along with details /reference of atleast two latest deals/transactions with respect to adjacent properties in the areas)
+:
+{{PREVAILING_RATE}}
+4.
+Guideline rate obtained from the Registrar’s Office / Mandal Revenue office (an evidence thereof to be enclosed)
+:
+{{GUIDELINE_RATE}}
+5.
+Assessed / adopted rate of valuation
+:
+{{ADOPTED_RATE}}
+6.
+Estimated value of land
+:
+{{ESTIMATED_VALUE}}
+As a result of my appraisal and analysis, it is my considered opinion that the present fair market value of the above property in the prevailing condition with aforesaid specifications is Rs. {{ESTIMATED_VALUE}} (Rupees {{ESTIMATED_VALUE_WORDS}} only). The book value of the above property as of {{REPORT_DATE}} (Report date) is Rs. {{BOOK_VALUE}} (Rupees {{BOOK_VALUE_WORDS}} only) and the distress value is Rs. {{DISTRESS_VALUE}} (Rupees {{DISTRESS_VALUE_WORDS}} only).
+Signature
+(Name and Official Seal of the Approved Valuer)
+The undersigned has inspected the property detailed in the Valuation Report dated ---------------- on -------------------. We are satisfied that the fair and reasonable market value of the property is Rs. ----------------- (Rupees ------------------------------ only)
+Signature
+(Name of the Branch Manager with Office Seal)
+Date:
+PROPERTY PHOTOGRAPHS{{PROPERTY_PHOTOGRAPHS}}
+ROUTE MAP{{ROUTE_MAP}}
+DECLARATION FROM VALUER
+I hereby declare that
+The information furnished in my Valuation Report dt.{{REPORT_DATE}} is true and correct to the best of my knowledge and belief and I have made an impartial and true valuation of the property.
+I have no direct or indirect interest in the property valued.
+I have personally inspected the right property on {{INSPECTION_DATE}}. The work is not sub contracted to any other valuer and carried-out by myself.
+I have not been convicted of any offence and sentenced to a term of imprisonment.
+I have not been found guilt of misconduct in my professional capacity.
+I have read the hand book on policy, standards and procedure for real estate valuation, 2011 of the IBA and this report is in conformity to the “Standards” enshrined for valuation in the part – B of the hand book to the best of my ability.
+I have read the international valuation standards (IVS) and the report submitted to the bank for the respective asset class is in conformity to the “Standards” as enshrined for valuation in the IVS in “General Standards” and “Asset Standards” as applicable.
+I abide by the Model Code of Conduct for empanelment of valuer in the bank.
+I am registered under section 34 AB of the Wealth Tax Act, 1957.
+I am the proprietor / partner / authorized official of the firm / company, who is competent to sign this valuation report.
+Further, I hereby provide the following information.
+S.No.
+Particulars
+Valuer Comment
+1
+Background information of the asset being valued
+{{DOCUMENTS_SUMMARY}}
+2
+Purpose of Valuation and appointing authority
+{{VALUATION_PURPOSE}}
+3
+Identity of the valuer and any other experts involved in the valuation
+{{VALUER_NAME}}
+4
+Disclosure of valuer interest or conflict, if any
+-
+5
+Date of appointment, valuation date and date of report
+{{ASSIGNMENT_DATE}}{{VALUATION_DATE}}{{REPORT_DATE}}
+6
+Inspections and / or investigations undertaken
+Physical inspection of the property
+7
+Nature and sources of the information used or relied upon
+Local enquiry, IGRS
+8
+Procedures adopted in carrying out the valuation and valuation standards followed
+As per IVS
+9
+Restrictions on use of the report, if any
+1.The purpose of this report is to assess the present value. This report is not to be referred if the purpose is anything else.
+2.Value varies with the purpose. It is a function of place, purpose and date. This certified value holds good as on the date of valuation and for the specific purpose mentioned in the report.
+3.Legal aspects not considered in this report.
+10
+Major factors that were taken into account during the valuation
+Local enquiries and availability of infrastructural facilities
+11
+Caveats, limitations and disclaimers to the extent they explain or elucidate the limitations faced by the valuer, which shall not be for the purpose of limiting his responsibility for the valuation report.
+1. This report is issued to {{BANK_NAME}}, {{BRANCH_NAME}}. This report is not to be referred to anybody including the owner for any other purpose.2. The bank is requested to accept only the original copy of this report.3. Value varies with the purpose. It is a function of place, purpose and date. This certified value holds good as on the date of valuation and for the specific purpose mentioned in the report.
+Date : {{REPORT_DATE}}Signature
+Place : {{REPORT_PLACE}}(Name of the Approved Valuer & seal of the firm / company)
+MODEL CODE OF CONDUCT FOR VALUERS
+(Adopted in line with Companies (Registered Valuers and Valuation Rules, 2017))
+All valuers empanelled with Bank shall strictly adhere to the following code of conduct:
+Integrity and Fairness
+A valuer shall, in the conduct of his/its business, follow high standards of integrity and fairness in all his/its dealings with his/its clients and other valuers.
+A valuer shall maintain integrity by being honest, straightforward, and forthright in all professional relationships.
+A valuer shall endeavour to ensure that he/it provides true and adequate information and shall not misrepresent any facts or situations.
+A valuer shall refrain from being involved in any action that would bring disrepute to the profession.
+A valuer shall keep public interest foremost while delivering his services.
+Professional Competence and Due Care
+A valuer shall render at all times high standards of service, exercise due diligence, ensure proper care and exercise independent professional judgment.
+A valuer shall carry out professional services in accordance with the relevant technical and professional standards that may be specified from time to time
+A valuer shall continuously maintain professional knowledge and skill to provide competent professional service based on up-to-date developments in practice, prevailing regulations/guidelines and techniques.
+In the preparation of a valuation report, the valuer shall not disclaim liability for his/its expertise or deny his/its duty of care, except to the extent that the assumptions are based on statements of fact provided by the company or its auditors or consultants or information available in public domain and not generated by the valuer.
+A valuer shall not carry out any instruction of the client insofar as they are incompatible with the requirements of integrity, objectivity and independence.
+A valuer shall clearly state to his client the services that he would be competent to provide and the services for which he would be relying on other valuers or professionals or for which the client can have a separate arrangement with other valuers.
+Independence and Disclosure of interest
+A valuer shall act with objectivity in his/its professional dealings by ensuring that his/its decisions are made without the presence of any bias, conflict of interest, coercion, or undue influence of any party, whether directly connected to the valuation assignment or not.
+A valuer shall not take up an assignment if he/it or any of his/its relatives or associates is not independent in terms of association to the company.
+A valuer shall maintain complete independence in his/its professional relationships and shall conduct the valuation independent of external influences.
+A valuer shall wherever necessary disclose to the clients, possible sources of conflicts of duties and interests, while providing unbiased services.
+A valuer shall not deal in securities of any subject company after any time when he/it first becomes aware of the possibility of his/its association with the valuation, and in accordance with the Securities and Exchange Board of India (Prohibition of Insider Trading) Regulations, 2015 or till the time the valuation report becomes public, whichever is earlier.
+A valuer shall not indulge in “mandate snatching” or offering “convenience valuations” in order to cater to a company or client’s needs.
+As an independent valuer, the valuer shall not charge success fee.
+  8.  In any fairness opinion or independent expert opinion submitted by a valuer, if there has 
+        been a Prior engagement in an unconnected transaction, the valuer shall declare the 
+        association with the company during the last five years.
+Confidentiality
+A valuer shall not use or divulge to other clients or any other party any confidential information about the subject company, which has come to his/its knowledge without proper and specific authority or unless there is a legal or professional right or duty to disclose.
+Information Management
+A valuer shall ensure that he/ it maintains written contemporaneous records for any decision taken, the reasons for taking the decision, and the information and evidence in support of such decision. This shall be maintained so as to sufficiently enable a reasonable person to take a view on the appropriateness of his/its decisions and actions.
+A valuer shall appear, co-operate and be available for inspections and investigations carried out by the authority, any person authorised by the authority, the registered valuers organisation with which he/it is registered or any other statutory regulatory body.
+A valuer shall provide all information and records as may be required by the authority, the Tribunal, Appellate Tribunal, the registered valuers organisation with which he/it is registered, or any other statutory regulatory body.
+A valuer while respecting the confidentiality of information acquired during the course of performing professional services, shall maintain proper working papers for a period of three years or such longer period as required in its contract for a specific valuation, for production before a regulatory authority or for a peer review. In the event of a pending case before the Tribunal or Appellate Tribunal, the record shall be maintained till the disposal of the case.
+Gifts and Hospitality
+A valuer or his/its relative shall not accept gifts or hospitality which undermines or affects his independence as a valuer.
+Explanation: For the purposes of this code the term ‘relative’ shall have the same meaning as defined in clause (77) of Section 2 of the Companies Act, 2013 (18 of 2013).
+A valuer shall not offer gifts or hospitality or a financial or any other advantage to a public servant or any other person with a view to obtain or retain work for himself/
+         self, or to obtain or retain an advantage in the conduct of profession for himself/ itself.
+  Remuneration and Costs
+A valuer shall provide services for remuneration which is charged in a transparent manner, is a reasonable reflection of the work necessarily and properly undertaken, and is not inconsistent with the applicable rules.
+A valuer shall not accept any fees or charges other than those which are disclosed in a written contract with the person to whom he would be rendering service. Occupation, employability and restrictions.
+A valuer shall refrain from accepting too many assignments, if he/it is unlikely to be able to devote adequate time to each of his/ its assignments.
+A valuer shall not conduct business which in the opinion of the authority or the registered valuer organization discredits the profession.
+Date : {{REPORT_DATE}}SIGNATURE OF VALUER
+Place : {{REPORT_PLACE}}

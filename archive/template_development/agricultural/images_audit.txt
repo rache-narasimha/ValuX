@@ -1,0 +1,9 @@
+IMAGE KINDS
+- anchor: 1
+
+ROWS (part | kind | size | target)
+- word/document.xml | anchor | 4.95 x 0.01 | 
+
+WARNING
+- Floating/anchored images detected (wp:anchor). These are the most common Word-vs-LO mismatch.
+  Strongly recommend: render to PNG and check placement on every affected page.

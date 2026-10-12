@@ -1,0 +1,7 @@
+.DS_Store
+__pycache__/
+*.pyc
+outputs/generated_reports/*
+outputs/test_artifacts/*
+!outputs/generated_reports/.gitkeep
+!outputs/test_artifacts/.gitkeep

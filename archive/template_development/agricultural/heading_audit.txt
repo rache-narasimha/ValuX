@@ -1,0 +1,28 @@
+HEADING STYLE COUNTS
+- Heading 3: 2
+
+NUMBERING WITHOUT HEADING STYLE (common TOC issue)
+- p#63: style='List Paragraph' text='The information furnished in my Valuation Report dt.09-10-2026 true and correct '
+- p#64: style='List Paragraph' text='I have no direct or indirect interest in the property valued.'
+- p#65: style='List Paragraph' text='I have personally inspected the right property on 09-03-2026. The work is not su'
+- p#66: style='List Paragraph' text='I have not been convicted of any offence and sentenced to a term of imprisonment'
+- p#67: style='List Paragraph' text='I have not been found guilt of misconduct in my professional capacity.'
+- p#68: style='List Paragraph' text='I have read the hand book on policy, standards and procedure for real estate val'
+- p#69: style='List Paragraph' text='I have read the international valuation standards (IVS) and the report submitted'
+- p#70: style='List Paragraph' text='I abide by the Model Code of Conduct for empanelment of valuer in the bank.'
+- p#71: style='List Paragraph' text='I am registered under section 34 AB of the Wealth Tax Act, 1957.'
+- p#72: style='List Paragraph' text='I am the proprietor / partner / authorized official of the firm / company, who i'
+- p#73: style='List Paragraph' text='Further, I hereby provide the following information.'
+- p#104: style='List Paragraph' text='A valuer shall, in the conduct of his/its business, follow high standards of int'
+- p#105: style='List Paragraph' text='A valuer shall maintain integrity by being honest, straightforward, and forthrig'
+- p#106: style='List Paragraph' text='A valuer shall endeavour to ensure that he/it provides true and adequate informa'
+- p#107: style='List Paragraph' text='A valuer shall refrain from being involved in any action that would bring disrep'
+- p#108: style='List Paragraph' text='A valuer shall keep public interest foremost while delivering his services.'
+- p#110: style='List Paragraph' text='A valuer shall render at all times high standards of service, exercise due dilig'
+- p#111: style='List Paragraph' text='A valuer shall carry out professional services in accordance with the relevant t'
+- p#112: style='List Paragraph' text='A valuer shall continuously maintain professional knowledge and skill to provide'
+- p#113: style='List Paragraph' text='In the preparation of a valuation report, the valuer shall not disclaim liabilit'
+- ... (21 more)
+
+REMINDER
+- TOC relies on Heading styles (Heading 1/2/3...). Avoid manual numbering + direct formatting for headings.

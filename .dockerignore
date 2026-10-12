@@ -1,0 +1,7 @@
+archive
+docs
+tests
+outputs
+__pycache__
+*.pyc
+.DS_Store

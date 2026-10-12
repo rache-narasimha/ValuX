@@ -1,0 +1,20 @@
+services:
+  valuation-report:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "4180:4173"
+    working_dir: /app
+    command: ["python", "-m", "backend.server"]
+    volumes:
+      # Mount source read-only so local development changes are available without
+      # rebuilding the dependency-heavy image on every edit.
+      - ./backend:/app/backend:ro
+      - ./frontend:/app/frontend:ro
+      - ./resources:/app/resources:ro
+      - ./outputs/generated_reports:/app/outputs/generated_reports
+      # Compatibility mount for containers created before the source reorganization.
+      # It can be removed after every installation has rebuilt the current image.
+      - ./outputs/generated_reports:/workspace/valuation_app/generated_reports
+    restart: unless-stopped

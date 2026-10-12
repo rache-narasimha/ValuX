@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Agricultural Land Valuation</title>
+    <link rel="stylesheet" href="/assets/css/styles.css" />
+    <style>
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <a class="back-link" href="/">← All report types</a>
+        <h1>Agricultural land valuation</h1>
+        <p>
+          Enter the agricultural property details and generate the approved Word
+          or PDF report.
+        </p>
+      </div>
+      <div id="status" aria-live="polite">Draft</div>
+    </header>
+    <main>
+      <aside><nav id="nav"></nav></aside>
+      <section class="workspace">
+        <form id="agricultural-form">
+          <div id="sections"></div>
+          <footer>
+            <button type="button" class="secondary" id="previous">
+              Previous</button
+            ><span id="progress"></span
+            ><button type="button" class="secondary" id="next">
+              Next section</button
+            ><button type="button" class="preview-button" id="preview-report">
+              Preview report</button
+            ><button
+              type="submit"
+              class="primary"
+              id="generate-docx"
+              data-format="docx"
+              disabled
+            >
+              Generate DOCX</button
+            ><button
+              type="submit"
+              class="primary"
+              id="generate-pdf"
+              data-format="pdf"
+              disabled
+            >
+              Generate PDF
+            </button>
+          </footer>
+        </form>
+      </section>
+    </main>
+    <div
+      class="processing"
+      id="processing"
+      hidden
+      role="status"
+      aria-live="polite"
+    >
+      <div class="processing-card">
+        <strong id="processing-title">Processing report</strong>
+        <div class="loading-track" aria-hidden="true">
+          <div class="loading-bar"></div>
+        </div>
+        <span id="processing-stage">Please wait…</span>
+      </div>
+    </div>
+    <div class="modal" id="preview-modal" hidden>
+      <div
+        class="modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="preview-title"
+      >
+        <div class="modal-head">
+          <div>
+            <h2 id="preview-title">Word print-layout preview</h2>
+            <p>
+              This PDF is rendered from the exact DOCX that will be downloaded.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="modal-close"
+            id="close-preview"
+            aria-label="Close preview"
+          >
+            ×
+          </button>
+        </div>
+        <iframe
+          id="preview-frame"
+          title="Generated agricultural valuation report preview"
+        ></iframe>
+      </div>
+    </div>
+    <script src="/assets/js/institutions.js"></script>
+    <script src="/assets/js/shared.js"></script>
+    <script src="/assets/js/agricultural.js"></script>
+  </body>
+</html>

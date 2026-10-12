@@ -1,0 +1,396 @@
+--- a
++++ b
+@@ -1,8 +1,8 @@
+ Format-B
+-(Name & address of Valuer)
++{{VALUER_NAME_ADDRESS}}
+ To
+-UNION BANK OF INDIA
+-BRANCH:
++{{BANK_NAME_UPPER}}
++BRANCH: {{BRANCH_NAME}}
+ VALUATION REPORT (IN RESPECT OF AGRICULTURAL LANDS)
+ (To be filled in by the Approved Valuer)
+ I.
+@@ -10,90 +10,89 @@
+ 1.
+ Purpose for which the valuation is made
+ :
+-For secured lending
++{{VALUATION_PURPOSE}}
+ 2.
+ a)
+ Date of inspection
+ :
+-06-07-2026
++{{INSPECTION_DATE}}
+ b)
+ Date on which the valuation is made
+ :
+-06-07-2026
++{{VALUATION_DATE}}
+ 3.
+ List of documents produced for perusal
+-Sale Deed
+-:
+-Sale Deed No.5881/2023 dt.16-05-2023
+-LSR
+-:
+-LSR dt.23-06-2026
+-Other documents
+-:
+-Khata No.3428
++{{DOCUMENT_1_TYPE}}
++:
++{{DOCUMENT_1_DETAILS}}
++{{DOCUMENT_2_TYPE}}
++:
++{{DOCUMENT_2_DETAILS}}
++{{DOCUMENT_3_TYPE}}
++:
++{{DOCUMENT_3_DETAILS}}
+ 4.
+ Name of the owner(s) and his / their address (es) with Phone no. (details of share of each owner in case of joint ownership)
+ :
+-Madanillu Eeranna 
+-S/o Madanillu Valamanna, Sadapuram
++{{OWNER_DETAILS}}
+ 5.
+ Brief description of the property
+ :
+-Agricultural Lands
++{{PROPERTY_DESCRIPTION}}
+ 6.
+ Location of property
+ a)
+ Plot No. / Survey No.
+ :
+-Sy.No.134/D pyki 
++{{SURVEY_NUMBER}}
+ b)
+ Door No.
+ :
+--
++{{DOOR_NUMBER}}
+ c)
+ T. S. No. / Village
+ :
+-Sy.No.134/D pyki, Sadapuram Village
++{{VILLAGE}}
+ d)
+ Ward / Taluka
+ :
+-Adoni
++{{TALUKA}}
+ e)
+ Mandal / District
+ :
+-Adoni – Kurnool District
++{{MANDAL_DISTRICT}}
+ 7.
+ Postal address of the property
+ :
+-Agri Land
++{{POSTAL_ADDRESS}}
+ 8.
+ Coming under Corporation limit / Village Panchayat / Municipality
+ :
+-Village Panchayat
++{{LOCAL_AUTHORITY}}
+ 9.
+ Whether covered under any State / Central Govt. enactments (e.g. Urban Land Ceiling Act) or notified under agency area / scheduled area / cantonment area
+ :
+-No
++{{ENACTMENT_STATUS}}
+ 10.
+ Is any conversion to house site plots comtemplated?
+ :
+-No
++{{CONVERSION_CONTEMPLATED}}
+ 11.
+ Boundaries of the property (As per deed)
+ :
+ As per actual
+-North : L/o Somappa
+-:
+-L/o Somappa
+-South : L/o Ramanjineyulu & others
+-:
+-L/o Ramanjineyulu & others
+-East   : L/o Applicant
+-:
+-L/o Applicant
+-West  : L/o Beldar Eranna & Water Tank
+-:
+-L/o Beldar Eranna & Water Tank
++North : {{BOUNDARY_DEED_NORTH}}
++:
++{{BOUNDARY_ACTUAL_NORTH}}
++South : {{BOUNDARY_DEED_SOUTH}}
++:
++{{BOUNDARY_ACTUAL_SOUTH}}
++East : {{BOUNDARY_DEED_EAST}}
++:
++{{BOUNDARY_ACTUAL_EAST}}
++West : {{BOUNDARY_DEED_WEST}}
++:
++{{BOUNDARY_ACTUAL_WEST}}
+ 12.
+ Dimensions of the site
+ :
+@@ -103,159 +102,160 @@
+ Actuals
+ North
+ :
+--
+--
++{{DIM_DEED_N}}
++{{DIM_ACTUAL_N}}
+ South
+ :
+--
+--
++{{DIM_DEED_S}}
++{{DIM_ACTUAL_S}}
+ East
+ :
+--
+--
++{{DIM_DEED_E}}
++{{DIM_ACTUAL_E}}
+ West
+ :
+--
+--
++{{DIM_DEED_W}}
++{{DIM_ACTUAL_W}}
+ 13
+ Extent of the site
+ :
+-3.0 Acres
++{{SITE_EXTENT}}
+ 13.a
+ Latitude, Longitude and Coordinates of the site
+-15.723456,77.23456
++{{COORDINATES}}
+ 14
+ Extent of the site considered for valuation (least of 12 A & 12 B)
+ :
+-3.0 Acres
++{{VALUATION_EXTENT}}
+ 15
+ Whether occupied by the owner / lessee?  If cultivated by lessee, since how long and type of tenancy agreement?
+ :
+-Owner occupied
++{{OCCUPATION_DETAILS}}
+ 16
+ Income received (per year)
+ :
+-Rs.1,50,000/-
++{{ANNUAL_INCOME}}
+ II.
+ CHARACTERISTICS OF THE SITE
+ :
+ 1.
+ Whether the land under consideration is suitable for cultivation
+ :
+-Yes
++{{CULTIVATION_SUITABLE}}
+ 2.
+ Irrigation facilities – canal / well / bore / rain-fed
+ :
+-Rain-fed
++{{IRRIGATION_FACILITIES}}
+ 3.
+ Possibility of frequent flooding / sub-merging
+ :
+-No
++{{FLOODING_RISK}}
+ 4.
+ Level of land with topographical conditions.
+ :
+-Level
++{{TOPOGRAPHY}}
+ 5.
+ Shape of land
+ :
+-Quadrilateral
++{{LAND_SHAPE}}
+ 6.
+ Is it a Land – locked land?
+ :
+-Yes
++{{LAND_LOCKED}}
+ 7.
+ Whether any cottages / buildings exist in the Land?
+ :
+-No
++{{EXISTING_BUILDINGS}}
+ 8.
+ Whether fencing and gates are arranged?
+ :
+-No
++{{FENCING_GATES}}
+ 9.
+ General conditions of the land
+ :
+-Normal
++{{LAND_CONDITION}}
+ 10.
+ Quality of soil of the sand
+ :
+-Good
++{{SOIL_QUALITY}}
+ 11.
+ Whether the land is situated on a Main / National Highway Road? If not, distance from the Main / Highway Road.
+ :
+-2 KM from main road
++{{ROAD_ACCESS}}
+ 12.
+ Types of crops grown
+ :
+-Cotton, Ground nut
++{{CROPS_GROWN}}
+ 13.
+ Water supply & electricity facilities.
+ :
+-No
++{{WATER_ELECTRICITY}}
+ 14.
+ Advantage of the site
+ :
+ 1.
+ :
+-Nil
+-2.
+-:
+-Nil
++{{ADVANTAGE_1}}
++2.
++:
++{{ADVANTAGE_2}}
+ 15.
+ Disadvantages of the land
+ :
+ 1.
+ :
+-Nil
+-2.
+-:
+-Nil
++{{DISADVANTAGE_1}}
++2.
++:
++{{DISADVANTAGE_2}}
+ 16.
+ Special remarks, if any, like threat of acquisition of land for public service purposes, road widening or applicability of CRZ provisions etc. (Distance from sea-coast / tidal level must be incorporated)
+ :
+-No threat of acquisition
++{{SPECIAL_REMARKS}}
+ III. VALUATION OF AGRICULTURAL LAND
+ 1.
+ Size of land
+ :
+ North & South
+ :
+--
++{{SIZE_NORTH_SOUTH}}
+ East & West
+ :
+--
++{{SIZE_EAST_WEST}}
+ 2.
+ Total extent of the land
+ :
+-3.0 Acres
++{{TOTAL_EXTENT}}
+ 3.
+ Prevailing market rate (per acre) (Along with details /reference of atleast two latest deals/transactions with respect to adjacent properties in the areas)
+ :
+-Rs.8.0 to 10.0 lakhs per acre
++{{PREVAILING_RATE}}
+ 4.
+ Guideline rate obtained from the Registrar’s Office / Mandal Revenue office (an evidence thereof to be enclosed)
+ :
+-Rs.2.0 lakh per acre
++{{GUIDELINE_RATE}}
+ 5.
+ Assessed / adopted rate of valuation
+ :
+-Rs.9.0 lakh per acre
++{{ADOPTED_RATE}}
+ 6.
+ Estimated value of land
+ :
+-Rs.27,00,000/-
+-As a result of my appraisal and analysis, it is my considered opinion that the present fair market value of the above property in the prevailing condition with aforesaid specifications is Rs. 27,00,000/- (Rupees Twenty seven lakhs only). The book value of the above property as of 06-07-2026 (Report date) is Rs. 27,00,000/- (Rupees Twenty seven lakhs only ) and the distress value Rs. 21,60,000/- (Rupees Twenty one lakhs and sixty thousands only)
++{{ESTIMATED_VALUE}}
++As a result of my appraisal and analysis, it is my considered opinion that the present fair market value of the above property in the prevailing condition with aforesaid specifications is Rs. {{ESTIMATED_VALUE}} (Rupees {{ESTIMATED_VALUE_WORDS}} only). The book value of the above property as of {{REPORT_DATE}} (Report date) is Rs. {{BOOK_VALUE}} (Rupees {{BOOK_VALUE_WORDS}} only) and the distress value is Rs. {{DISTRESS_VALUE}} (Rupees {{DISTRESS_VALUE_WORDS}} only).
+ Signature
+ (Name and Official Seal of the Approved Valuer)
+ The undersigned has inspected the property detailed in the Valuation Report dated ---------------- on -------------------. We are satisfied that the fair and reasonable market value of the property is Rs. ----------------- (Rupees ------------------------------ only)
+ Signature
+ (Name of the Branch Manager with Office Seal)
+ Date:
+-Photos Route Map
++PROPERTY PHOTOGRAPHS{{PROPERTY_PHOTOGRAPHS}}
++ROUTE MAP{{ROUTE_MAP}}
+ DECLARATION FROM VALUER
+ I hereby declare that
+-The information furnished in my Valuation Report dt.09-10-2026 true and correct to the best of my knowledge and belief and I have made an impartial and true valuation of the property.
++The information furnished in my Valuation Report dt.{{REPORT_DATE}} is true and correct to the best of my knowledge and belief and I have made an impartial and true valuation of the property.
+ I have no direct or indirect interest in the property valued.
+-I have personally inspected the right property on 09-03-2026. The work is not sub contracted to any other valuer and carried-out by myself.
++I have personally inspected the right property on {{INSPECTION_DATE}}. The work is not sub contracted to any other valuer and carried-out by myself.
+ I have not been convicted of any offence and sentenced to a term of imprisonment.
+ I have not been found guilt of misconduct in my professional capacity.
+ I have read the hand book on policy, standards and procedure for real estate valuation, 2011 of the IBA and this report is in conformity to the “Standards” enshrined for valuation in the part – B of the hand book to the best of my ability.
+@@ -269,21 +269,19 @@
+ Valuer Comment
+ 1
+ Background information of the asset being valued
+-Documents
++{{DOCUMENTS_SUMMARY}}
+ 2
+ Purpose of Valuation and appointing authority
+-For secured lending
++{{VALUATION_PURPOSE}}
+ 3
+ Identity of the valuer and any other experts involved in the valuation
+-K.Siva Prasad
++{{VALUER_NAME}}
+ 4
+ Disclosure of valuer interest or conflict, if any
+ -
+ 5
+ Date of appointment, valuation date and date of report
+-06 - 07 - 2026
+-06 - 07 - 2026
+-06 - 07 - 2026
++{{ASSIGNMENT_DATE}}{{VALUATION_DATE}}{{REPORT_DATE}}
+ 6
+ Inspections and / or investigations undertaken
+ Physical inspection of the property
+@@ -303,11 +301,9 @@
+ Local enquiries and availability of infrastructural facilities
+ 11
+ Caveats, limitations and disclaimers to the extent they explain or elucidate the limitations faced by the valuer, which shall not be for the purpose of limiting his responsibility for the valuation report.
+-1.This report is issued to Bank of Baroda, GH Road Branch, Adoni. This report is not to be referred to anybody including the owner for any other purpose.
+-2.The bank is requested to accept only the original copy of this report.
+-3. Value varies with the purpose. It is a function of place, purpose and date. This certified value holds good as on the date of valuation and for the specific purpose mentioned in the report. 
+-Date : 06-07-2026Signature
+-Place : Adoni  (Name of the Approved Valuer & seal of the firm / company) 
++1. This report is issued to {{BANK_NAME}}, {{BRANCH_NAME}}. This report is not to be referred to anybody including the owner for any other purpose.2. The bank is requested to accept only the original copy of this report.3. Value varies with the purpose. It is a function of place, purpose and date. This certified value holds good as on the date of valuation and for the specific purpose mentioned in the report.
++Date : {{REPORT_DATE}}Signature
++Place : {{REPORT_PLACE}}(Name of the Approved Valuer & seal of the firm / company)
+ MODEL CODE OF CONDUCT FOR VALUERS
+ (Adopted in line with Companies (Registered Valuers and Valuation Rules, 2017))
+ All valuers empanelled with Bank shall strictly adhere to the following code of conduct:
+@@ -352,5 +348,5 @@
+ A valuer shall not accept any fees or charges other than those which are disclosed in a written contract with the person to whom he would be rendering service. Occupation, employability and restrictions.
+ A valuer shall refrain from accepting too many assignments, if he/it is unlikely to be able to devote adequate time to each of his/ its assignments.
+ A valuer shall not conduct business which in the opinion of the authority or the registered valuer organization discredits the profession.
+-Date  : 06-07-2026     SIGNATURE OF VALUER
+-Place : Adoni.
++Date : {{REPORT_DATE}}SIGNATURE OF VALUER
++Place : {{REPORT_PLACE}}

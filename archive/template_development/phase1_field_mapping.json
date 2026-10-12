@@ -1,0 +1,40 @@
+{
+  "reference_sha256": "928bb139fac37bd9706dcec00436ced963e21102f258768175db4387a3ae2af0",
+  "fields": {
+    "[[BANK_U]]": "BANK OF MAHARASHTRA",
+    "[[BANK]]": "Bank of Maharashtra",
+    "[[BRANCH]]": "ADONI",
+    "[[D_INSP]]": "09-09-2026",
+    "[[D_VAL]]": "24-09-2026",
+    "[[DEED]]": "Rectification Deed",
+    "[[DEED_NO]]": "No.4258/2015 dt. 19-05-2015",
+    "[[PLAN]]": "PER No. 67-2016-G1 Dt.29-03-2016",
+    "[[TAX]]": "09/2026-27/23017 Dt. 01-09-2026",
+    "[[OWNER]]": "B.Govindu S/o Late B.Jambanna,",
+    "[[OWNER_C]]": "B.Govind S/o Late B.Jambanna, Adoni.",
+    "[[PROP]]": "Residential Building in GF",
+    "[[ADDRESS]]": "H.No. 5/390/280/44, Plot No.44, Sy.No. 313 A/2, 313D, L.P.No.32/93, Near Ravindra School, Hanuman Nagar, Adoni, Kurnool Dist.",
+    "[[COORD]]": "15.635543,77.268148",
+    "[[AREA]]": "202.6 sq.yd. / 4.18 Cents",
+    "[[MKT_RATE]]": "Rs.5.0-7.0 lakhs per cent",
+    "[[GUIDE]]": "Rs. 3,14,600/-per Cent",
+    "[[RATE]]": "Rs.6,00,000/- per cent",
+    "[[LAND_VAL]]": "Rs.25,08,000/-",
+    "[[PLINTH]]": "1,158.42",
+    "[[REPL_RATE]]": "2500/-",
+    "[[REPL_COST]]": "28,96,050/-",
+    "[[DEPR]]": "3,35,050/-",
+    "[[BLDG_VAL]]": "25,61,000/-",
+    "[[PMV]]": "50,69,000/-",
+    "[[REAL_VAL]]": "45,62,000/-",
+    "[[DIST_VAL]]": "40,55,000/-",
+    "[[GOVT_VAL]]": "30,44,000/-",
+    "[[PMV_WORDS]]": "Rupees Fifty lakhs sixty nine thousands only"
+  },
+  "rules": {
+    "realizable_value_percent": 90,
+    "distress_value_percent": 80,
+    "highlight_only": "Present Market Value row",
+    "cover_letter_fair_market_value_color": "#0070C0"
+  }
+}

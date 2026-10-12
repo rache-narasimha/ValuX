@@ -1,0 +1,1325 @@
+{
+  "template": "Valuation_Report_Master_Template_Phase2.docx",
+  "controls": [
+    {
+      "id": "report.valuation_date",
+      "kind": "table_cell",
+      "table": 0,
+      "row": 1,
+      "cell": 0,
+      "sample_text": "24-09-2026"
+    },
+    {
+      "id": "property.summary_description",
+      "kind": "table_cell",
+      "table": 0,
+      "row": 1,
+      "cell": 1,
+      "sample_text": "Residential Building in GF"
+    },
+    {
+      "id": "valuation.present_market_value",
+      "kind": "table_cell",
+      "table": 0,
+      "row": 1,
+      "cell": 2,
+      "sample_text": "50,69,000/-"
+    },
+    {
+      "id": "valuation.realizable_value",
+      "kind": "table_cell",
+      "table": 0,
+      "row": 1,
+      "cell": 3,
+      "sample_text": "45,62,000/-"
+    },
+    {
+      "id": "valuation.distress_value",
+      "kind": "table_cell",
+      "table": 0,
+      "row": 1,
+      "cell": 4,
+      "sample_text": "40,55,000/-"
+    },
+    {
+      "id": "valuation.government_value",
+      "kind": "table_cell",
+      "table": 0,
+      "row": 1,
+      "cell": 5,
+      "sample_text": "30,44,000/-"
+    },
+    {
+      "id": "report.purpose",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 1,
+      "cell": 2,
+      "sample_text": "For Housing Loan"
+    },
+    {
+      "id": "report.inspection_date",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 2,
+      "cell": 4,
+      "sample_text": "09-09-2026"
+    },
+    {
+      "id": "report.valuation_date_detail",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 3,
+      "cell": 4,
+      "sample_text": "24-09-2026"
+    },
+    {
+      "id": "documents.deed_type",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 5,
+      "cell": 1,
+      "sample_text": "Rectification Deed"
+    },
+    {
+      "id": "documents.deed_details",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 5,
+      "cell": 3,
+      "sample_text": "No.4258/2015 dt. 19-05-2015"
+    },
+    {
+      "id": "documents.approved_plan",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 6,
+      "cell": 3,
+      "sample_text": "PER No. 67-2016-G1  Dt.29-03-2016"
+    },
+    {
+      "id": "documents.legal_scrutiny",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 7,
+      "cell": 3,
+      "sample_text": "-"
+    },
+    {
+      "id": "documents.tax_receipt",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 8,
+      "cell": 3,
+      "sample_text": "09/2026-27/23017 Dt. 01-09-2026"
+    },
+    {
+      "id": "owner.details",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 9,
+      "cell": 3,
+      "sample_text": "B.Govindu S/o Late B.Jambanna, H.No. 5/390/218, Hanuman Nagar, Adoni."
+    },
+    {
+      "id": "property.description",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 10,
+      "cell": 3,
+      "sample_text": "Residential Building in GF"
+    },
+    {
+      "id": "property.plot_survey_number",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 12,
+      "cell": 4,
+      "sample_text": "Plot No.44, Sy.No. 313 A/2, 313D"
+    },
+    {
+      "id": "property.door_number",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 13,
+      "cell": 4,
+      "sample_text": "5/390/280/44"
+    },
+    {
+      "id": "property.village",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 14,
+      "cell": 4,
+      "sample_text": "Hanuman Nagar"
+    },
+    {
+      "id": "property.ward_taluka",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 15,
+      "cell": 4,
+      "sample_text": "Adoni"
+    },
+    {
+      "id": "property.mandal_district",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 16,
+      "cell": 4,
+      "sample_text": "Adoni \u2013 Kurnool District"
+    },
+    {
+      "id": "property.postal_address",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 17,
+      "cell": 3,
+      "sample_text": "H.No. 5/390/280/44, Plot No.44, Sy.No. 313 A/2, 313D,L.P.No.32/93, Near Ravindra School, Hanuman Nagar, Adoni, Kurnool Dist."
+    },
+    {
+      "id": "property.city",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 18,
+      "cell": 3,
+      "sample_text": "Adoni"
+    },
+    {
+      "id": "property.area.residential",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 19,
+      "cell": 3,
+      "sample_text": "Yes "
+    },
+    {
+      "id": "property.area.commercial",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 20,
+      "cell": 3,
+      "sample_text": "No"
+    },
+    {
+      "id": "property.area.industrial",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 21,
+      "cell": 3,
+      "sample_text": "No"
+    },
+    {
+      "id": "property.area_quality",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 23,
+      "cell": 4,
+      "sample_text": "Middle"
+    },
+    {
+      "id": "property.urban_classification",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 24,
+      "cell": 4,
+      "sample_text": "Urban"
+    },
+    {
+      "id": "property.local_authority_limit",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 25,
+      "cell": 3,
+      "sample_text": "Municipality Limits"
+    },
+    {
+      "id": "property.government_enactment",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 26,
+      "cell": 3,
+      "sample_text": "No"
+    },
+    {
+      "id": "property.agricultural_conversion",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 27,
+      "cell": 3,
+      "sample_text": "NA"
+    },
+    {
+      "id": "property.boundary.north.deed",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 29,
+      "cell": 3,
+      "sample_text": "Plot No.49"
+    },
+    {
+      "id": "property.boundary.north.actual",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 29,
+      "cell": 4,
+      "sample_text": "Plot No.49"
+    },
+    {
+      "id": "property.boundary.south.deed",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 30,
+      "cell": 3,
+      "sample_text": "33 ft Wide Road"
+    },
+    {
+      "id": "property.boundary.south.actual",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 30,
+      "cell": 4,
+      "sample_text": "33 ft Wide Road"
+    },
+    {
+      "id": "property.boundary.east.deed",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 31,
+      "cell": 3,
+      "sample_text": "Plot No.43"
+    },
+    {
+      "id": "property.boundary.east.actual",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 31,
+      "cell": 4,
+      "sample_text": "Plot No.43"
+    },
+    {
+      "id": "property.boundary.west.deed",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 32,
+      "cell": 3,
+      "sample_text": "20 ft Wide Road"
+    },
+    {
+      "id": "property.boundary.west.actual",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 32,
+      "cell": 4,
+      "sample_text": "20 ft Wide Road"
+    },
+    {
+      "id": "property.dimension.north.deed",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 35,
+      "cell": 3,
+      "sample_text": "55.5 ft."
+    },
+    {
+      "id": "property.dimension.north.actual",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 35,
+      "cell": 4,
+      "sample_text": "55.5 ft."
+    },
+    {
+      "id": "property.dimension.south.deed",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 36,
+      "cell": 3,
+      "sample_text": "55.0 ft."
+    },
+    {
+      "id": "property.dimension.south.actual",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 36,
+      "cell": 4,
+      "sample_text": "55.0 ft."
+    },
+    {
+      "id": "property.dimension.east.deed",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 37,
+      "cell": 3,
+      "sample_text": "33.0 ft."
+    },
+    {
+      "id": "property.dimension.east.actual",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 37,
+      "cell": 4,
+      "sample_text": "33.0 ft."
+    },
+    {
+      "id": "property.dimension.west.deed",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 38,
+      "cell": 3,
+      "sample_text": "33.0 ft."
+    },
+    {
+      "id": "property.dimension.west.actual",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 38,
+      "cell": 4,
+      "sample_text": "33.0 ft."
+    },
+    {
+      "id": "property.coordinates",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 39,
+      "cell": 3,
+      "sample_text": "15.635543,77.268148"
+    },
+    {
+      "id": "property.site_extent",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 40,
+      "cell": 3,
+      "sample_text": "202.6 sq.yd. / 4.18 Cents        "
+    },
+    {
+      "id": "property.valuation_extent",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 41,
+      "cell": 3,
+      "sample_text": "202.6 sq.yd. / 4.18 Cents        "
+    },
+    {
+      "id": "property.road_affected_area",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 42,
+      "cell": 3,
+      "sample_text": "No road affected area in plan"
+    },
+    {
+      "id": "property.occupancy",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 43,
+      "cell": 3,
+      "sample_text": "Owner Occupied"
+    },
+    {
+      "id": "site.classification",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 45,
+      "cell": 3,
+      "sample_text": "Residential"
+    },
+    {
+      "id": "site.surrounding_development",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 46,
+      "cell": 3,
+      "sample_text": "Developing"
+    },
+    {
+      "id": "site.flooding",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 47,
+      "cell": 3,
+      "sample_text": "No"
+    },
+    {
+      "id": "site.civic_amenities",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 48,
+      "cell": 3,
+      "sample_text": "In about 0.5 KM"
+    },
+    {
+      "id": "site.topography",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 49,
+      "cell": 3,
+      "sample_text": "Level"
+    },
+    {
+      "id": "site.shape",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 50,
+      "cell": 3,
+      "sample_text": "Rectangular"
+    },
+    {
+      "id": "site.permitted_use",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 51,
+      "cell": 3,
+      "sample_text": "Residential"
+    },
+    {
+      "id": "site.usage_restriction",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 52,
+      "cell": 3,
+      "sample_text": "No"
+    },
+    {
+      "id": "site.layout_approval",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 53,
+      "cell": 3,
+      "sample_text": "Yes-L.P.No.32/93"
+    },
+    {
+      "id": "site.plot_position",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 54,
+      "cell": 3,
+      "sample_text": "Corner Plot"
+    },
+    {
+      "id": "site.road_facilities",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 55,
+      "cell": 3,
+      "sample_text": "Available"
+    },
+    {
+      "id": "site.road_type",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 56,
+      "cell": 3,
+      "sample_text": "CC Road"
+    },
+    {
+      "id": "site.road_width",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 57,
+      "cell": 3,
+      "sample_text": "> 20 feet"
+    },
+    {
+      "id": "site.land_locked",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 58,
+      "cell": 3,
+      "sample_text": "No"
+    },
+    {
+      "id": "site.water_potential",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 59,
+      "cell": 3,
+      "sample_text": "Satisfactory"
+    },
+    {
+      "id": "site.sewerage",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 60,
+      "cell": 3,
+      "sample_text": "Not Available"
+    },
+    {
+      "id": "site.power_supply",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 61,
+      "cell": 3,
+      "sample_text": "Yes"
+    },
+    {
+      "id": "site.advantage_1",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 63,
+      "cell": 4,
+      "sample_text": "-"
+    },
+    {
+      "id": "site.advantage_2",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 64,
+      "cell": 4,
+      "sample_text": "-"
+    },
+    {
+      "id": "site.special_remarks",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 65,
+      "cell": 3,
+      "sample_text": "Apparently no such threat "
+    },
+    {
+      "id": "site.special_remark_1",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 66,
+      "cell": 4,
+      "sample_text": "-"
+    },
+    {
+      "id": "site.special_remark_2",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 67,
+      "cell": 4,
+      "sample_text": "-"
+    },
+    {
+      "id": "land.north_south_size",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 70,
+      "cell": 3,
+      "sample_text": "N-55.5 ft, S-55.0 ft."
+    },
+    {
+      "id": "land.east_west_size",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 71,
+      "cell": 3,
+      "sample_text": "E-33.0 ft, W-33.0 ft."
+    },
+    {
+      "id": "land.total_extent",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 72,
+      "cell": 3,
+      "sample_text": "202.6 sq.yd. / 4.18 Cents        "
+    },
+    {
+      "id": "land.prevailing_market_rate",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 73,
+      "cell": 3,
+      "sample_text": "Rs.5.0-7.0 lakhs per cent "
+    },
+    {
+      "id": "land.guideline_rate",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 74,
+      "cell": 3,
+      "sample_text": "Rs. 3,14,600/- per Cent"
+    },
+    {
+      "id": "land.adopted_rate",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 75,
+      "cell": 3,
+      "sample_text": "Rs.6,00,000/- per cent"
+    },
+    {
+      "id": "land.estimated_value",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 76,
+      "cell": 3,
+      "sample_text": "Rs.25,08,000/-"
+    },
+    {
+      "id": "building.type",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 79,
+      "cell": 4,
+      "sample_text": "Residential"
+    },
+    {
+      "id": "building.construction_type",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 80,
+      "cell": 4,
+      "sample_text": "RCC Framed"
+    },
+    {
+      "id": "building.year_age_residual",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 81,
+      "cell": 4,
+      "sample_text": "2017 \u2013 09 Years \u2013 51 Years"
+    },
+    {
+      "id": "building.floor_summary",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 82,
+      "cell": 4,
+      "sample_text": "GF Only, 10 ft."
+    },
+    {
+      "id": "building.plinth_summary",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 83,
+      "cell": 4,
+      "sample_text": "GF:  1,158.42 Sq.ft "
+    },
+    {
+      "id": "building.condition",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 84,
+      "cell": 4,
+      "sample_text": "Good "
+    },
+    {
+      "id": "building.plan_validity",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 85,
+      "cell": 4,
+      "sample_text": "Dt.29-03-2016"
+    },
+    {
+      "id": "building.plan_authority",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 86,
+      "cell": 4,
+      "sample_text": "Commissioner, Adoni Municipality"
+    },
+    {
+      "id": "building.plan_verified",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 87,
+      "cell": 4,
+      "sample_text": "Yes"
+    },
+    {
+      "id": "building.plan_comments",
+      "kind": "table_cell",
+      "table": 1,
+      "row": 88,
+      "cell": 4,
+      "sample_text": "Approved Plan is authentic"
+    },
+    {
+      "id": "construction.foundation",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 1,
+      "cell": 2,
+      "sample_text": "RCC Column Footing"
+    },
+    {
+      "id": "construction.basement",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 2,
+      "cell": 2,
+      "sample_text": "CR Masonry"
+    },
+    {
+      "id": "construction.superstructure",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 3,
+      "cell": 2,
+      "sample_text": "BM"
+    },
+    {
+      "id": "construction.joinery",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 4,
+      "cell": 2,
+      "sample_text": "T/NT wood"
+    },
+    {
+      "id": "construction.rcc_works",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 5,
+      "cell": 2,
+      "sample_text": "M20"
+    },
+    {
+      "id": "construction.plastering",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 6,
+      "cell": 2,
+      "sample_text": "C M (1:6)"
+    },
+    {
+      "id": "construction.flooring",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 7,
+      "cell": 2,
+      "sample_text": "Granite"
+    },
+    {
+      "id": "construction.special_finish",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 8,
+      "cell": 2,
+      "sample_text": "Nil"
+    },
+    {
+      "id": "construction.roofing",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 9,
+      "cell": 2,
+      "sample_text": "RCC"
+    },
+    {
+      "id": "construction.drainage",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 10,
+      "cell": 2,
+      "sample_text": "2 \u2013 Pipe System"
+    },
+    {
+      "id": "construction.compound_wall_height",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 12,
+      "cell": 3,
+      "sample_text": "-"
+    },
+    {
+      "id": "construction.compound_wall_length",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 13,
+      "cell": 3,
+      "sample_text": "-"
+    },
+    {
+      "id": "construction.compound_wall_type",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 14,
+      "cell": 3,
+      "sample_text": "Brick Masonry"
+    },
+    {
+      "id": "construction.wiring",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 16,
+      "cell": 3,
+      "sample_text": "Concealed"
+    },
+    {
+      "id": "construction.fittings_class",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 17,
+      "cell": 3,
+      "sample_text": "Superior"
+    },
+    {
+      "id": "construction.light_points",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 18,
+      "cell": 3,
+      "sample_text": "Adequate"
+    },
+    {
+      "id": "construction.fan_points",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 19,
+      "cell": 3,
+      "sample_text": "Adequate"
+    },
+    {
+      "id": "construction.spare_plugs",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 20,
+      "cell": 3,
+      "sample_text": "Adequate"
+    },
+    {
+      "id": "construction.electrical_other",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 21,
+      "cell": 3,
+      "sample_text": "Provision for Inverter"
+    },
+    {
+      "id": "construction.water_closets",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 23,
+      "cell": 4,
+      "sample_text": "06"
+    },
+    {
+      "id": "construction.wash_basins",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 24,
+      "cell": 4,
+      "sample_text": "03"
+    },
+    {
+      "id": "construction.urinals",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 25,
+      "cell": 4,
+      "sample_text": "-"
+    },
+    {
+      "id": "construction.bath_tubs",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 26,
+      "cell": 4,
+      "sample_text": "-"
+    },
+    {
+      "id": "construction.water_meters_taps",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 27,
+      "cell": 4,
+      "sample_text": "01"
+    },
+    {
+      "id": "construction.other_fixtures",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 28,
+      "cell": 4,
+      "sample_text": "-"
+    },
+    {
+      "id": "building.floors.1.name",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 31,
+      "cell": 1,
+      "sample_text": "GF"
+    },
+    {
+      "id": "building.floors.1.plinth_area",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 31,
+      "cell": 2,
+      "sample_text": "1,158.42"
+    },
+    {
+      "id": "building.floors.1.roof_height",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 31,
+      "cell": 3,
+      "sample_text": "10.0"
+    },
+    {
+      "id": "building.floors.1.age",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 31,
+      "cell": 4,
+      "sample_text": "09"
+    },
+    {
+      "id": "building.floors.1.replacement_rate",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 31,
+      "cell": 5,
+      "sample_text": "2500/-"
+    },
+    {
+      "id": "building.floors.1.replacement_cost",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 31,
+      "cell": 6,
+      "sample_text": "28,96,050/-"
+    },
+    {
+      "id": "building.floors.1.depreciation",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 31,
+      "cell": 7,
+      "sample_text": "3,35,050/-"
+    },
+    {
+      "id": "building.floors.1.net_value",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 31,
+      "cell": 8,
+      "sample_text": "25,61,000/-"
+    },
+    {
+      "id": "building.floors.2.name",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 32,
+      "cell": 1,
+      "sample_text": "FF"
+    },
+    {
+      "id": "building.floors.2.plinth_area",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 32,
+      "cell": 2,
+      "sample_text": "-"
+    },
+    {
+      "id": "building.floors.2.roof_height",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 32,
+      "cell": 3,
+      "sample_text": "-"
+    },
+    {
+      "id": "building.floors.2.age",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 32,
+      "cell": 4,
+      "sample_text": "-"
+    },
+    {
+      "id": "building.floors.2.replacement_rate",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 32,
+      "cell": 5,
+      "sample_text": "-"
+    },
+    {
+      "id": "building.floors.2.replacement_cost",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 32,
+      "cell": 6,
+      "sample_text": "-"
+    },
+    {
+      "id": "building.floors.2.depreciation",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 32,
+      "cell": 7,
+      "sample_text": "-"
+    },
+    {
+      "id": "building.floors.2.net_value",
+      "kind": "table_cell",
+      "table": 2,
+      "row": 32,
+      "cell": 8,
+      "sample_text": "-"
+    },
+    {
+      "id": "extra.item_1",
+      "kind": "table_cell",
+      "table": 3,
+      "row": 0,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "extra.item_2",
+      "kind": "table_cell",
+      "table": 3,
+      "row": 1,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "extra.item_3",
+      "kind": "table_cell",
+      "table": 3,
+      "row": 2,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "extra.item_4",
+      "kind": "table_cell",
+      "table": 3,
+      "row": 3,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "extra.item_5",
+      "kind": "table_cell",
+      "table": 3,
+      "row": 4,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "amenity.item_1",
+      "kind": "table_cell",
+      "table": 4,
+      "row": 0,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "amenity.item_2",
+      "kind": "table_cell",
+      "table": 4,
+      "row": 1,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "amenity.item_3",
+      "kind": "table_cell",
+      "table": 4,
+      "row": 2,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "amenity.item_4",
+      "kind": "table_cell",
+      "table": 4,
+      "row": 3,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "amenity.item_5",
+      "kind": "table_cell",
+      "table": 4,
+      "row": 4,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "amenity.item_6",
+      "kind": "table_cell",
+      "table": 4,
+      "row": 5,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "amenity.item_7",
+      "kind": "table_cell",
+      "table": 4,
+      "row": 6,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "amenity.item_8",
+      "kind": "table_cell",
+      "table": 4,
+      "row": 7,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "amenity.item_9",
+      "kind": "table_cell",
+      "table": 4,
+      "row": 8,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "amenity.item_10",
+      "kind": "table_cell",
+      "table": 4,
+      "row": 9,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "misc.item_1",
+      "kind": "table_cell",
+      "table": 5,
+      "row": 0,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "misc.item_2",
+      "kind": "table_cell",
+      "table": 5,
+      "row": 1,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "misc.item_3",
+      "kind": "table_cell",
+      "table": 5,
+      "row": 2,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "misc.item_4",
+      "kind": "table_cell",
+      "table": 5,
+      "row": 3,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "service.item_1",
+      "kind": "table_cell",
+      "table": 6,
+      "row": 0,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "service.item_2",
+      "kind": "table_cell",
+      "table": 6,
+      "row": 1,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "service.item_3",
+      "kind": "table_cell",
+      "table": 6,
+      "row": 2,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "service.item_4",
+      "kind": "table_cell",
+      "table": 6,
+      "row": 3,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "service.item_5",
+      "kind": "table_cell",
+      "table": 6,
+      "row": 4,
+      "cell": 3,
+      "sample_text": "Included"
+    },
+    {
+      "id": "abstract.land",
+      "kind": "table_cell",
+      "table": 7,
+      "row": 0,
+      "cell": 3,
+      "sample_text": "25,08,000/-"
+    },
+    {
+      "id": "abstract.building",
+      "kind": "table_cell",
+      "table": 7,
+      "row": 1,
+      "cell": 3,
+      "sample_text": "25,61,000/-"
+    },
+    {
+      "id": "abstract.extra",
+      "kind": "table_cell",
+      "table": 7,
+      "row": 2,
+      "cell": 3,
+      "sample_text": "-"
+    },
+    {
+      "id": "abstract.amenities",
+      "kind": "table_cell",
+      "table": 7,
+      "row": 3,
+      "cell": 3,
+      "sample_text": "-"
+    },
+    {
+      "id": "abstract.miscellaneous",
+      "kind": "table_cell",
+      "table": 7,
+      "row": 4,
+      "cell": 3,
+      "sample_text": "-"
+    },
+    {
+      "id": "abstract.services",
+      "kind": "table_cell",
+      "table": 7,
+      "row": 5,
+      "cell": 3,
+      "sample_text": "-"
+    },
+    {
+      "id": "abstract.machinery",
+      "kind": "table_cell",
+      "table": 7,
+      "row": 6,
+      "cell": 3,
+      "sample_text": "-"
+    },
+    {
+      "id": "abstract.total",
+      "kind": "table_cell",
+      "table": 7,
+      "row": 7,
+      "cell": 3,
+      "sample_text": "50,69,000/-"
+    },
+    {
+      "id": "abstract.present_market_value",
+      "kind": "table_cell",
+      "table": 7,
+      "row": 8,
+      "cell": 3,
+      "sample_text": "50,69,000/-"
+    }
+  ]
+}

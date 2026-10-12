@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>SLN Property Reports</title>
+    <link rel="stylesheet" href="/assets/css/styles.css" />
+    <style>
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body class="home-page">
+    <header class="home-header">
+      <div>
+        <p class="eyebrow">SLN Consultancy &amp; Engineering Services</p>
+        <h1>Property report workspace</h1>
+        <p>Select the report workflow you want to prepare.</p>
+      </div>
+      <div class="phase-badge">Phase 2</div>
+    </header>
+    <main class="home-main">
+      <section class="selector-card" aria-labelledby="selector-title">
+        <div class="selector-intro">
+          <span class="step-number">1</span>
+          <div>
+            <h2 id="selector-title">Choose report type</h2>
+            <p>The next choices change according to the report selected.</p>
+          </div>
+        </div>
+        <form id="report-selector" class="report-selector">
+          <div class="field full">
+            <label class="required" for="report-type">Report type</label
+            ><select id="report-type" required>
+              <option value="">Select report type</option>
+              <option value="valuation">Valuation</option>
+              <option value="estimation">Estimation</option>
+              <option value="progress_completion">
+                Progress / Completion Report
+              </option>
+            </select>
+          </div>
+          <div class="field full" id="valuation-type-wrap" hidden>
+            <label class="required" for="valuation-type">Valuation type</label
+            ><select id="valuation-type">
+              <option value="">Select valuation type</option>
+              <option value="general_property">
+                General Property Valuation
+              </option>
+              <option value="agricultural_land">
+                Agricultural Land Valuation
+              </option>
+            </select>
+          </div>
+          <div class="selection-note" id="selection-note" aria-live="polite">
+            Select a report type to continue.
+          </div>
+          <button
+            type="submit"
+            class="primary start-report"
+            id="start-report"
+            disabled
+          >
+            Open report
+          </button>
+        </form>
+      </section>
+      <section class="workflow-grid" aria-label="Available report workflows">
+        <article class="workflow-card ready">
+          <span>Available</span>
+          <h3>General Property Valuation</h3>
+          <p>
+            Residential, commercial and industrial plots or land-and-building
+            properties.
+          </p>
+        </article>
+        <article class="workflow-card ready">
+          <span>Available</span>
+          <h3>Agricultural Land Valuation</h3>
+          <p>
+            Five-section form with unit conversion, valuation calculations,
+            preview and document generation.
+          </p>
+        </article>
+        <article class="workflow-card future">
+          <span>Planned</span>
+          <h3>Estimation</h3>
+          <p>
+            This workflow will be added when its approved template and field
+            rules are supplied.
+          </p>
+        </article>
+        <article class="workflow-card future">
+          <span>Planned</span>
+          <h3>Progress / Completion</h3>
+          <p>
+            This workflow will remain separate from valuation and estimation
+            reports.
+          </p>
+        </article>
+      </section>
+    </main>
+    <script src="/assets/js/home.js"></script>
+  </body>
+</html>
