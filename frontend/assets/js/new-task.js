@@ -9,6 +9,8 @@
   const valuationWrap = document.getElementById("valuation-type-wrap");
   const assignedDate = document.getElementById("assigned-date");
   const dueDate = document.getElementById("due-date");
+  const errorMessage = document.getElementById("task-error");
+  const submitButton = form.querySelector('button[type="submit"]');
 
   function iso(date) {
     return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
@@ -49,22 +51,34 @@
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!form.reportValidity()) return;
-    const selectedInstitution = (window.INSTITUTIONS[institutionType.value] || []).find((item) => item.code === institution.value);
-    const reportKey = reportType.value === "valuation" ? `valuation-${valuationType.value}` : reportType.value;
-    const task = TaskStore.create({
-      institutionType: institutionType.value,
-      institutionCode: institution.value,
-      institutionName: selectedInstitution.name,
-      branch: document.getElementById("branch").value,
-      customerName: document.getElementById("customer-name").value,
-      propertyBrief: document.getElementById("property-brief").value,
-      reportKey,
-      assignee: document.getElementById("assignee").value,
-      priority: document.getElementById("priority").value,
-      assignedDate: assignedDate.value,
-      dueDate: dueDate.value,
-      initialNote: document.getElementById("initial-note").value,
-    });
-    window.location.href = `/tasks/detail?id=${encodeURIComponent(task.id)}`;
+    errorMessage.hidden = true;
+    submitButton.disabled = true;
+    submitButton.textContent = "Creating…";
+    try {
+      const selectedInstitution = (window.INSTITUTIONS[institutionType.value] || []).find((item) => item.code === institution.value);
+      if (!selectedInstitution) throw new Error("Select a valid bank or NBFC.");
+      const reportKey = reportType.value === "valuation" ? `valuation-${valuationType.value}` : reportType.value;
+      const task = TaskStore.create({
+        institutionType: institutionType.value,
+        institutionCode: institution.value,
+        institutionName: selectedInstitution.name,
+        branch: document.getElementById("branch").value,
+        customerName: document.getElementById("customer-name").value,
+        propertyBrief: document.getElementById("property-brief").value,
+        reportKey,
+        assignee: document.getElementById("assignee").value,
+        priority: document.getElementById("priority").value,
+        assignedDate: assignedDate.value,
+        dueDate: dueDate.value,
+        initialNote: document.getElementById("initial-note").value,
+      });
+      window.location.href = `/tasks/detail?id=${encodeURIComponent(task.id)}`;
+    } catch (error) {
+      errorMessage.textContent = error.message || "The assignment could not be created. Please try again.";
+      errorMessage.hidden = false;
+      submitButton.disabled = false;
+      submitButton.textContent = "Create assignment";
+      errorMessage.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
   });
 })();

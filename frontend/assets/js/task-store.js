@@ -56,12 +56,30 @@
   }
 
   function save(tasks) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    } catch (_error) {
+      throw new Error("This browser could not save the assignment. Check that browser storage is enabled and try again.");
+    }
     window.dispatchEvent(new CustomEvent("sln:tasks-changed"));
   }
 
   function timestamp() {
     return new Date().toISOString();
+  }
+
+  function randomId() {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+      return window.crypto.randomUUID();
+    }
+    const random = Math.random().toString(36).slice(2, 12);
+    return `${Date.now().toString(36)}-${random}`;
+  }
+
+  function copyTask(task) {
+    return typeof window.structuredClone === "function"
+      ? window.structuredClone(task)
+      : JSON.parse(JSON.stringify(task));
   }
 
   function customerToken(name) {
@@ -121,7 +139,7 @@
       payment: { estimated: 0, agreed: 0, received: 0, status: "Pending" },
       activity: [
         {
-          id: crypto.randomUUID(),
+          id: randomId(),
           type: "created",
           author: "K. Sivaprasad",
           text: `Assignment created and assigned to ${input.assignee}.`,
@@ -131,7 +149,7 @@
     };
     if (input.initialNote) {
       task.activity.push({
-        id: crypto.randomUUID(),
+        id: randomId(),
         type: "note",
         author: "K. Sivaprasad",
         text: input.initialNote.trim(),
@@ -151,7 +169,7 @@
     const tasks = load();
     const index = tasks.findIndex((task) => task.id === taskId);
     if (index < 0) throw new Error("Task not found.");
-    const copy = structuredClone(tasks[index]);
+    const copy = copyTask(tasks[index]);
     mutate(copy);
     copy.updatedAt = timestamp();
     tasks[index] = copy;
@@ -160,7 +178,7 @@
   }
 
   function addActivity(task, type, text, author = "K. Sivaprasad") {
-    task.activity.push({ id: crypto.randomUUID(), type, author, text, createdAt: timestamp() });
+    task.activity.push({ id: randomId(), type, author, text, createdAt: timestamp() });
   }
 
   function addNote(taskId, text) {

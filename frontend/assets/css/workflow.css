@@ -420,6 +420,16 @@
   gap: 11px;
   padding: 4px 0 30px;
 }
+.form-error {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid #e1aaa4;
+  border-radius: 9px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 0.85rem;
+  font-weight: 750;
+}
 .form-actions button,
 .stack-form button,
 .inline-form button {
