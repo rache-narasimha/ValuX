@@ -86,9 +86,8 @@
   document.getElementById("status-form").addEventListener("submit", (event) => {
     event.preventDefault();
     const note = document.getElementById("status-note");
-    if (["On Hold", "Awaiting Review", "Returned for Correction"].includes(statusField.value) && !note.value.trim()) {
-      return alert("Add a work note for this status change.");
-    }
+    if (statusField.value === task.status) return alert("Choose a different status to update the assignment.");
+    if (!note.value.trim()) return alert("Add a work note for this status change.");
     let reason = "";
     if (statusField.value === "On Hold") {
       reason = document.getElementById("hold-reason").value;

@@ -21,7 +21,34 @@
         </section>
         <section class="detail-layout">
           <div class="detail-main">
-            <article class="work-card"><div class="section-heading"><div><h2>Assignment details</h2><p>Application information kept outside the report form.</p></div></div><dl class="detail-grid" id="assignment-details"></dl></article>
+            <article class="work-card">
+              <div class="section-heading"><div><h2>Assignment details</h2><p>Application information kept outside the report form.</p></div></div>
+              <dl class="detail-grid" id="assignment-details"></dl>
+              <section class="assignment-actions" aria-labelledby="workflow-actions-title">
+                <div class="section-heading"><div><h2 id="workflow-actions-title">Workflow actions</h2><p>A work note is required only when an action changes the assignment.</p></div></div>
+                <div class="assignment-actions-grid">
+                  <form id="status-form" class="stack-form action-panel">
+                    <h3>Change status</h3>
+                    <div class="field"><label for="task-status">Status</label><select id="task-status"></select></div>
+                    <div class="field" id="hold-reason-wrap" hidden><label for="hold-reason">On-hold reason</label><select id="hold-reason"><option value="">Select reason</option><option>Awaiting documents</option><option>Site visit scheduled</option><option>Awaiting review</option><option>Custom</option></select></div>
+                    <div class="field" id="hold-custom-wrap" hidden><label for="hold-custom">Custom reason</label><input id="hold-custom" /></div>
+                    <div class="field"><label for="status-note">Work note</label><textarea id="status-note" placeholder="Required when the status changes"></textarea></div>
+                    <button class="primary" type="submit">Update status</button>
+                  </form>
+                  <form id="reassign-form" class="stack-form action-panel">
+                    <h3>Reassign task</h3>
+                    <div class="field"><label for="new-assignee">Reassign to</label><select id="new-assignee"><option>K. Sivaprasad</option><option>Lavakumar</option></select></div>
+                    <div class="field"><label for="reassign-note">Work note</label><textarea id="reassign-note" required placeholder="Required when reassigned"></textarea></div>
+                    <button class="secondary" type="submit">Reassign task</button>
+                  </form>
+                  <form id="cancel-form" class="stack-form action-panel danger-panel">
+                    <h3>Cancel task</h3><p>Reviewer-only action. History is retained.</p>
+                    <div class="field"><label for="cancel-reason">Cancellation reason</label><textarea id="cancel-reason" required placeholder="Required when cancelled"></textarea></div>
+                    <button class="danger-button" type="submit">Cancel task</button>
+                  </form>
+                </div>
+              </section>
+            </article>
             <article class="work-card">
               <div class="section-heading"><div><h2>Work notes and activity</h2><p>Updates remain in chronological order.</p></div></div>
               <form id="note-form" class="inline-form"><label for="work-note">Add work note</label><textarea id="work-note" required placeholder="Record progress, ambiguity or review context"></textarea><button class="primary" type="submit">Add note</button></form>
@@ -29,21 +56,6 @@
             </article>
           </div>
           <aside class="detail-aside">
-            <article class="work-card action-card">
-              <h2>Workflow</h2>
-              <form id="status-form" class="stack-form">
-                <div class="field"><label for="task-status">Status</label><select id="task-status"></select></div>
-                <div class="field" id="hold-reason-wrap" hidden><label for="hold-reason">On-hold reason</label><select id="hold-reason"><option value="">Select reason</option><option>Awaiting documents</option><option>Site visit scheduled</option><option>Awaiting review</option><option>Custom</option></select></div>
-                <div class="field" id="hold-custom-wrap" hidden><label for="hold-custom">Custom reason</label><input id="hold-custom" /></div>
-                <div class="field"><label for="status-note">Work note</label><textarea id="status-note" placeholder="Required for hold or review context"></textarea></div>
-                <button class="primary" type="submit">Update status</button>
-              </form>
-              <form id="reassign-form" class="stack-form separated-form">
-                <div class="field"><label for="new-assignee">Reassign to</label><select id="new-assignee"><option>K. Sivaprasad</option><option>Lavakumar</option></select></div>
-                <div class="field"><label for="reassign-note">Mandatory work note</label><textarea id="reassign-note" required></textarea></div>
-                <button class="secondary" type="submit">Reassign task</button>
-              </form>
-            </article>
             <article class="work-card action-card">
               <h2>Payment</h2><p class="card-help">Task-specific payment only. It is not inserted in the report.</p>
               <form id="payment-form" class="stack-form">
@@ -53,10 +65,6 @@
                 <div class="payment-summary"><span>Outstanding</span><strong id="outstanding-fee">₹0</strong><small id="payment-status">Pending</small></div>
                 <button class="secondary" type="submit">Update payment</button>
               </form>
-            </article>
-            <article class="work-card danger-card">
-              <h2>Cancel task</h2><p>Reviewer-only action. The reason is retained in activity history.</p>
-              <form id="cancel-form" class="stack-form"><div class="field"><label for="cancel-reason">Cancellation reason</label><textarea id="cancel-reason" required></textarea></div><button class="danger-button" type="submit">Cancel task</button></form>
             </article>
           </aside>
         </section>

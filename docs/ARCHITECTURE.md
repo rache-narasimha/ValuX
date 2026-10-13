@@ -33,6 +33,7 @@ valuation_app/
 │           ├── new-task.js
 │           ├── task-list.js
 │           ├── task-detail.js
+│           ├── task-context.js
 │           ├── shared.js
 │           ├── general.js
 │           ├── agricultural.js
@@ -80,6 +81,8 @@ The backend does not contain editable form markup. It reads form definitions and
   browser storage during workflow discovery and is designed to be replaced by
   the future PostgreSQL API without changing the page controllers.
 - `assets/js/workflow-ui.js` renders shared work-task rows and display values.
+- `assets/js/task-context.js` adds task status, action-note validation and
+  return links around either valuation form when it is opened from a task.
 - `assets/js/shared.js` contains reusable controls, parsing, date, institution
   and file-reading helpers used by every valuation form.
 - `pages/general.html` and `assets/js/general.js` implement residential, commercial and industrial valuation forms.
