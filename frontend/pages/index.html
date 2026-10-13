@@ -3,104 +3,58 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>SLN Property Reports</title>
+    <title>SLN Work Dashboard</title>
     <link rel="stylesheet" href="/assets/css/styles.css" />
-    <style>
-      [hidden] {
-        display: none !important;
-      }
-    </style>
+    <link rel="stylesheet" href="/assets/css/workflow.css" />
   </head>
-  <body class="home-page">
-    <header class="home-header">
-      <div>
-        <p class="eyebrow">SLN Consultancy &amp; Engineering Services</p>
-        <h1>Property report workspace</h1>
-        <p>Select the report workflow you want to prepare.</p>
-      </div>
-      <div class="phase-badge">Phase 2</div>
+  <body class="workflow-page">
+    <header class="app-header">
+      <a class="brand" href="/" aria-label="SLN work dashboard">
+        <span class="brand-mark">SLN</span>
+        <span><strong>Property Reports</strong><small>Work management</small></span>
+      </a>
+      <nav class="top-actions" aria-label="Account navigation">
+        <a href="/tasks">All tasks</a>
+        <span class="user-chip"><span class="avatar">KS</span><span><strong>K. Sivaprasad</strong><small>Reviewer</small></span></span>
+      </nav>
     </header>
-    <main class="home-main">
-      <section class="selector-card" aria-labelledby="selector-title">
-        <div class="selector-intro">
-          <span class="step-number">1</span>
-          <div>
-            <h2 id="selector-title">Choose report type</h2>
-            <p>The next choices change according to the report selected.</p>
-          </div>
-        </div>
-        <form id="report-selector" class="report-selector">
-          <div class="field full">
-            <label class="required" for="report-type">Report type</label
-            ><select id="report-type" required>
-              <option value="">Select report type</option>
-              <option value="valuation">Valuation</option>
-              <option value="estimation">Estimation</option>
-              <option value="progress_completion">
-                Progress / Completion Report
-              </option>
-            </select>
-          </div>
-          <div class="field full" id="valuation-type-wrap" hidden>
-            <label class="required" for="valuation-type">Valuation type</label
-            ><select id="valuation-type">
-              <option value="">Select valuation type</option>
-              <option value="general_property">
-                General Property Valuation
-              </option>
-              <option value="agricultural_land">
-                Agricultural Land Valuation
-              </option>
-            </select>
-          </div>
-          <div class="selection-note" id="selection-note" aria-live="polite">
-            Select a report type to continue.
-          </div>
-          <button
-            type="submit"
-            class="primary start-report"
-            id="start-report"
-            disabled
-          >
-            Open report
-          </button>
-        </form>
-      </section>
-      <section class="workflow-grid" aria-label="Available report workflows">
-        <article class="workflow-card ready">
-          <span>Available</span>
-          <h3>General Property Valuation</h3>
-          <p>
-            Residential, commercial and industrial plots or land-and-building
-            properties.
-          </p>
-        </article>
-        <article class="workflow-card ready">
-          <span>Available</span>
-          <h3>Agricultural Land Valuation</h3>
-          <p>
-            Five-section form with unit conversion, valuation calculations,
-            preview and document generation.
-          </p>
-        </article>
-        <article class="workflow-card future">
-          <span>Planned</span>
-          <h3>Estimation</h3>
-          <p>
-            This workflow will be added when its approved template and field
-            rules are supplied.
-          </p>
-        </article>
-        <article class="workflow-card future">
-          <span>Planned</span>
-          <h3>Progress / Completion</h3>
-          <p>
-            This workflow will remain separate from valuation and estimation
-            reports.
-          </p>
-        </article>
-      </section>
-    </main>
+    <div class="app-shell">
+      <aside class="app-sidebar">
+        <p class="sidebar-label">Workspace</p>
+        <nav id="report-navigation" aria-label="Report workspaces">
+          <button type="button" class="active" data-group="all"><span>All work</span><strong id="count-all">0</strong></button>
+          <button type="button" data-group="valuation"><span>Valuation</span><strong id="count-valuation">0</strong></button>
+          <button type="button" data-group="estimation"><span>Estimation</span><strong id="count-estimation">0</strong></button>
+          <button type="button" data-group="progress"><span>Progress</span><strong id="count-progress">0</strong></button>
+          <button type="button" data-group="completion"><span>Completion</span><strong id="count-completion">0</strong></button>
+        </nav>
+        <div class="sidebar-note"><strong>Workflow prototype</strong><p>Task data is stored on this browser until durable storage is added.</p></div>
+      </aside>
+      <main class="dashboard" id="dashboard">
+        <section class="dashboard-heading">
+          <div><p class="eyebrow">Work overview</p><h1 id="dashboard-title">All work</h1><p id="dashboard-description">Review assignments, continue reports and follow up on pending work.</p></div>
+          <a class="button-link primary new-assignment" href="/tasks/new"><span aria-hidden="true">＋</span> New assignment</a>
+        </section>
+        <section class="metric-grid" aria-label="Task status summary">
+          <button class="metric-card" type="button" data-status="Assigned"><span>Assigned</span><strong id="metric-assigned">0</strong><small>Ready to begin</small></button>
+          <button class="metric-card" type="button" data-status="In Progress"><span>In progress</span><strong id="metric-progress">0</strong><small>Currently being worked</small></button>
+          <button class="metric-card warning" type="button" data-status="On Hold"><span>On hold</span><strong id="metric-hold">0</strong><small>Needs follow-up</small></button>
+          <button class="metric-card success" type="button" data-status="Awaiting Review"><span>Awaiting review</span><strong id="metric-review">0</strong><small>Submitted for checking</small></button>
+        </section>
+        <section class="dashboard-grid">
+          <article class="work-card recent-card">
+            <div class="section-heading"><div><h2>Recently assigned</h2><p>The latest work added to this section.</p></div><a href="/tasks" id="view-all-assigned">View all</a></div>
+            <div class="task-stack" id="recent-assigned"></div>
+          </article>
+          <article class="work-card recent-card">
+            <div class="section-heading"><div><h2>Recently completed</h2><p>Finished and closed assignments.</p></div><a href="/tasks?status=Completed" id="view-all-completed">View all</a></div>
+            <div class="task-stack" id="recent-completed"></div>
+          </article>
+        </section>
+      </main>
+    </div>
+    <script src="/assets/js/task-store.js"></script>
+    <script src="/assets/js/workflow-ui.js"></script>
     <script src="/assets/js/home.js"></script>
   </body>
 </html>

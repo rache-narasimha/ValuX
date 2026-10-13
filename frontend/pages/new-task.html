@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>New Assignment · SLN Property Reports</title>
+    <link rel="stylesheet" href="/assets/css/styles.css" />
+    <link rel="stylesheet" href="/assets/css/workflow.css" />
+  </head>
+  <body class="workflow-page">
+    <header class="app-header">
+      <a class="brand" href="/"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
+      <a class="quiet-link" href="/">Cancel and return</a>
+    </header>
+    <main class="page-frame narrow-page">
+      <section class="page-intro"><p class="eyebrow">Work intake</p><h1>Create new assignment</h1><p>Create the work task first. Report fields and payment information remain separate.</p></section>
+      <form id="new-task-form" class="workflow-form">
+        <section class="form-section">
+          <div class="form-section-heading"><span>1</span><div><h2>Institution</h2><p>Select the assigning bank or NBFC and branch.</p></div></div>
+          <div class="form-grid">
+            <div class="field"><label class="required" for="institution-type">Institution type</label><select id="institution-type" required><option value="">Select type</option><option value="Bank">Bank</option><option value="NBFC">NBFC</option></select></div>
+            <div class="field"><label class="required" for="institution">Bank / NBFC</label><select id="institution" required disabled><option value="">Select institution</option></select></div>
+            <div class="field full"><label class="required" for="branch">Branch</label><input id="branch" required autocomplete="organization" placeholder="Example: Adoni Branch" /></div>
+          </div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-heading"><span>2</span><div><h2>Customer and property</h2><p>This identifies the assignment; it does not alter the report form.</p></div></div>
+          <div class="form-grid">
+            <div class="field full"><label class="required" for="customer-name">Applicant / customer name</label><input id="customer-name" required autocomplete="name" placeholder="Enter the full name" /></div>
+            <div class="field full"><label class="required" for="property-brief">Property location or short description</label><textarea id="property-brief" required placeholder="A short description that helps identify the property"></textarea></div>
+          </div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-heading"><span>3</span><div><h2>Report and assignment</h2><p>Choose the work type, owner and target date.</p></div></div>
+          <div class="form-grid">
+            <div class="field"><label class="required" for="report-type">Report type</label><select id="report-type" required><option value="">Select report type</option><option value="valuation">Valuation</option><option value="estimation">Estimation</option><option value="progress">Progress report</option><option value="completion">Completion report</option></select></div>
+            <div class="field" id="valuation-type-wrap" hidden><label class="required" for="valuation-type">Valuation type</label><select id="valuation-type"><option value="">Select valuation type</option><option value="general">General property valuation</option><option value="agricultural">Agricultural land valuation</option></select></div>
+            <div class="field"><label class="required" for="assignee">Assigned to</label><select id="assignee" required><option value="K. Sivaprasad">K. Sivaprasad</option><option value="Lavakumar">Lavakumar</option></select></div>
+            <div class="field"><label class="required" for="priority">Priority</label><select id="priority" required><option value="Normal">Normal</option><option value="High">High</option><option value="Urgent">Urgent</option></select></div>
+            <div class="field"><label class="required" for="assigned-date">Assigned date</label><input id="assigned-date" type="date" required /></div>
+            <div class="field"><label class="required" for="due-date">Due date</label><input id="due-date" type="date" required /><small class="field-help">Defaults to seven days and cannot exceed month-end in this phase.</small></div>
+            <div class="field full"><label for="initial-note">Initial work note</label><textarea id="initial-note" placeholder="Optional context for the assignee"></textarea></div>
+          </div>
+        </section>
+        <div class="form-actions"><a class="button-link secondary" href="/">Cancel</a><button class="primary" type="submit">Create assignment</button></div>
+      </form>
+    </main>
+    <script src="/assets/js/institutions.js"></script>
+    <script src="/assets/js/task-store.js"></script>
+    <script src="/assets/js/new-task.js"></script>
+  </body>
+</html>

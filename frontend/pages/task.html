@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Task Workspace · SLN Property Reports</title>
+    <link rel="stylesheet" href="/assets/css/styles.css" />
+    <link rel="stylesheet" href="/assets/css/workflow.css" />
+  </head>
+  <body class="workflow-page">
+    <header class="app-header">
+      <a class="brand" href="/"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
+      <a class="quiet-link" href="/tasks">← All tasks</a>
+    </header>
+    <main class="page-frame" id="task-workspace">
+      <div id="task-not-found" class="empty-state" hidden><strong>Task not found</strong><p>The requested assignment is not available in this browser.</p><a class="button-link primary" href="/tasks">Return to tasks</a></div>
+      <div id="task-content" hidden>
+        <section class="task-hero">
+          <div><p class="task-id" id="task-id"></p><h1 id="task-name"></h1><p id="task-subtitle"></p><div class="badge-row" id="task-badges"></div></div>
+          <a id="open-report" class="button-link primary" href="#">Open report</a>
+        </section>
+        <section class="detail-layout">
+          <div class="detail-main">
+            <article class="work-card"><div class="section-heading"><div><h2>Assignment details</h2><p>Application information kept outside the report form.</p></div></div><dl class="detail-grid" id="assignment-details"></dl></article>
+            <article class="work-card">
+              <div class="section-heading"><div><h2>Work notes and activity</h2><p>Updates remain in chronological order.</p></div></div>
+              <form id="note-form" class="inline-form"><label for="work-note">Add work note</label><textarea id="work-note" required placeholder="Record progress, ambiguity or review context"></textarea><button class="primary" type="submit">Add note</button></form>
+              <ol id="activity-list" class="activity-list"></ol>
+            </article>
+          </div>
+          <aside class="detail-aside">
+            <article class="work-card action-card">
+              <h2>Workflow</h2>
+              <form id="status-form" class="stack-form">
+                <div class="field"><label for="task-status">Status</label><select id="task-status"></select></div>
+                <div class="field" id="hold-reason-wrap" hidden><label for="hold-reason">On-hold reason</label><select id="hold-reason"><option value="">Select reason</option><option>Awaiting documents</option><option>Site visit scheduled</option><option>Awaiting review</option><option>Custom</option></select></div>
+                <div class="field" id="hold-custom-wrap" hidden><label for="hold-custom">Custom reason</label><input id="hold-custom" /></div>
+                <div class="field"><label for="status-note">Work note</label><textarea id="status-note" placeholder="Required for hold or review context"></textarea></div>
+                <button class="primary" type="submit">Update status</button>
+              </form>
+              <form id="reassign-form" class="stack-form separated-form">
+                <div class="field"><label for="new-assignee">Reassign to</label><select id="new-assignee"><option>K. Sivaprasad</option><option>Lavakumar</option></select></div>
+                <div class="field"><label for="reassign-note">Mandatory work note</label><textarea id="reassign-note" required></textarea></div>
+                <button class="secondary" type="submit">Reassign task</button>
+              </form>
+            </article>
+            <article class="work-card action-card">
+              <h2>Payment</h2><p class="card-help">Task-specific payment only. It is not inserted in the report.</p>
+              <form id="payment-form" class="stack-form">
+                <div class="field"><label for="estimated-fee">Estimated fee</label><input id="estimated-fee" inputmode="decimal" /></div>
+                <div class="field"><label for="agreed-fee">Agreed fee</label><input id="agreed-fee" inputmode="decimal" /></div>
+                <div class="field"><label for="received-fee">Amount received</label><input id="received-fee" inputmode="decimal" /></div>
+                <div class="payment-summary"><span>Outstanding</span><strong id="outstanding-fee">₹0</strong><small id="payment-status">Pending</small></div>
+                <button class="secondary" type="submit">Update payment</button>
+              </form>
+            </article>
+            <article class="work-card danger-card">
+              <h2>Cancel task</h2><p>Reviewer-only action. The reason is retained in activity history.</p>
+              <form id="cancel-form" class="stack-form"><div class="field"><label for="cancel-reason">Cancellation reason</label><textarea id="cancel-reason" required></textarea></div><button class="danger-button" type="submit">Cancel task</button></form>
+            </article>
+          </aside>
+        </section>
+      </div>
+    </main>
+    <script src="/assets/js/task-store.js"></script>
+    <script src="/assets/js/workflow-ui.js"></script>
+    <script src="/assets/js/task-detail.js"></script>
+  </body>
+</html>

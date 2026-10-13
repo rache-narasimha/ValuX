@@ -19,12 +19,20 @@ valuation_app/
 ├── frontend/
 │   ├── pages/
 │   │   ├── index.html
+│   │   ├── tasks.html
+│   │   ├── new-task.html
+│   │   ├── task.html
 │   │   ├── general.html
 │   │   └── agricultural.html
 │   └── assets/
 │       ├── css/styles.css
 │       └── js/
+│           ├── task-store.js
+│           ├── workflow-ui.js
 │           ├── home.js
+│           ├── new-task.js
+│           ├── task-list.js
+│           ├── task-detail.js
 │           ├── shared.js
 │           ├── general.js
 │           ├── agricultural.js
@@ -65,7 +73,13 @@ The backend does not contain editable form markup. It reads form definitions and
 
 ### Frontend
 
-- `pages/index.html` and `assets/js/home.js` control report-type selection.
+- `pages/index.html` and `assets/js/home.js` provide the work dashboard.
+- `pages/new-task.html`, `tasks.html`, and `task.html` implement assignment
+  creation, the searchable work queue, and the task workspace.
+- `assets/js/task-store.js` is the temporary task repository boundary. It uses
+  browser storage during workflow discovery and is designed to be replaced by
+  the future PostgreSQL API without changing the page controllers.
+- `assets/js/workflow-ui.js` renders shared work-task rows and display values.
 - `assets/js/shared.js` contains reusable controls, parsing, date, institution
   and file-reading helpers used by every valuation form.
 - `pages/general.html` and `assets/js/general.js` implement residential, commercial and industrial valuation forms.

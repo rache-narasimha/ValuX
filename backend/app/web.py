@@ -73,6 +73,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         pages = {
             "/": PAGES_DIR / "index.html",
+            "/tasks": PAGES_DIR / "tasks.html",
+            "/tasks/": PAGES_DIR / "tasks.html",
+            "/tasks/new": PAGES_DIR / "new-task.html",
+            "/tasks/new/": PAGES_DIR / "new-task.html",
+            "/tasks/detail": PAGES_DIR / "task.html",
+            "/tasks/detail/": PAGES_DIR / "task.html",
             "/valuation/general": PAGES_DIR / "general.html",
             "/valuation/general/": PAGES_DIR / "general.html",
             "/valuation/agricultural": PAGES_DIR / "agricultural.html",
@@ -147,4 +153,3 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": True, "download": f"/downloads/{docx_name}"})
         except Exception as exc:
             self.send_json({"ok": False, "error": str(exc)}, 500)
-

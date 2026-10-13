@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>All Tasks · SLN Property Reports</title>
+    <link rel="stylesheet" href="/assets/css/styles.css" />
+    <link rel="stylesheet" href="/assets/css/workflow.css" />
+  </head>
+  <body class="workflow-page">
+    <header class="app-header">
+      <a class="brand" href="/"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
+      <a class="button-link primary compact-button" href="/tasks/new">＋ New assignment</a>
+    </header>
+    <main class="page-frame">
+      <section class="page-intro list-intro"><div><p class="eyebrow">Work queue</p><h1>All tasks</h1><p>Search and filter assignments, then open a row for full details.</p></div><a class="quiet-link" href="/">← Dashboard</a></section>
+      <form id="task-filters" class="filter-bar">
+        <div class="field search-field"><label for="task-search">Search</label><input id="task-search" type="search" placeholder="Task ID, applicant, report, assignee or institution" /></div>
+        <div class="field"><label for="group-filter">Report section</label><select id="group-filter"><option value="all">All work</option><option value="valuation">Valuation</option><option value="estimation">Estimation</option><option value="progress">Progress</option><option value="completion">Completion</option></select></div>
+        <div class="field"><label for="status-filter">Status</label><select id="status-filter"><option value="">All statuses</option></select></div>
+        <div class="field"><label for="assignee-filter">Assigned to</label><select id="assignee-filter"><option value="">Everyone</option><option value="K. Sivaprasad">K. Sivaprasad</option><option value="Lavakumar">Lavakumar</option></select></div>
+      </form>
+      <section class="work-card task-list-card">
+        <div class="section-heading"><div><h2>Assignments</h2><p id="result-count">0 tasks</p></div></div>
+        <div id="task-list" class="task-stack"></div>
+        <button id="load-more" class="load-more" type="button" hidden>Load more tasks</button>
+      </section>
+    </main>
+    <script src="/assets/js/task-store.js"></script>
+    <script src="/assets/js/workflow-ui.js"></script>
+    <script src="/assets/js/task-list.js"></script>
+  </body>
+</html>

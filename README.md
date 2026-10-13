@@ -1,6 +1,7 @@
 # SLN Property Report Application
 
-Local web application for preparing property valuation forms and generating matching DOCX and PDF reports.
+Local web application for managing property-report assignments, preparing
+valuation forms, and generating matching DOCX and PDF reports.
 
 ## Start the application
 
@@ -31,7 +32,7 @@ docker compose -f valuation_app/compose.yaml down
 | `backend/app/media.py`          | Photograph normalization and document image layout                     |
 | `backend/app/reports.py`        | High-level DOCX generators for both valuation types                    |
 | `backend/app/web.py`            | HTTP routes, previews, static files and downloads                      |
-| `frontend/pages/`               | Home page and form page HTML                                           |
+| `frontend/pages/`               | Dashboard, task workflow and report-form HTML                          |
 | `frontend/assets/js/shared.js`  | Shared controls, parsing, dates, institutions and file-reading helpers  |
 | `frontend/assets/js/`           | Report-specific browser controllers and home-page behavior              |
 | `frontend/assets/css/`          | Shared application styling                                             |
@@ -49,6 +50,8 @@ The archive is retained for reference but is not copied into the Docker image an
 ## Runtime behavior
 
 - Form text is saved in the current browser's local storage.
+- Workflow tasks are temporarily stored behind a browser repository adapter
+  until the PostgreSQL phase replaces it with durable application storage.
 - Uploaded photographs remain in the current browser session and must be selected again after a refresh.
 - Preview creates a DOCX first, renders that exact DOCX to PDF, and reuses the same files for download.
 - All generated files are written beneath `outputs/generated_reports/`.
