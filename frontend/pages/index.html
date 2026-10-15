@@ -6,12 +6,14 @@
     <title>SLN Work Dashboard</title>
     <link rel="stylesheet" href="/assets/css/styles.css" />
     <link rel="stylesheet" href="/assets/css/workflow.css" />
+    <script src="/assets/js/appearance.js"></script>
   </head>
   <body class="workflow-page">
     <header class="app-header">
       <a class="brand" href="/" aria-label="SLN work dashboard"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
       <nav class="top-actions" aria-label="Account navigation">
-        <a href="/practice">Practice forms</a><a href="/tasks">All tasks</a>
+        <a href="/practice">Practice forms</a><a href="/tasks">All tasks</a><a href="/settings/institutions" data-father-only>Institutions</a>
+        <button class="appearance-toggle" type="button" data-appearance-toggle></button>
         <div data-role-switcher></div>
         <span class="user-chip"><span class="avatar" data-current-user-initials>KS</span><span><strong data-current-user-name>K. Sivaprasad</strong><small data-current-user-role>Father / reviewer</small></span></span>
       </nav>
@@ -42,16 +44,25 @@
         </section>
         <section class="father-business" id="father-business">
           <article class="work-card institution-overview">
-            <div class="section-heading chart-heading"><div><h2>Institution workload</h2><p>Every configured bank and NBFC remains visible, including institutions with zero work.</p></div><div class="chart-heading-tools"><span id="workload-period-label" class="soft-badge"></span><div class="period-switch" aria-label="Institution workload period"><button type="button" data-dashboard-period="daily">Daily</button><button type="button" data-dashboard-period="weekly">Weekly</button><button type="button" data-dashboard-period="monthly">Monthly</button><button type="button" data-dashboard-period="yearly">Yearly</button></div></div></div>
+            <div class="section-heading chart-heading"><div><h2>Institution workload</h2><p>Every configured bank and NBFC remains visible, including institutions with zero work.</p></div><div class="chart-heading-tools"><span id="workload-period-label" class="soft-badge"></span><div class="period-switch" aria-label="Institution workload period"><button type="button" data-dashboard-period="daily">Daily</button><button type="button" data-dashboard-period="weekly">Weekly</button><button type="button" data-dashboard-period="monthly">Monthly</button><button type="button" data-dashboard-period="yearly">Yearly</button></div><div id="dashboard-period-picker" class="period-picker"></div></div></div>
             <div id="institution-workload" class="institution-chart"></div>
           </article>
           <article class="work-card finance-overview">
-            <div class="section-heading"><div><h2>Income and payments</h2><p>Institution-wise financial position for completed work in the selected period.</p></div><div class="finance-legend" aria-label="Chart legend"><span class="earned">Earned</span><span class="received">Received</span><span class="outstanding">Outstanding</span></div></div>
+            <div class="section-heading finance-heading">
+              <div><h2>Income and payments</h2><p>Current financial position for assignments that entered the selected finance period.</p></div>
+              <div class="finance-tools">
+                <label class="compact-control" for="finance-period-select"><span>Period</span><select id="finance-period-select" aria-label="Income and payments period"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
+                <div id="finance-period-picker" class="period-picker"></div>
+                <label class="compact-control" for="finance-metric-select"><span>Payment view</span><select id="finance-metric-select" aria-label="Finance metric"><option value="all">All</option><option value="earned">Earned</option><option value="received">Received</option><option value="outstanding">Outstanding</option></select></label>
+                <span id="finance-period-label" class="soft-badge finance-period-label"></span>
+                <div class="finance-legend" id="finance-legend" aria-label="Chart legend"><span class="earned">Earned</span><span class="received">Received</span><span class="outstanding">Outstanding</span></div>
+              </div>
+            </div>
             <div id="institution-finance-chart" class="institution-chart finance-chart"></div>
             <div id="institution-finance-detail" class="institution-finance-detail"></div>
             <div class="finance-strip" aria-label="Overall business payment summary">
-              <article><span>Income earned</span><strong id="income-earned">₹0</strong><small>Agreed fees for completed work</small></article>
-              <article><span>Payment received</span><strong id="income-received">₹0</strong><small>Received against completed work</small></article>
+              <article><span>Income earned</span><strong id="income-earned">₹0</strong><small>Agreed fee, otherwise estimated fee</small></article>
+              <article><span>Payment received</span><strong id="income-received">₹0</strong><small>Currently recorded receipts</small></article>
               <article><span>Outstanding</span><strong id="income-outstanding">₹0</strong><small>Pending collection</small></article>
             </div>
           </article>

@@ -12,6 +12,7 @@
   }
 
   function currency(value) {
+    if (value === null || value === undefined || value === "") return "N/A";
     return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(value) || 0);
   }
 
@@ -23,19 +24,21 @@
     return `payment-${String(status || "pending").toLowerCase().replaceAll(" ", "-")}`;
   }
 
-  const CHART_COLORS = ["#087ea4", "#e17b42", "#49a078", "#7b6fc2", "#d5a12d", "#d85c70", "#399bb0", "#8b67a9", "#5a9c45", "#c66b2c", "#3e6daf", "#b84b87", "#68858f", "#9a7b25"];
-
-  function chartColor(index) {
-    return CHART_COLORS[Math.abs(Number(index) || 0) % CHART_COLORS.length];
+  function chartColor(indexOrInstitution) {
+    if (typeof indexOrInstitution === "object" && indexOrInstitution?.color) return indexOrInstitution.color;
+    return "#087ea4";
   }
 
   function taskRow(task, options = {}) {
     const hold = task.status === "On Hold" && task.holdReason ? `<span class="task-secondary">${escape(task.holdReason)}</span>` : "";
     const assignee = task.assignee || "Unassigned";
-    const payment = task.payment?.status || "Pending";
+    const paymentSummary = TaskStore.paymentSummary(task);
+    const payment = paymentSummary.status;
     const quickPayment = options.paymentAction !== false && WorkflowAccess.can("updatePayment", task)
       ? `<button class="row-action" type="button" data-payment-task="${escape(task.id)}">Payment</button>`
-      : `<span class="row-arrow" aria-hidden="true">›</span>`;
+      : task.status === "Closed" && options.paymentAction !== false
+        ? '<button class="row-action" type="button" disabled title="Payment is locked after closure">Payment locked</button>'
+        : `<span class="row-arrow" aria-hidden="true">›</span>`;
     return `<article class="task-row" data-task-id="${escape(task.id)}">
       <a class="task-row-link" href="/tasks/detail?id=${encodeURIComponent(task.id)}" aria-label="Open ${escape(task.reportName)}"></a>
       <div class="task-row-main">
@@ -48,7 +51,7 @@
       <div class="task-row-meta">
         <span class="status-badge ${statusClass(task.status)}">${escape(task.status)}</span>${hold}
       </div>
-      <div class="task-row-payment task-wide"><small>Payment</small><span class="payment-badge ${paymentClass(payment)}">${escape(payment)}</span><small>${currency(Math.max(0, Number(task.payment?.agreed || 0) - Number(task.payment?.received || 0)))} due</small></div>
+      <div class="task-row-payment task-wide"><small>Payment</small><span class="payment-badge ${paymentClass(payment)}">${escape(payment)}</span><small>${paymentSummary.outstanding === null ? "N/A" : `${currency(paymentSummary.outstanding)} due`}</small></div>
       ${quickPayment}
     </article>`;
   }
@@ -57,5 +60,14 @@
     return `<div class="empty-state compact-empty"><strong>No tasks to show</strong><p>${escape(message)}</p></div>`;
   }
 
-  window.WorkflowUI = { escape, date, currency, statusClass, paymentClass, chartColor, taskRow, empty };
+  function fatal(message) {
+    const alert = document.createElement("div");
+    alert.className = "global-error";
+    alert.setAttribute("role", "alert");
+    alert.innerHTML = `<strong>Local data could not be loaded</strong><p>${escape(message)}</p>`;
+    const target = document.querySelector("main") || document.body;
+    target.prepend(alert);
+  }
+
+  window.WorkflowUI = { escape, date, currency, statusClass, paymentClass, chartColor, taskRow, empty, fatal };
 })();

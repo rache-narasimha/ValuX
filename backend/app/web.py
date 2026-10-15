@@ -23,6 +23,22 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def do_HEAD(self):
+        """Support lightweight availability checks for retained report files."""
+        path = urlparse(self.path).path
+        if not path.startswith("/downloads/"):
+            self.send_error(404)
+            return
+        file_path = OUTPUT_DIR / Path(path).name
+        if not file_path.exists() or not file_path.is_file():
+            self.send_error(404)
+            return
+        content_type = "application/pdf" if file_path.suffix.lower() == ".pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(file_path.stat().st_size))
+        self.end_headers()
+
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/api/schema":
@@ -81,6 +97,8 @@ class Handler(BaseHTTPRequestHandler):
             "/tasks/detail/": PAGES_DIR / "task.html",
             "/practice": PAGES_DIR / "practice.html",
             "/practice/": PAGES_DIR / "practice.html",
+            "/settings/institutions": PAGES_DIR / "institutions.html",
+            "/settings/institutions/": PAGES_DIR / "institutions.html",
             "/valuation/general": PAGES_DIR / "general.html",
             "/valuation/general/": PAGES_DIR / "general.html",
             "/valuation/agricultural": PAGES_DIR / "agricultural.html",
@@ -123,7 +141,8 @@ class Handler(BaseHTTPRequestHandler):
             preview_id = str(time.time_ns()) if is_preview else str(payload.get("preview_id", ""))
             if preview_id and not re.fullmatch(r"\d+", preview_id):
                 raise ValueError("Invalid preview identifier")
-            base_name = f"{prefix}-preview-{preview_id}" if is_preview else f"{prefix}-report"
+            generation_id = str(time.time_ns())
+            base_name = f"{prefix}-preview-{preview_id}" if is_preview else f"{prefix}-report-{generation_id}"
             docx_name = f"{base_name}.docx"
             docx_path = OUTPUT_DIR / docx_name
             generator = generate_agricultural_docx if is_agricultural else generate_docx

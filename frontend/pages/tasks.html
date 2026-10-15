@@ -6,11 +6,12 @@
     <title>All Tasks · SLN Property Reports</title>
     <link rel="stylesheet" href="/assets/css/styles.css" />
     <link rel="stylesheet" href="/assets/css/workflow.css" />
+    <script src="/assets/js/appearance.js"></script>
   </head>
   <body class="workflow-page">
     <header class="app-header">
       <a class="brand" href="/"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
-      <div class="top-actions"><div data-role-switcher></div><a class="button-link primary compact-button" href="/tasks/new">＋ New assignment</a></div>
+      <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button><div data-role-switcher></div><a class="button-link primary compact-button" href="/tasks/new">＋ New assignment</a></div>
     </header>
     <main class="page-frame">
       <section class="page-intro list-intro"><div><p class="eyebrow">Work queue</p><h1 id="task-list-title">All work tasks</h1><p id="task-list-description">Search and filter assignments, then open a row for full details.</p></div><a class="quiet-link" href="/">← Dashboard</a></section>
@@ -22,7 +23,7 @@
         <div class="field"><label for="status-filter">Status</label><select id="status-filter"><option value="">All statuses</option></select></div>
         <div class="field"><label for="assignee-filter">Assigned to</label><select id="assignee-filter"><option value="">Everyone</option><option value="K. Sivaprasad">K. Sivaprasad</option><option value="Lavakumar">Lavakumar</option></select></div>
         <div class="field"><label for="hold-filter">On-hold reason</label><select id="hold-filter"><option value="">All reasons</option><option>Awaiting Documents</option><option>Scheduled Site Visit</option><option>Awaiting Review</option><option>Returned for Correction</option><option>Custom</option></select></div>
-        <div class="field"><label for="payment-filter">Payment</label><select id="payment-filter"><option value="">All payment states</option><option>Pending</option><option>Partially Received</option><option>Received</option></select></div>
+        <div class="field"><label for="payment-filter">Payment</label><select id="payment-filter"><option value="">All payment states</option><option>Not Set</option><option>Pending</option><option>Partially Received</option><option>Overdue</option><option>Received</option></select></div>
       </form>
       <section class="work-card institution-drilldown" id="institution-drilldown" hidden>
         <div class="section-heading"><div><p class="eyebrow">Institution view</p><h2 id="institution-drilldown-title"></h2><p id="institution-drilldown-subtitle"></p></div><button type="button" class="quiet-button" id="clear-institution">View all institutions</button></div>

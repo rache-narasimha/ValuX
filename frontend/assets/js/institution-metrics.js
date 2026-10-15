@@ -17,31 +17,34 @@
   ];
 
   function configured() {
-    return Object.entries(window.INSTITUTIONS || {}).flatMap(([type, institutions]) =>
-      institutions.map((institution) => ({ ...institution, type })),
-    );
+    return window.InstitutionStore
+      ? InstitutionStore.active()
+      : Object.entries(window.INSTITUTIONS || {}).flatMap(([type, institutions]) =>
+        institutions.map((institution) => ({ ...institution, type })),
+      );
   }
 
   function forInstitution(tasks, institutionCode) {
     return tasks.filter((task) => task.institutionCode === institutionCode);
   }
 
-  function workload(tasks, period) {
+  function workload(tasks, period, reference) {
     return configured().map((institution) => ({
       ...institution,
       count: forInstitution(tasks, institution.code)
-        .filter((task) => TaskStore.matchesPeriod(task, period, "assignedDate")).length,
+        .filter((task) => TaskStore.matchesPeriod(task, period, "assignedDate", reference)).length,
     }));
   }
 
-  function finance(tasks, period) {
+  function finance(tasks, period, reference) {
     return configured().map((institution) => {
       const billable = forInstitution(tasks, institution.code)
-        .filter((task) => ["Completed", "Closed"].includes(task.status))
-        .filter((task) => TaskStore.matchesPeriod(task, period, "completedAt"));
-      const earned = billable.reduce((sum, task) => sum + Number(task.payment.agreed || 0), 0);
+        .filter((task) => task.status !== "Cancelled")
+        .filter((task) => TaskStore.matchesPeriod(task, period, "assignedDate", reference));
+      const earned = billable.reduce((sum, task) => sum + Number(TaskStore.paymentSummary(task).basis || 0), 0);
       const received = billable.reduce((sum, task) => sum + Number(task.payment.received || 0), 0);
-      return { ...institution, earned, received, outstanding: Math.max(0, earned - received) };
+      const outstanding = billable.reduce((sum, task) => sum + Number(TaskStore.paymentSummary(task).outstanding || 0), 0);
+      return { ...institution, earned, received, outstanding };
     });
   }
 

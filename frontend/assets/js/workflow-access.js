@@ -44,8 +44,10 @@
       viewTask: true,
       createTask: true,
       addNote: !task || task.status !== "Cancelled",
-      updatePayment: Boolean(task && task.status !== "Cancelled"),
+      updatePayment: Boolean(task && !["Closed", "Cancelled"].includes(task.status)),
       closeTask: Boolean(task && task.status === "Completed"),
+      reopenTask: user.role === "father" && Boolean(task && window.TaskStore?.canReopen(task)),
+      downloadFinalReport: Boolean(task && task.status === "Closed" && task.finalDocx?.url),
       cancelTask: user.role === "father" && Boolean(task && !["Closed", "Cancelled"].includes(task.status)),
       openReport: Boolean(task && task.assignee && ["In Progress", "On Hold"].includes(task.status) && (user.role === "father" || ownsTask)),
       assignUnassigned: Boolean(task && task.status === "Unassigned"),
@@ -76,6 +78,7 @@
     document.querySelectorAll("[data-current-user-role]").forEach((node) => { node.textContent = user.label; });
     document.querySelectorAll("[data-current-user-initials]").forEach((node) => { node.textContent = user.initials; });
     document.body.dataset.role = user.role;
+    document.querySelectorAll("[data-father-only]").forEach((node) => { node.hidden = user.role !== "father"; });
   }
 
   window.WorkflowAccess = { USERS, currentRole, currentUser, setRole, can, visible, installSwitcher };

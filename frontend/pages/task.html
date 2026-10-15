@@ -6,33 +6,25 @@
     <title>Task Workspace · SLN Property Reports</title>
     <link rel="stylesheet" href="/assets/css/styles.css" />
     <link rel="stylesheet" href="/assets/css/workflow.css" />
+    <script src="/assets/js/appearance.js"></script>
   </head>
   <body class="workflow-page">
     <header class="app-header">
       <a class="brand" href="/"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
-      <div class="top-actions"><div data-role-switcher></div><a class="quiet-link" href="/tasks">← All tasks</a></div>
+      <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button><div data-role-switcher></div><a class="quiet-link" href="/tasks">← All tasks</a></div>
     </header>
     <main class="page-frame" id="task-workspace">
       <div id="task-not-found" class="empty-state" hidden><strong>Task not found</strong><p>The requested assignment is not available in this browser.</p><a class="button-link primary" href="/tasks">Return to tasks</a></div>
       <div id="task-content" hidden>
         <section class="task-hero">
           <div><p class="task-id" id="task-id"></p><h1 id="task-name"></h1><p id="task-subtitle"></p><div class="badge-row" id="task-badges"></div></div>
-          <div class="hero-actions"><button id="cancel-task-button" class="danger-ghost" type="button" hidden>Cancel task</button><a id="open-report" class="button-link primary" href="#">Open report</a></div>
+          <div class="hero-actions"><button id="hold-task-button" class="secondary" type="button" hidden>Put on hold</button><button id="resume-task-button" class="secondary" type="button" hidden>Resume work</button><button id="reopen-task-button" class="secondary" type="button" hidden>Reopen task</button><button id="cancel-task-button" class="danger-ghost" type="button" hidden>Cancel task</button><a id="open-report" class="button-link primary" href="#">Open report</a></div>
         </section>
         <section class="detail-layout">
           <div class="detail-main">
             <article class="work-card">
               <div class="section-heading"><div><h2>Assignment details</h2></div></div>
               <dl class="detail-grid" id="assignment-details"></dl>
-              <div class="assignment-inline-actions">
-                <form id="assignment-form" class="assignment-inline-form">
-                  <label for="new-assignee" id="assignment-action-title">Assign to</label><select id="new-assignee"></select>
-                  <button class="secondary" type="submit">Apply</button>
-                  <small id="assignment-help">Add the routing note below before applying.</small>
-                </form>
-                <button id="hold-task-button" class="secondary compact-action" type="button" hidden>Put on hold</button>
-                <button id="resume-task-button" class="secondary compact-action" type="button" hidden>Resume work</button>
-              </div>
             </article>
             <article class="work-card" id="activity-card">
               <div class="section-heading"><div><h2>Work notes and activity</h2><p>Use this one work-note field for progress and for any action requiring context.</p></div></div>
@@ -44,14 +36,23 @@
           <aside class="detail-aside">
             <article class="work-card action-card" id="payment-card">
               <h2>Payment</h2><p class="card-help">Update payment at any stage. These details are not inserted in the report.</p>
+              <p id="payment-readonly-reason" class="readonly-notice" hidden></p>
               <form id="payment-form" class="stack-form">
                 <div class="field"><label for="estimated-fee">Estimated fee</label><input id="estimated-fee" inputmode="decimal" /></div>
                 <div class="field"><label for="agreed-fee">Agreed fee</label><input id="agreed-fee" inputmode="decimal" /></div>
                 <div class="field"><label for="received-fee">Amount received</label><input id="received-fee" inputmode="decimal" /></div>
-                <div class="payment-summary"><span>Outstanding</span><strong id="outstanding-fee">₹0</strong><small id="payment-status">Pending</small></div>
+                <div class="field"><label for="payment-due-date">Payment due date</label><input id="payment-due-date" type="date" /><small id="payment-due-help" class="field-help">Defaults to seven calendar days after completion.</small></div>
+                <div class="payment-summary"><span>Outstanding</span><strong id="outstanding-fee">N/A</strong><small id="payment-status">Not Set</small></div>
+                <p id="payment-warning" class="payment-warning" hidden></p>
                 <button class="secondary" id="save-payment" type="submit">Save payment update</button>
-                <button class="primary" id="detail-close-request" type="button" disabled>Close request</button>
+                <span class="disabled-action" id="detail-close-wrapper"><button class="primary" id="detail-close-request" type="button" disabled>Close request</button><small id="detail-close-reason">Complete the report and settle payment before closing.</small></span>
               </form>
+            </article>
+            <article class="work-card action-card" id="final-report-card" hidden>
+              <h2>Final report</h2>
+              <p id="final-report-message" class="card-help"></p>
+              <a id="download-final-docx" class="button-link secondary" href="#" download>Download final DOCX</a>
+              <small id="reopen-deadline" class="field-help"></small>
             </article>
           </aside>
         </section>
@@ -60,7 +61,24 @@
     <div class="workflow-modal" id="cancel-modal" hidden>
       <section class="workflow-dialog" role="dialog" aria-modal="true" aria-labelledby="cancel-title">
         <div class="dialog-heading"><div><h2 id="cancel-title">Cancel task</h2><p>This father-only action retains the complete history.</p></div><button type="button" class="modal-x" data-close-cancel aria-label="Close">×</button></div>
-        <form id="cancel-form" class="stack-form"><div class="field"><label for="cancel-reason">Reason</label><select id="cancel-reason"></select></div><p class="card-help">For Custom, enter the explanation in the main work-note field before cancelling.</p><div class="dialog-actions"><button class="secondary" type="button" data-close-cancel>Keep task</button><button class="danger-button" type="submit">Cancel task</button></div></form>
+        <form id="cancel-form" class="stack-form"><div class="field"><label for="cancel-reason">Reason</label><select id="cancel-reason"></select></div><div class="field"><label for="cancel-work-note">Work note <span class="optional-label">Required for Custom</span></label><textarea id="cancel-work-note" placeholder="Explain the custom cancellation reason"></textarea></div><p id="cancel-error" class="form-error" role="alert" hidden></p><div class="dialog-actions"><button class="secondary" type="button" data-close-cancel>Keep task</button><button class="danger-button" type="submit">Cancel task</button></div></form>
+      </section>
+    </div>
+    <div class="workflow-modal" id="assignment-modal" hidden>
+      <section class="workflow-dialog" role="dialog" aria-modal="true" aria-labelledby="assignment-modal-title">
+        <div class="dialog-heading"><div><h2 id="assignment-modal-title">Assign task</h2><p id="assignment-modal-help">Select an employee and record the routing context.</p></div><button type="button" class="modal-x" data-close-assignment aria-label="Close">×</button></div>
+        <form id="assignment-modal-form" class="stack-form">
+          <div class="field"><label for="task-assignee-picker">Employee</label><div id="task-assignee-picker"></div></div>
+          <div class="field"><label for="assignment-work-note">Work note</label><textarea id="assignment-work-note" required placeholder="Acknowledge self-assignment or explain the transfer"></textarea></div>
+          <p id="assignment-error" class="form-error" role="alert" hidden></p>
+          <div class="dialog-actions"><button class="secondary" type="button" data-close-assignment>Cancel</button><button id="assignment-submit" class="primary" type="submit">Assign task</button></div>
+        </form>
+      </section>
+    </div>
+    <div class="workflow-modal" id="reopen-modal" hidden>
+      <section class="workflow-dialog" role="dialog" aria-modal="true" aria-labelledby="reopen-title">
+        <div class="dialog-heading"><div><h2 id="reopen-title">Reopen closed task</h2><p>The task returns to In Progress and requires a newly generated DOCX before completion.</p></div><button type="button" class="modal-x" data-close-reopen aria-label="Close">×</button></div>
+        <form id="reopen-form" class="stack-form"><div class="field"><label for="reopen-work-note">Work note</label><textarea id="reopen-work-note" required placeholder="Explain why this closed request must be reopened"></textarea></div><p id="reopen-error" class="form-error" role="alert" hidden></p><div class="dialog-actions"><button class="secondary" type="button" data-close-reopen>Cancel</button><button class="primary" type="submit">Reopen task</button></div></form>
       </section>
     </div>
     <div class="workflow-modal" id="hold-modal" hidden>
@@ -76,6 +94,7 @@
     </div>
     <script src="/assets/js/workflow-access.js"></script>
     <script src="/assets/js/task-store.js"></script>
+    <script src="/assets/js/employee-picker.js"></script>
     <script src="/assets/js/workflow-ui.js"></script>
     <script src="/assets/js/task-detail.js"></script>
   </body>

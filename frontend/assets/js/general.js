@@ -31,6 +31,16 @@ const {
   numeric,
   title,
 } = window.ValuationUI;
+
+function linkedTaskValues() {
+  const taskId = PAGE_PARAMS.get("task");
+  const task = taskId && window.TaskStore ? TaskStore.get(taskId) : null;
+  return task ? {
+    "institution.type": task.institutionType,
+    "bank.name": task.institutionName,
+    "bank.branch": task.branch,
+  } : {};
+}
 const sectionPlan = [
   { id: "setup", label: "Report Setup", groups: ["report"] },
   {
@@ -586,7 +596,8 @@ async function init() {
       state.schema.groups.map((g) => [g.id, g.label]),
     ),
     host = byId("groups"),
-    draft = restoreDraft();
+    draft = restoreDraft(),
+    initialValues = { ...(draft?.values || {}), ...linkedTaskValues() };
   state.floorCount = Math.max(1, draft?.floorCount || 1);
   state.documentCount = Math.max(1, draft?.documentCount || 1);
   sectionPlan.forEach((section, index) => {
@@ -621,8 +632,8 @@ async function init() {
         if (g === "floors") addFloorSection(panel);
       });
     host.append(panel);
-    if (section.id === "property") renderDocuments(draft?.values || {});
-    if (section.id === "building_floors") renderFloors(draft?.values || {});
+    if (section.id === "property") renderDocuments(initialValues);
+    if (section.id === "building_floors") renderFloors(initialValues);
     state.sections.push(panel);
     const b = document.createElement("button");
     b.type = "button";
@@ -658,16 +669,16 @@ async function init() {
         .append(readonlyField(id, title(id.split(".").pop()))),
     );
   }
-  if (draft?.values) {
+  if (Object.keys(initialValues).length) {
     const type =
-      draft.values["institution.type"] ||
-      institutionTypeFor(draft.values["bank.name"]);
-    setValues({ ...draft.values, "institution.type": type });
+      initialValues["institution.type"] ||
+      institutionTypeFor(initialValues["bank.name"]);
+    setValues({ ...initialValues, "institution.type": type });
     applyInstitutionOptions();
-    setValues(draft.values);
-    renderDocuments(draft.values);
-    renderFloors(draft.values);
-    if (Object.values(draft.values).some((value) => String(value ?? "").trim()))
+    setValues(initialValues);
+    renderDocuments(initialValues);
+    renderFloors(initialValues);
+    if (draft?.values && Object.values(draft.values).some((value) => String(value ?? "").trim()))
       byId("status").textContent = "Draft restored";
   } else applyInstitutionOptions();
   wireInputs();
@@ -745,7 +756,13 @@ byId("valuation-form").addEventListener("submit", async (e) => {
       return data;
     });
     status.textContent = "Generated";
-    window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: state.format } }));
+    window.dispatchEvent(new CustomEvent("sln:report-generated", {
+      detail: {
+        format: state.format,
+        download: response.download,
+        filename: response.download.split("/").pop(),
+      },
+    }));
     location.href = response.download;
   } catch (error) {
     status.textContent = "Generation failed";

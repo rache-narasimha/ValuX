@@ -3,37 +3,57 @@
 
   const taskId = new URLSearchParams(window.location.search).get("id");
   let task = TaskStore.get(taskId);
-  const content = document.getElementById("task-content");
-  const notFound = document.getElementById("task-not-found");
+  let assigneePicker = null;
+
+  const element = (id) => document.getElementById(id);
+  const content = element("task-content");
+  const notFound = element("task-not-found");
+  const workNote = element("work-note");
+  const actionError = element("action-error");
+  const assignmentModal = element("assignment-modal");
+  const holdModal = element("hold-modal");
+  const cancelModal = element("cancel-modal");
+  const reopenModal = element("reopen-modal");
+
+  function showMissingTask() {
+    const storage = TaskStore.storageStatus();
+    notFound.querySelector("strong").textContent = storage.ok ? "Task not found" : "Saved task data needs attention";
+    notFound.querySelector("p").textContent = storage.ok
+      ? "The requested assignment is not available in this browser."
+      : storage.error;
+    notFound.hidden = false;
+  }
 
   if (!task) {
-    notFound.hidden = false;
+    showMissingTask();
     return;
   }
   content.hidden = false;
 
-  const workNote = document.getElementById("work-note");
-  const actionError = document.getElementById("action-error");
-  const assignmentForm = document.getElementById("assignment-form");
-  const assigneeField = document.getElementById("new-assignee");
-  const holdReason = document.getElementById("hold-reason");
-  const cancelModal = document.getElementById("cancel-modal");
-  const holdModal = document.getElementById("hold-modal");
+  TaskStore.HOLD_REASONS.forEach((reason) => element("hold-reason").add(new Option(reason, reason)));
+  element("cancel-reason").add(new Option("Select reason", ""));
+  TaskStore.CANCELLATION_REASONS.forEach((reason) => element("cancel-reason").add(new Option(reason, reason)));
 
-  TaskStore.HOLD_REASONS.forEach((reason) => holdReason.add(new Option(reason, reason)));
-  const cancelReason = document.getElementById("cancel-reason");
-  cancelReason.add(new Option("Select reason", ""));
-  TaskStore.CANCELLATION_REASONS.forEach((reason) => cancelReason.add(new Option(reason, reason)));
+  function openModal(modal) {
+    modal.hidden = false;
+    document.body.classList.add("modal-open");
+  }
 
-  function outstanding() {
-    return Math.max(0, Number(task.payment.agreed || 0) - Number(task.payment.received || 0));
+  function closeModal(modal) {
+    modal.hidden = true;
+    document.body.classList.remove("modal-open");
   }
 
   function showError(error) {
     actionError.textContent = error.message || String(error);
     actionError.hidden = false;
-    document.getElementById("activity-card").scrollIntoView({ behavior: "smooth", block: "start" });
-    window.setTimeout(() => workNote.focus(), 350);
+    element("activity-card").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function showModalError(id, error) {
+    const output = element(id);
+    output.textContent = error.message || String(error);
+    output.hidden = false;
   }
 
   function clearActionNote() {
@@ -41,142 +61,269 @@
     actionError.hidden = true;
   }
 
-  function configureAssignment() {
+  function paymentSummary() {
+    return TaskStore.paymentSummary(task);
+  }
+
+  function assignmentAccess() {
+    const action = task.status === "Unassigned" ? "assignUnassigned" : "transferTask";
+    return WorkflowAccess.can(action, task);
+  }
+
+  function openAssignmentModal() {
+    if (!assignmentAccess()) return;
     const user = WorkflowAccess.currentUser();
-    const canAssign = WorkflowAccess.can(task.status === "Unassigned" ? "assignUnassigned" : "transferTask", task);
-    assignmentForm.hidden = !canAssign;
-    if (!canAssign) return;
-    assigneeField.innerHTML = "";
-    if (user.role === "father" || task.assignee === user.name) {
-      TaskStore.EMPLOYEES.forEach((employee) => assigneeField.add(new Option(employee === user.name ? `${employee} (me)` : employee, employee)));
-    } else {
-      assigneeField.add(new Option(`${user.name} (assign to me)`, user.name));
-    }
-    if (task.assignee && [...assigneeField.options].some((option) => option.value === task.assignee)) assigneeField.value = task.assignee;
-    document.getElementById("assignment-action-title").textContent = task.status === "Unassigned" ? "Assign to" : "Transfer to";
-    document.getElementById("assignment-help").textContent = task.status === "Unassigned"
-      ? "Assignment immediately starts the task In Progress. Add an acknowledgement or routing justification below."
-      : "The task remains In Progress after transfer. Explain the transfer in the work note below.";
+    const assigning = task.status === "Unassigned";
+    const allowed = user.role === "father" || task.assignee === user.name
+      ? EmployeePicker.employees()
+      : EmployeePicker.employees().filter((employee) => employee.name === user.name);
+    assigneePicker = EmployeePicker.mount(element("task-assignee-picker"), {
+      value: assigning ? "" : task.assignee,
+      required: true,
+      allowed,
+      label: assigning ? "Assign to" : "Transfer to",
+    });
+    element("assignment-modal-title").textContent = assigning ? "Assign task" : "Transfer task";
+    element("assignment-modal-help").textContent = assigning
+      ? "Assignment starts the task In Progress. Add an acknowledgement or routing justification."
+      : "Select the new employee and explain the transfer in the required work note.";
+    element("assignment-submit").textContent = assigning ? "Assign task" : "Transfer task";
+    element("assignment-work-note").value = "";
+    element("assignment-error").hidden = true;
+    openModal(assignmentModal);
   }
 
   function configureWorkflow() {
-    const allowed = WorkflowAccess.can("changeWorkflow", task);
-    document.getElementById("hold-task-button").hidden = !allowed || task.status !== "In Progress";
-    document.getElementById("resume-task-button").hidden = !allowed || task.status !== "On Hold";
+    const canChange = WorkflowAccess.can("changeWorkflow", task);
+    element("hold-task-button").hidden = !canChange || task.status !== "In Progress";
+    element("resume-task-button").hidden = !canChange || task.status !== "On Hold";
+    const reopen = element("reopen-task-button");
+    const fatherClosedView = WorkflowAccess.currentRole() === "father" && task.status === "Closed";
+    reopen.hidden = !fatherClosedView;
+    reopen.disabled = fatherClosedView && !WorkflowAccess.can("reopenTask", task);
+    reopen.title = reopen.disabled ? `The ${TaskStore.REOPEN_WINDOW_DAYS}-day reopening window has expired.` : "";
+  }
+
+  function configureReportLink() {
+    const report = TaskStore.REPORTS[task.reportKey];
+    const openReport = element("open-report");
+    const canOpen = report.route && WorkflowAccess.can("openReport", task);
+    openReport.href = canOpen ? `${report.route}?task=${encodeURIComponent(task.id)}` : "#";
+    if (!report.route) openReport.textContent = "Report form pending";
+    else if (task.status === "Unassigned") openReport.textContent = "Assign before opening report";
+    else if (["Completed", "Closed", "Cancelled"].includes(task.status)) openReport.textContent = "Report editing unavailable";
+    else openReport.textContent = canOpen ? "Open report" : "Assigned employee only";
+    openReport.classList.toggle("disabled-link", !canOpen);
+    openReport.setAttribute("aria-disabled", String(!canOpen));
   }
 
   function configurePayment() {
     const canUpdate = WorkflowAccess.can("updatePayment", task);
-    document.getElementById("payment-card").classList.toggle("is-disabled", !canUpdate);
-    ["estimated-fee", "agreed-fee", "received-fee", "save-payment"].forEach((id) => { document.getElementById(id).disabled = !canUpdate; });
-    const closeButton = document.getElementById("detail-close-request");
-    closeButton.hidden = task.status === "Closed";
-    closeButton.disabled = !WorkflowAccess.can("closeTask", task) || task.payment.status !== "Received" || outstanding() !== 0;
+    const closed = task.status === "Closed";
+    element("payment-card").classList.toggle("is-disabled", !canUpdate);
+    ["estimated-fee", "agreed-fee", "received-fee", "payment-due-date", "save-payment"].forEach((id) => {
+      element(id).disabled = !canUpdate;
+    });
+    const notice = element("payment-readonly-reason");
+    notice.hidden = !closed;
+    notice.textContent = closed ? "Payment is locked because this request is closed. Reopen the task within the allowed window to edit it." : "";
+
+    const closeButton = element("detail-close-request");
+    const summary = paymentSummary();
+    closeButton.hidden = closed;
+    closeButton.disabled = !WorkflowAccess.can("closeTask", task) || summary.status !== "Received" || summary.outstanding !== 0;
+    const reason = task.status !== "Completed"
+      ? "Complete the report task to enable closing."
+      : summary.outstanding === null
+        ? "Enter the agreed or estimated fee before closing."
+        : summary.outstanding !== 0
+          ? "Settle the outstanding payment before closing."
+          : "Payment is settled; the request can be closed.";
+    element("detail-close-reason").textContent = reason;
+    element("detail-close-wrapper").hidden = closed;
+    element("detail-close-wrapper").title = reason;
+  }
+
+  function configureFinalReport() {
+    const card = element("final-report-card");
+    const closed = task.status === "Closed";
+    card.hidden = !closed;
+    if (!closed) return;
+    const download = element("download-final-docx");
+    if (task.finalDocx?.url) {
+      download.hidden = false;
+      download.href = task.finalDocx.url;
+      download.setAttribute("download", task.finalDocx.filename || "final-report.docx");
+      element("final-report-message").textContent = `Final DOCX generated ${WorkflowUI.date(task.finalDocx.generatedAt)} and retained at closure.`;
+      verifyFinalReport(task.finalDocx);
+    } else {
+      download.hidden = true;
+      element("final-report-message").textContent = "A final DOCX is unavailable because no downloadable DOCX reference was captured before this request was closed.";
+    }
+    const deadline = TaskStore.reopenDeadline(task);
+    element("reopen-deadline").textContent = WorkflowAccess.currentRole() === "father"
+      ? TaskStore.canReopen(task)
+        ? `Reopening is available through ${WorkflowUI.date(deadline)}.`
+        : `The reopening window ended on ${WorkflowUI.date(deadline)}.`
+      : "Only the father/reviewer can reopen a closed task.";
+  }
+
+  async function verifyFinalReport(artifact) {
+    try {
+      const response = await fetch(artifact.url, { method: "HEAD", cache: "no-store" });
+      if (!response.ok) throw new Error("File not found");
+    } catch (_error) {
+      const current = TaskStore.get(taskId);
+      if (current?.status !== "Closed" || current.finalDocx?.url !== artifact.url) return;
+      element("download-final-docx").hidden = true;
+      element("final-report-message").textContent = "The final DOCX reference is recorded, but the file is no longer available on this installation.";
+    }
+  }
+
+  function renderBadges() {
+    const assigneeLabel = task.assignee ? `Assigned to ${WorkflowUI.escape(task.assignee)}` : "Unassigned";
+    const assignee = assignmentAccess()
+      ? `<button type="button" class="soft-badge assignee-badge-action" id="assignment-badge">${assigneeLabel}<span aria-hidden="true">›</span></button>`
+      : `<span class="soft-badge">${assigneeLabel}</span>`;
+    element("task-badges").innerHTML = `<span class="status-badge ${WorkflowUI.statusClass(task.status)}">Task: ${WorkflowUI.escape(task.status)}</span><span class="soft-badge">${WorkflowUI.escape(task.priority)} priority</span>${assignee}<span class="payment-badge ${WorkflowUI.paymentClass(task.payment.status)}">Payment: ${WorkflowUI.escape(task.payment.status)}</span>`;
+    element("assignment-badge")?.addEventListener("click", openAssignmentModal);
   }
 
   function render() {
     task = TaskStore.get(taskId);
+    if (!task) {
+      content.hidden = true;
+      showMissingTask();
+      return;
+    }
     document.title = `${task.id} · SLN Property Reports`;
-    document.getElementById("task-id").textContent = task.id;
-    document.getElementById("task-name").textContent = task.reportName;
-    document.getElementById("task-subtitle").textContent = `${task.institutionName}, ${task.branch}`;
-    document.getElementById("task-badges").innerHTML = `<span class="status-badge ${WorkflowUI.statusClass(task.status)}">Task: ${WorkflowUI.escape(task.status)}</span><span class="soft-badge">${WorkflowUI.escape(task.priority)} priority</span><span class="soft-badge">${task.assignee ? `Assigned to ${WorkflowUI.escape(task.assignee)}` : "Unassigned"}</span><span class="payment-badge ${WorkflowUI.paymentClass(task.payment.status)}">Payment: ${WorkflowUI.escape(task.payment.status)}</span>`;
-    document.getElementById("assignment-details").innerHTML = [
+    element("task-id").textContent = task.id;
+    element("task-name").textContent = task.reportName;
+    element("task-subtitle").textContent = `${task.institutionName}, ${task.branch}`;
+    renderBadges();
+    element("assignment-details").innerHTML = [
       ["Applicant / customer", task.customerName], ["Property", task.propertyBrief],
       ["Institution", `${task.institutionName} (${task.institutionType})`], ["Branch", task.branch],
       ["Report type", task.reportLabel], ["Assigned date", WorkflowUI.date(task.assignedDate)],
       ["Due date", WorkflowUI.date(task.dueDate)], ["On-hold reason", task.holdReason || "—"],
     ].map(([label, value]) => `<div><dt>${WorkflowUI.escape(label)}</dt><dd>${WorkflowUI.escape(value)}</dd></div>`).join("");
 
-    const report = TaskStore.REPORTS[task.reportKey];
-    const openReport = document.getElementById("open-report");
-    const canOpen = report.route && WorkflowAccess.can("openReport", task);
-    openReport.href = canOpen ? `${report.route}?task=${encodeURIComponent(task.id)}` : "#";
-    openReport.textContent = !report.route ? "Report form pending" : task.status === "Unassigned" ? "Assign before opening report" : canOpen ? "Open report" : "Assigned employee only";
-    openReport.classList.toggle("disabled-link", !canOpen);
-    openReport.setAttribute("aria-disabled", String(!canOpen));
-
-    document.getElementById("cancel-task-button").hidden = !WorkflowAccess.can("cancelTask", task);
-    document.getElementById("estimated-fee").value = task.payment.estimated || "";
-    document.getElementById("agreed-fee").value = task.payment.agreed || "";
-    document.getElementById("received-fee").value = task.payment.received || "";
-    document.getElementById("outstanding-fee").textContent = WorkflowUI.currency(outstanding());
-    document.getElementById("payment-status").textContent = task.payment.status;
-    document.getElementById("activity-list").innerHTML = task.activity.slice().reverse().map((event) => `<li><span class="activity-dot activity-${WorkflowUI.escape(event.type)}"></span><div><p>${WorkflowUI.escape(event.text)}</p><small>${WorkflowUI.escape(event.author)} · ${WorkflowUI.date(event.createdAt)}</small></div></li>`).join("");
-    configureAssignment();
+    configureReportLink();
     configureWorkflow();
+    element("cancel-task-button").hidden = !WorkflowAccess.can("cancelTask", task);
+    element("estimated-fee").value = task.payment.estimated ?? "";
+    element("agreed-fee").value = task.payment.agreed ?? "";
+    element("received-fee").value = task.payment.received ?? "";
+    element("payment-due-date").value = task.payment.dueDate || "";
+    const summary = paymentSummary();
+    element("outstanding-fee").textContent = summary.outstanding === null ? "N/A" : WorkflowUI.currency(summary.outstanding);
+    element("payment-status").textContent = summary.status;
+    element("payment-warning").hidden = !summary.outsideStandard;
+    element("payment-warning").textContent = summary.outsideStandard ? "This payment due date is beyond the standard seven-day period after completion." : "";
+    element("activity-list").innerHTML = task.activity.slice().reverse().map((event) => `<li><span class="activity-dot activity-${WorkflowUI.escape(event.type)}"></span><div><p>${WorkflowUI.escape(event.text)}</p><small>${WorkflowUI.escape(event.author)} · ${WorkflowUI.date(event.createdAt)}</small></div></li>`).join("");
     configurePayment();
-    document.getElementById("note-form").hidden = !WorkflowAccess.can("addNote", task);
+    configureFinalReport();
+    element("note-form").hidden = !WorkflowAccess.can("addNote", task);
   }
 
-  document.getElementById("open-report").addEventListener("click", (event) => {
+  element("open-report").addEventListener("click", (event) => {
     if (event.currentTarget.getAttribute("aria-disabled") === "true") event.preventDefault();
   });
-  document.getElementById("note-form").addEventListener("submit", (event) => {
-    event.preventDefault();
-    try { TaskStore.addNote(taskId, workNote.value); clearActionNote(); render(); } catch (error) { showError(error); }
-  });
-  assignmentForm.addEventListener("submit", (event) => {
+
+  element("note-form").addEventListener("submit", (event) => {
     event.preventDefault();
     try {
-      if (assigneeField.value === task.assignee) throw new Error("Select a different employee, or use another task action.");
-      TaskStore.assign(taskId, assigneeField.value, workNote.value);
+      TaskStore.addNote(taskId, workNote.value);
       clearActionNote();
       render();
     } catch (error) { showError(error); }
   });
-  document.getElementById("hold-task-button").addEventListener("click", () => {
-    document.getElementById("hold-work-note").value = "";
-    document.getElementById("hold-error").hidden = true;
-    holdModal.hidden = false;
-    document.body.classList.add("modal-open");
-  });
-  document.querySelectorAll("[data-close-hold]").forEach((button) => button.addEventListener("click", () => {
-    holdModal.hidden = true;
-    document.body.classList.remove("modal-open");
-  }));
-  document.getElementById("hold-form").addEventListener("submit", (event) => {
+
+  element("assignment-modal-form").addEventListener("submit", (event) => {
     event.preventDefault();
-    const errorOutput = document.getElementById("hold-error");
     try {
-      TaskStore.putOnHold(taskId, holdReason.value, document.getElementById("hold-work-note").value);
-      holdModal.hidden = true;
-      document.body.classList.remove("modal-open");
+      const selectedAssignee = assigneePicker.value();
+      if (selectedAssignee === task.assignee) throw new Error("Select a different employee for the transfer.");
+      TaskStore.assign(taskId, selectedAssignee, element("assignment-work-note").value);
+      closeModal(assignmentModal);
       render();
-    } catch (error) {
-      errorOutput.textContent = error.message;
-      errorOutput.hidden = false;
-    }
+    } catch (error) { showModalError("assignment-error", error); }
   });
-  document.getElementById("resume-task-button").addEventListener("click", () => {
+  document.querySelectorAll("[data-close-assignment]").forEach((button) => button.addEventListener("click", () => closeModal(assignmentModal)));
+
+  element("hold-task-button").addEventListener("click", () => {
+    element("hold-work-note").value = "";
+    element("hold-error").hidden = true;
+    openModal(holdModal);
+  });
+  document.querySelectorAll("[data-close-hold]").forEach((button) => button.addEventListener("click", () => closeModal(holdModal)));
+  element("hold-form").addEventListener("submit", (event) => {
+    event.preventDefault();
     try {
-      TaskStore.resume(taskId, workNote.value);
+      TaskStore.putOnHold(taskId, element("hold-reason").value, element("hold-work-note").value);
+      closeModal(holdModal);
+      render();
+    } catch (error) { showModalError("hold-error", error); }
+  });
+
+  element("resume-task-button").addEventListener("click", () => {
+    try {
+      TaskStore.resume(taskId);
+      render();
+    } catch (error) { showError(error); }
+  });
+
+  element("payment-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    try {
+      TaskStore.updatePayment(taskId, {
+        estimated: element("estimated-fee").value,
+        agreed: element("agreed-fee").value,
+        received: element("received-fee").value,
+        dueDate: element("payment-due-date").value,
+      });
+      render();
+    } catch (error) { showError(error); }
+  });
+
+  element("detail-close-request").addEventListener("click", () => {
+    try {
+      TaskStore.close(taskId, workNote.value);
       clearActionNote();
-      render();
+      window.location.replace("/");
     } catch (error) { showError(error); }
   });
-  document.getElementById("payment-form").addEventListener("submit", (event) => {
-    event.preventDefault();
-    try {
-      TaskStore.updatePayment(taskId, { estimated: document.getElementById("estimated-fee").value, agreed: document.getElementById("agreed-fee").value, received: document.getElementById("received-fee").value });
-      render();
-    } catch (error) { showError(error); }
+
+  element("cancel-task-button").addEventListener("click", () => {
+    element("cancel-work-note").value = "";
+    element("cancel-error").hidden = true;
+    openModal(cancelModal);
   });
-  document.getElementById("detail-close-request").addEventListener("click", () => {
-    try { TaskStore.close(taskId, workNote.value); clearActionNote(); render(); } catch (error) { showError(error); }
-  });
-  document.getElementById("cancel-task-button").addEventListener("click", () => { cancelModal.hidden = false; document.body.classList.add("modal-open"); });
-  document.querySelectorAll("[data-close-cancel]").forEach((button) => button.addEventListener("click", () => { cancelModal.hidden = true; document.body.classList.remove("modal-open"); }));
-  document.getElementById("cancel-form").addEventListener("submit", (event) => {
+  document.querySelectorAll("[data-close-cancel]").forEach((button) => button.addEventListener("click", () => closeModal(cancelModal)));
+  element("cancel-form").addEventListener("submit", (event) => {
     event.preventDefault();
     try {
       if (!confirm("Cancel this task? Its history will be retained.")) return;
-      TaskStore.cancel(taskId, cancelReason.value, workNote.value);
-      cancelModal.hidden = true;
-      document.body.classList.remove("modal-open");
-      clearActionNote();
+      TaskStore.cancel(taskId, element("cancel-reason").value, element("cancel-work-note").value);
+      closeModal(cancelModal);
       render();
-    } catch (error) { cancelModal.hidden = true; document.body.classList.remove("modal-open"); showError(error); }
+    } catch (error) { showModalError("cancel-error", error); }
+  });
+
+  element("reopen-task-button").addEventListener("click", () => {
+    if (!WorkflowAccess.can("reopenTask", task)) return;
+    element("reopen-work-note").value = "";
+    element("reopen-error").hidden = true;
+    openModal(reopenModal);
+  });
+  document.querySelectorAll("[data-close-reopen]").forEach((button) => button.addEventListener("click", () => closeModal(reopenModal)));
+  element("reopen-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    try {
+      TaskStore.reopen(taskId, element("reopen-work-note").value);
+      closeModal(reopenModal);
+      render();
+    } catch (error) { showModalError("reopen-error", error); }
   });
 
   render();

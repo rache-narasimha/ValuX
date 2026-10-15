@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Institutions · SLN Property Reports</title>
+    <link rel="stylesheet" href="/assets/css/styles.css" />
+    <link rel="stylesheet" href="/assets/css/workflow.css" />
+    <script src="/assets/js/appearance.js"></script>
+  </head>
+  <body class="workflow-page">
+    <header class="app-header">
+      <a class="brand" href="/"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Institution settings</small></span></a>
+      <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button><div data-role-switcher></div><a class="quiet-link" href="/">← Dashboard</a></div>
+    </header>
+    <main class="page-frame">
+      <section class="page-intro"><div><p class="eyebrow">Configuration</p><h1>Institutions</h1><p>Maintain the banks and NBFCs available in assignments, report forms and dashboard charts.</p></div></section>
+      <div id="institution-settings-denied" class="empty-state" hidden><strong>Father view only</strong><p>Institution configuration is not available in the employee workspace.</p><a class="button-link primary" href="/">Return to dashboard</a></div>
+      <section id="institution-settings-content" class="settings-layout">
+        <article class="work-card settings-editor">
+          <div class="section-heading"><div><h2 id="institution-form-title">Add institution</h2><p>Existing institutions are deactivated rather than deleted so historical records remain correct.</p></div></div>
+          <form id="institution-settings-form" class="stack-form">
+            <div class="form-grid">
+              <div class="field"><label class="required" for="institution-kind">Type</label><select id="institution-kind" required><option>Bank</option><option>NBFC</option></select></div>
+              <div class="field"><label class="required" for="institution-code">Code</label><input id="institution-code" required maxlength="12" placeholder="Example: BOB" /></div>
+              <div class="field full"><label class="required" for="institution-name">Institution name</label><input id="institution-name" required /></div>
+              <div class="field"><label for="institution-color">Chart colour</label><input id="institution-color" type="color" value="#087ea4" /></div>
+              <label class="check setting-check"><input id="institution-active" type="checkbox" checked /> Active in new assignments and forms</label>
+            </div>
+            <p id="institution-settings-error" class="form-error" role="alert" hidden></p>
+            <div class="form-actions"><button id="cancel-institution-edit" class="secondary" type="button">Clear</button><button class="primary" type="submit">Save institution</button></div>
+          </form>
+        </article>
+        <article class="work-card settings-directory">
+          <div class="section-heading"><div><h2>Working institution list</h2><p>Colour choices remain consistent across dashboard periods and report sections.</p></div><button id="reset-institutions" class="quiet-button" type="button">Restore original list</button></div>
+          <div id="institution-settings-list"></div>
+        </article>
+      </section>
+    </main>
+    <script src="/assets/js/workflow-access.js"></script>
+    <script src="/assets/js/institutions.js"></script>
+    <script src="/assets/js/workflow-ui.js"></script>
+    <script src="/assets/js/institution-settings.js"></script>
+  </body>
+</html>

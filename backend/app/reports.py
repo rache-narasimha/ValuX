@@ -168,6 +168,16 @@ def generate_docx(values, output_path, photos=None, map_image=None):
                     tags = sdt.xpath("./w:sdtPr/w:tag/@w:val", namespaces=NS)
                     if tags and tags[0] in replacements:
                         replace_sdt_text(sdt, str(replacements[tags[0]]))
+                for paragraph in root.xpath(".//w:p", namespaces=NS):
+                    text_value = " ".join("".join(paragraph.xpath(".//w:t/text()", namespaces=NS)).split())
+                    if text_value in {"BANK OF MAHARASHTRA", "OF MAHARASHTRA"}:
+                        set_paragraph_text(paragraph, replacements.get("BANK_NAME_UPPER", ""), color="FFFFFF" if text_value.startswith("BANK") else None, preserve_style=True)
+                    elif text_value == "BANK OF MAHARASHTRA VALUATION REPORT":
+                        set_paragraph_text(paragraph, f"{replacements.get('BANK_NAME_UPPER', '')}\nVALUATION REPORT", color="FFFFFF", preserve_style=True)
+                    elif text_value.startswith("OF MAHARASHTRA VALUATION REPORT"):
+                        suffix = text_value.removeprefix("OF MAHARASHTRA VALUATION REPORT").strip()
+                        heading = f"{replacements.get('BANK_NAME_UPPER', '')} VALUATION REPORT"
+                        set_paragraph_text(paragraph, f"{heading}\n{suffix}" if suffix else heading, preserve_style=True)
                 pmv_words = amount_in_words(pmv_text)
                 realizable_words = amount_in_words(realizable_text)
                 for paragraph in root.xpath(".//w:body/w:p", namespaces=NS):

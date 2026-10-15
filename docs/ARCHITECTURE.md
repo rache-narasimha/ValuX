@@ -22,6 +22,7 @@ valuation_app/
 │   │   ├── tasks.html
 │   │   ├── new-task.html
 │   │   ├── task.html
+│   │   ├── institutions.html
 │   │   ├── general.html
 │   │   └── agricultural.html
 │   └── assets/
@@ -38,6 +39,10 @@ valuation_app/
 │           ├── task-list.js
 │           ├── task-detail.js
 │           ├── task-context.js
+│           ├── employee-picker.js
+│           ├── appearance.js
+│           ├── report-layout.js
+│           ├── institution-settings.js
 │           ├── shared.js
 │           ├── general.js
 │           ├── agricultural.js
@@ -83,7 +88,12 @@ The backend does not contain editable form markup. It reads form definitions and
   creation, the searchable work queue, and the task workspace.
 - `assets/js/task-store.js` is the temporary task repository boundary. It uses
   browser storage during workflow discovery and is designed to be replaced by
-  the future PostgreSQL API without changing the page controllers.
+  the future PostgreSQL API without changing the page controllers. It also
+  owns workflow transitions, payment locking, the seven-day reopen rule and
+  final-DOCX metadata; page controllers do not recreate those rules.
+- `assets/js/institutions.js` is a separate temporary repository boundary for
+  bank/NBFC configuration, active state and chart colours. Deactivation keeps
+  historical task labels intact.
 - `assets/js/workflow-access.js` centralizes the temporary father/employee
   identity adapter and all task permissions so role rules are not hard-coded
   into individual pages.
@@ -95,11 +105,18 @@ The backend does not contain editable form markup. It reads form definitions and
   and close-request popup used wherever a completed task row appears.
 - `assets/js/task-context.js` adds task status, action-note validation and
   return links around either valuation form when it is opened from a task.
+- `assets/js/employee-picker.js` provides the shared employee-ID/name reference
+  control used for initial assignment and the assignee-chip transfer dialog.
+- `assets/js/appearance.js` owns the persisted light/dark preference used by
+  all workflow and report-form pages. Generated reports remain white.
+- `assets/js/report-layout.js` owns the persisted collapse state of the long
+  report-form navigation.
+- `pages/institutions.html` and `assets/js/institution-settings.js` provide the
+  father-only institution configuration surface.
 - `assets/js/shared.js` contains reusable controls, parsing, date, institution
   and file-reading helpers used by every valuation form.
 - `pages/general.html` and `assets/js/general.js` implement residential, commercial and industrial valuation forms.
 - `pages/agricultural.html` and `assets/js/agricultural.js` implement agricultural valuation forms.
-- `assets/js/institutions.js` is the shared Bank/NBFC list for current and future forms.
 - `assets/css/styles.css` is shared by every page.
 - `assets/css/workflow.css` contains responsive dashboard and task-management
   layout rules.
@@ -113,6 +130,10 @@ Each report family has its own self-contained resource folder:
 - `template_mapping.json` connects form values to template placeholders.
 
 Production code must use these files. Earlier templates and the scripts used to construct them are kept only in `archive/template_development/`.
+
+General-report cover headings are rewritten from the selected assignment/form
+institution at generation time. Static bank names in the reference template
+are never treated as application defaults.
 
 ### Outputs
 
@@ -139,6 +160,20 @@ Convert that exact DOCX to the displayed preview PDF
     ↓
 Reuse the same DOCX/PDF when Generate is clicked
 ```
+
+## Workflow invariants
+
+- Assigning or transferring a task moves it to **In Progress** and requires a
+  work note.
+- **Closed** tasks retain their payment values as read-only data.
+- The father/reviewer may reopen a closed task for seven calendar days. A
+  reopened task requires a newly generated DOCX before it can be completed
+  again.
+- Every generated DOCX receives a unique download path. Closing snapshots the
+  latest successful DOCX as the task's final report; PDF and older DOCX
+  versions are not offered from the closed-task view.
+- Assignment creation, report completion and request closure use history
+  replacement so browser Back does not revisit a submitted state.
 
 ## Adding another report type
 

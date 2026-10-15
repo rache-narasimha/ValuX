@@ -30,6 +30,17 @@ const {
   title,
 } = window.ValuationUI;
 
+function linkedTaskValues() {
+  const taskId = PAGE_PARAMS.get("task");
+  const task = taskId && window.TaskStore ? TaskStore.get(taskId) : null;
+  return task ? {
+    "institution.type": task.institutionType,
+    "bank.name": task.institutionName,
+    "bank.branch": task.branch,
+    "report.assignment_date": task.assignedDate,
+  } : {};
+}
+
 function fieldControl(field) {
   return createFieldControl(field, {}, (value) => areaLabels[value] || value);
 }
@@ -385,6 +396,7 @@ async function init() {
     return response.json();
   });
   const draft = restoreDraft();
+  const initialValues = { ...(draft?.values || {}), ...linkedTaskValues() };
   state.documentCount = Math.max(1, draft?.documentCount || 1);
   const host = byId("sections");
   state.schema.sections.forEach((section, index) => {
@@ -413,7 +425,7 @@ async function init() {
       if (section.id === "valuation") addCalculatedValues(panel);
     }
     host.append(panel);
-    if (section.id === "property") renderDocuments(draft?.values || {});
+    if (section.id === "property") renderDocuments(initialValues);
     state.sections.push(panel);
     const button = document.createElement("button");
     button.type = "button";
@@ -422,15 +434,15 @@ async function init() {
     button.onclick = () => show(index);
     byId("nav").append(button);
   });
-  if (draft?.values) {
+  if (Object.keys(initialValues).length) {
     const type =
-      draft.values["institution.type"] ||
-      institutionTypeFor(draft.values["bank.name"]);
-    setValues({ ...draft.values, "institution.type": type });
+      initialValues["institution.type"] ||
+      institutionTypeFor(initialValues["bank.name"]);
+    setValues({ ...initialValues, "institution.type": type });
     applyInstitutionOptions();
-    setValues(draft.values);
-    renderDocuments(draft.values);
-    if (Object.values(draft.values).some((value) => String(value ?? "").trim()))
+    setValues(initialValues);
+    renderDocuments(initialValues);
+    if (draft?.values && Object.values(draft.values).some((value) => String(value ?? "").trim()))
       byId("status").textContent = "Draft restored";
   } else applyInstitutionOptions();
   wireInputs();
@@ -510,7 +522,13 @@ byId("agricultural-form").addEventListener("submit", async (event) => {
       return data;
     });
     status.textContent = "Generated";
-    window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: state.format } }));
+    window.dispatchEvent(new CustomEvent("sln:report-generated", {
+      detail: {
+        format: state.format,
+        download: response.download,
+        filename: response.download.split("/").pop(),
+      },
+    }));
     location.href = response.download;
   } catch (error) {
     status.textContent = "Generation failed";

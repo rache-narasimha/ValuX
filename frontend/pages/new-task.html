@@ -6,14 +6,15 @@
     <title>New Assignment · SLN Property Reports</title>
     <link rel="stylesheet" href="/assets/css/styles.css" />
     <link rel="stylesheet" href="/assets/css/workflow.css" />
+    <script src="/assets/js/appearance.js"></script>
   </head>
   <body class="workflow-page">
     <header class="app-header">
       <a class="brand" href="/"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
-      <div class="top-actions"><div data-role-switcher></div><a class="quiet-link" href="/">Cancel and return</a></div>
+      <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button><div data-role-switcher></div><a class="quiet-link" href="/">Cancel and return</a></div>
     </header>
     <main class="page-frame narrow-page">
-      <section class="page-intro"><p class="eyebrow">Work intake</p><h1>Create new assignment</h1><p>Create the work task first. Report fields and payment information remain separate.</p></section>
+      <section class="page-intro"><p class="eyebrow">Work intake</p><h1>Create new assignment</h1><p>Create the work task first. Report fields and payment information remain separate.</p><div class="draft-state"><span id="draft-status" class="soft-badge" aria-live="polite">Draft not started</span><button id="discard-draft" class="quiet-button" type="button" hidden>Discard draft</button></div></section>
       <form id="new-task-form" class="workflow-form">
         <section class="form-section">
           <div class="form-section-heading"><span>1</span><div><h2>Institution</h2><p>Select the assigning bank or NBFC and branch.</p></div></div>
@@ -35,10 +36,10 @@
           <div class="form-grid">
             <div class="field"><label class="required" for="report-type">Report type</label><select id="report-type" required><option value="">Select report type</option><option value="valuation">Valuation</option><option value="estimation">Estimation</option><option value="progress">Progress report</option><option value="completion">Completion report</option></select></div>
             <div class="field" id="valuation-type-wrap" hidden><label class="required" for="valuation-type">Valuation type</label><select id="valuation-type"><option value="">Select valuation type</option><option value="general">General property valuation</option><option value="agricultural">Agricultural land valuation</option></select></div>
-            <div class="field"><label for="assignee">Assign to <span class="optional-label">Optional</span></label><select id="assignee"><option value="">Leave unassigned</option><option value="K. Sivaprasad">K. Sivaprasad</option><option value="Lavakumar">Lavakumar</option></select><small class="field-help">An assigned task starts In Progress. An unassigned task enters the Unassigned queue.</small></div>
+            <div class="field"><label for="assignee-picker" id="assignee-label">Assign to <span class="optional-label">Optional for father</span></label><div id="assignee-picker"></div><small class="field-help" id="assignee-help">An assigned task starts In Progress. A father-created unassigned task enters the Unassigned queue.</small></div>
             <div class="field"><label class="required" for="priority">Priority</label><select id="priority" required><option value="Normal">Normal</option><option value="High">High</option><option value="Urgent">Urgent</option></select></div>
             <div class="field"><label class="required" for="assigned-date">Assigned date</label><input id="assigned-date" type="date" required /></div>
-            <div class="field"><label class="required" for="due-date">Due date</label><input id="due-date" type="date" required /><small class="field-help">Defaults to seven days and cannot exceed month-end in this phase.</small></div>
+            <div class="field"><label class="required" for="due-date">Due date</label><input id="due-date" type="date" required /><small class="field-help" id="due-date-help"></small></div>
             <div class="field full"><label for="initial-note">Brief description</label><textarea id="initial-note" placeholder="Optional for an unassigned task; required when routing work to someone"></textarea><small class="field-help" id="initial-note-help">Use “Acknowledged” for self-assignment or briefly explain why the work is being routed to another employee.</small></div>
           </div>
         </section>
@@ -49,6 +50,7 @@
     <script src="/assets/js/workflow-access.js"></script>
     <script src="/assets/js/institutions.js"></script>
     <script src="/assets/js/task-store.js"></script>
+    <script src="/assets/js/employee-picker.js"></script>
     <script src="/assets/js/new-task.js"></script>
   </body>
 </html>

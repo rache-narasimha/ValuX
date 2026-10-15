@@ -37,7 +37,7 @@
       <button type="button" class="secondary" id="report-hold">Put on hold</button>
       <button type="button" class="secondary" id="report-resume" hidden>Resume work</button>
       <button type="button" class="secondary" id="report-add-note">Add note</button>
-      <button type="button" class="primary" id="report-complete-top" disabled>Mark Completed</button>
+      <button type="button" class="primary" id="report-complete-top">Mark Completed</button>
     </div>
     <div class="report-task-context__links"><a href="/tasks/detail?id=${encodeURIComponent(task.id)}">Assignment details</a></div>`;
   document.querySelector("header").insertAdjacentElement("afterend", top);
@@ -45,7 +45,8 @@
   const bottom = document.createElement("section");
   bottom.className = "report-task-notes";
   bottom.innerHTML = `<div class="report-completion-heading"><div><h2>Work note</h2><p>Record progress, review context or completion details.</p></div><span id="generation-state" class="soft-badge">Report not generated</span></div>
-    <form id="report-note-form"><label for="report-work-note">Work note</label><textarea id="report-work-note" placeholder="Add a clear update for this assignment"></textarea><div class="report-note-actions"><button type="submit" class="secondary">Add note</button><button type="button" class="primary" id="complete-task" disabled>Mark Completed</button></div><p id="report-note-error" class="report-task-context__error" role="alert" hidden></p></form>
+    <form id="report-note-form"><label for="report-work-note">Work note</label><textarea id="report-work-note" placeholder="Add a clear update for this assignment"></textarea><div class="report-note-actions"><button type="submit" class="secondary">Add note</button><button type="button" class="secondary" id="view-report-history" aria-expanded="false">View history</button><button type="button" class="primary" id="complete-task">Mark Completed</button></div><p id="report-note-error" class="report-task-context__error" role="alert" hidden></p></form>
+    <section id="report-history" class="report-inline-history" hidden><div class="compact-section-heading"><h3>Task history</h3><span id="report-history-count" class="soft-badge"></span></div><ol id="report-history-list" class="activity-list"></ol></section>
     <div class="report-task-notes__links"><a href="/tasks/detail?id=${encodeURIComponent(task.id)}">Back to assignment details</a><a href="/">Back to work dashboard</a></div>`;
   reportForm.insertAdjacentElement("afterend", bottom);
 
@@ -81,6 +82,17 @@
     window.setTimeout(() => workNote.focus(), 350);
   }
 
+  function completionBlockReason(current) {
+    if (current.status === "On Hold") return "Resume work before marking this task Completed.";
+    if (current.status !== "In Progress") return `A ${current.status} task cannot be marked Completed.`;
+    if (!current.reportGeneratedAt) return "Generate the report successfully before marking this task Completed.";
+    if (current.reopenedAt && (!current.latestDocx || new Date(current.latestDocx.generatedAt) < new Date(current.reopenedAt))) {
+      return "Generate a new DOCX after reopening before marking this task Completed.";
+    }
+    if (!WorkflowAccess.can("completeTask", current)) return "Only the assigned employee or father/reviewer can complete this task.";
+    return "";
+  }
+
   function render() {
     task = currentTask();
     statusBadge.textContent = `Task: ${task.status}`;
@@ -91,20 +103,31 @@
     document.getElementById("report-resume").hidden = !canChange || task.status !== "On Hold";
     const generated = Boolean(task.reportGeneratedAt);
     document.getElementById("generation-state").textContent = generated ? `Generated ${WorkflowUI.date(task.reportGeneratedAt)}` : "Report not generated";
-    const canComplete = WorkflowAccess.can("completeTask", task);
-    document.getElementById("complete-task").disabled = !canComplete;
-    document.getElementById("report-complete-top").disabled = !canComplete;
+    const completionReason = completionBlockReason(task);
+    [document.getElementById("complete-task"), document.getElementById("report-complete-top")].forEach((button) => {
+      button.classList.toggle("is-unavailable", Boolean(completionReason));
+      button.setAttribute("aria-disabled", String(Boolean(completionReason)));
+      button.title = completionReason;
+    });
+    const activities = task.activity.slice().reverse();
+    document.getElementById("report-history-count").textContent = `${activities.length} updates`;
+    document.getElementById("report-history-list").innerHTML = activities.map((event) => `<li><span class="activity-dot activity-${WorkflowUI.escape(event.type)}"></span><div><p>${WorkflowUI.escape(event.text)}</p><small>${WorkflowUI.escape(event.author)} · ${WorkflowUI.date(event.createdAt)}</small></div></li>`).join("");
   }
 
   function completeTask() {
     noteError.hidden = true;
+    const completionReason = completionBlockReason(currentTask());
+    if (completionReason) {
+      requestWorkNote(completionReason);
+      return;
+    }
     if (!workNote.value.trim()) {
       requestWorkNote("Add the completion work note, then select Mark Completed again.");
       return;
     }
     try {
       TaskStore.complete(taskId, workNote.value);
-      window.location.href = "/";
+      window.location.replace("/");
     } catch (error) {
       requestWorkNote(error.message);
     }
@@ -137,8 +160,7 @@
   document.getElementById("report-resume").addEventListener("click", () => {
     noteError.hidden = true;
     try {
-      TaskStore.resume(taskId, workNote.value);
-      workNote.value = "";
+      TaskStore.resume(taskId);
       render();
     } catch (error) { requestWorkNote(error.message); }
   });
@@ -156,8 +178,17 @@
   });
   document.getElementById("complete-task").addEventListener("click", completeTask);
   document.getElementById("report-complete-top").addEventListener("click", completeTask);
+  document.getElementById("view-report-history").addEventListener("click", (event) => {
+    const history = document.getElementById("report-history");
+    history.hidden = !history.hidden;
+    event.currentTarget.textContent = history.hidden ? "View history" : "Hide history";
+    event.currentTarget.setAttribute("aria-expanded", String(!history.hidden));
+  });
   window.addEventListener("sln:report-generated", (event) => {
-    TaskStore.markReportGenerated(taskId, event.detail?.format || "report");
+    TaskStore.markReportGenerated(taskId, event.detail?.format || "report", {
+      url: event.detail?.download || "",
+      filename: event.detail?.filename || "",
+    });
     render();
   });
   render();

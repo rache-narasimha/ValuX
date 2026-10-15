@@ -15,6 +15,7 @@
     payment: document.getElementById("payment-filter"),
   };
   let visible = PAGE_SIZE;
+  let periodReference = new Date();
   const GROUP_LABELS = {
     all: "All work",
     valuation: "Valuation",
@@ -22,6 +23,14 @@
     progress: "Progress",
     completion: "Completion",
   };
+
+  const storage = TaskStore.storageStatus();
+  if (!storage.ok) {
+    WorkflowUI.fatal(storage.error);
+    list.innerHTML = WorkflowUI.empty("Tasks cannot be shown until the local data issue is resolved.");
+    loadMore.hidden = true;
+    return;
+  }
 
   function populateFilters() {
     TaskStore.STATUSES.forEach((item) => fields.status.add(new Option(item, item)));
@@ -32,6 +41,7 @@
       fields.institution.append(group);
     });
     const initial = new URLSearchParams(window.location.search);
+    if (initial.get("periodReference")) periodReference = new Date(`${initial.get("periodReference")}T00:00:00`);
     fields.group.value = initial.get("group") || "all";
     fields.institution.value = initial.get("institution") || "";
     fields.period.value = initial.get("period") || "";
@@ -48,6 +58,7 @@
       ["period", fields.period.value], ["status", fields.status.value],
       ["assignee", fields.assignee.value], ["holdReason", fields.holdReason.value],
       ["payment", fields.payment.value], ["search", fields.search.value], ["limit", limit],
+      ["periodReference", periodReference],
     ]);
   }
 
@@ -75,13 +86,14 @@
       group: fields.group.value,
       institution: institution.code,
       period: fields.period.value,
+      periodReference,
       limit: Number.MAX_SAFE_INTEGER,
     }).items;
     const mix = InstitutionMetrics.workflowMix(tasks);
     const maximum = Math.max(1, ...mix.map((item) => item.count));
     document.getElementById("institution-drilldown-title").textContent = `${institution.code} · ${institution.name}`;
     document.getElementById("institution-drilldown-subtitle").textContent = fields.period.value
-      ? `${tasks.length} assignments · ${InstitutionMetrics.periodLabel(fields.period.value)}`
+      ? `${tasks.length} assignments · ${InstitutionMetrics.periodLabel(fields.period.value, periodReference)}`
       : `${tasks.length} assignments · all dates`;
     document.getElementById("institution-workflow-mix").innerHTML = mix.map((item) => {
       const width = item.count ? Math.max(5, Math.round((item.count / maximum) * 100)) : 0;
@@ -110,6 +122,7 @@
   function updateUrl() {
     const params = new URLSearchParams();
     if (fields.group.value !== "all") params.set("group", fields.group.value);
+    if (fields.period.value) params.set("periodReference", periodReference.toISOString().slice(0, 10));
     ["institution", "period", "status", "assignee", "holdReason", "payment"].forEach((key) => {
       if (fields[key].value) params.set(key, fields[key].value);
     });

@@ -18,6 +18,13 @@ const context = {
 context.window.window = context.window;
 context.window.localStorage = context.localStorage;
 context.window.CustomEvent = context.CustomEvent;
+context.window.WorkflowAccess = {
+  currentRole: () => "father",
+  currentUser: () => ({ name: "K. Sivaprasad" }),
+  visible: () => true,
+  can: () => true,
+};
+context.WorkflowAccess = context.window.WorkflowAccess;
 
 const source = fs.readFileSync(path.join(__dirname, "..", "frontend", "assets", "js", "task-store.js"), "utf8");
 vm.runInNewContext(source, context);
@@ -28,7 +35,7 @@ function input(overrides = {}) {
     institutionType: "Bank", institutionCode: "BOB", institutionName: "Bank of Baroda",
     branch: "Adoni", customerName: "WiFi Browser Test", propertyBrief: "Compatibility test",
     reportKey: "valuation-general", assignee: "K. Sivaprasad", priority: "Normal",
-    assignedDate: "2026-10-13", dueDate: "2026-10-20", initialNote: "Acknowledged.", ...overrides,
+    assignedDate: "2026-10-13", dueDate: "2026-10-15", initialNote: "Acknowledged.", ...overrides,
   };
 }
 
@@ -40,6 +47,8 @@ assert.ok(active.activity.every((event) => event.id));
 const activePayment = store.updatePayment(active.id, { estimated: 5000, agreed: 4500, received: 1000, note: "Advance received." });
 assert.equal(activePayment.status, "In Progress");
 assert.equal(activePayment.payment.status, "Partially Received");
+assert.equal(store.paymentSummary(activePayment).basis, 4500);
+assert.equal(store.paymentSummary(activePayment).outstanding, 3500);
 
 const unassigned = store.create(input({ customerName: "Unassigned Customer", assignee: "", initialNote: "" }));
 assert.equal(unassigned.status, "Unassigned");
@@ -48,6 +57,9 @@ assert.equal(store.query({ institution: "BOB", period: "monthly" }).total, 2);
 assert.equal(store.query({ institution: "PNB", period: "monthly" }).total, 0);
 assert.equal(store.matchesPeriod(active, "daily"), false);
 assert.equal(store.matchesPeriod(active, "monthly"), true);
+const estimatedOnly = store.updatePayment(unassigned.id, { estimated: 3000, agreed: "", received: 500, dueDate: "2026-10-20" });
+assert.equal(store.paymentSummary(estimatedOnly).basis, 3000);
+assert.equal(store.paymentSummary(estimatedOnly).outstanding, 2500);
 
 const claimed = store.assign(unassigned.id, "Lavakumar", "Acknowledged by employee.");
 assert.equal(claimed.status, "In Progress");
@@ -58,11 +70,13 @@ assert.equal(held.status, "On Hold");
 assert.equal(held.holdReason, "Awaiting Review");
 assert.equal(store.summary().awaitingReview, 1);
 
-const resumed = store.resume(active.id, "Review correction completed.");
+const activityBeforeResume = held.activity.length;
+const resumed = store.resume(active.id);
 assert.equal(resumed.status, "In Progress");
 assert.equal(resumed.holdReason, "");
+assert.equal(resumed.activity.length, activityBeforeResume + 1);
 
-store.markReportGenerated(active.id, "docx");
+store.markReportGenerated(active.id, "docx", { url: "/downloads/valuation-report-1.docx", filename: "valuation-report-1.docx" });
 const completed = store.complete(active.id, "Report issued.");
 assert.equal(completed.status, "Completed");
 const paid = store.updatePayment(active.id, { estimated: 5000, agreed: 4500, received: 4500, note: "Received." });
@@ -70,6 +84,20 @@ assert.equal(paid.payment.status, "Received");
 assert.ok(paid.payment.updatedAt);
 const closed = store.close(active.id, "Request closed.");
 assert.equal(closed.status, "Closed");
+assert.equal(closed.finalDocx.url, "/downloads/valuation-report-1.docx");
+assert.throws(() => store.updatePayment(active.id, { agreed: 4500, received: 4500 }), /closed task/i);
+assert.equal(store.canReopen(closed), true);
+assert.equal(store.canReopen(closed, new Date(new Date(closed.closedAt).getTime() + 8 * 24 * 60 * 60 * 1000)), false);
+const reopened = store.reopen(active.id, "A correction is required.");
+assert.equal(reopened.status, "In Progress");
+assert.equal(reopened.reportGeneratedAt, null);
+store.markReportGenerated(active.id, "pdf");
+assert.throws(() => store.complete(active.id, "Correction completed."), /new DOCX/i);
+store.markReportGenerated(active.id, "docx", { url: "/downloads/valuation-report-2.docx" });
+assert.equal(store.complete(active.id, "Corrected report completed.").status, "Completed");
 
 assert.throws(() => store.cancel(unassigned.id, "Custom", ""), /explain the cancellation/i);
+values.set("sln.workflow.tasks.v1", "{damaged-json");
+assert.equal(store.storageStatus().ok, false);
+assert.throws(() => store.create(input({ customerName: "Protected Data" })), /has not been overwritten/i);
 console.log("PASS: finalized task lifecycle works without secure-context browser APIs");

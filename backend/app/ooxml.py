@@ -26,14 +26,23 @@ def replace_sdt_text(sdt, value):
     run = etree.SubElement(paragraph, qn("r"))
     etree.SubElement(run, qn("t")).text = value
 
-def set_paragraph_text(paragraph, value, color=None):
+def set_paragraph_text(paragraph, value, color=None, preserve_style=False):
+    existing_properties = paragraph.xpath(".//w:rPr", namespaces=NS)
+    retained_properties = deepcopy(existing_properties[0]) if preserve_style and existing_properties else None
     ppr = paragraph.find(qn("pPr"))
     for child in list(paragraph):
         if child is not ppr:
             paragraph.remove(child)
     run = etree.SubElement(paragraph, qn("r"))
+    if retained_properties is not None:
+        run.append(retained_properties)
     if color:
-        rpr = etree.SubElement(run, qn("rPr"))
+        rpr = run.find(qn("rPr"))
+        if rpr is None:
+            rpr = etree.SubElement(run, qn("rPr"))
+        existing_color = rpr.find(qn("color"))
+        if existing_color is not None:
+            rpr.remove(existing_color)
         etree.SubElement(rpr, qn("color")).set(qn("val"), color)
     lines = str(value).split("\n")
     for index, line in enumerate(lines):
