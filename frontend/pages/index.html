@@ -9,18 +9,16 @@
   </head>
   <body class="workflow-page">
     <header class="app-header">
-      <a class="brand" href="/" aria-label="SLN work dashboard">
-        <span class="brand-mark">SLN</span>
-        <span><strong>Property Reports</strong><small>Work management</small></span>
-      </a>
+      <a class="brand" href="/" aria-label="SLN work dashboard"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
       <nav class="top-actions" aria-label="Account navigation">
-        <a href="/tasks">All tasks</a>
-        <span class="user-chip"><span class="avatar">KS</span><span><strong>K. Sivaprasad</strong><small>Reviewer</small></span></span>
+        <a href="/practice">Practice forms</a><a href="/tasks">All tasks</a>
+        <div data-role-switcher></div>
+        <span class="user-chip"><span class="avatar" data-current-user-initials>KS</span><span><strong data-current-user-name>K. Sivaprasad</strong><small data-current-user-role>Father / reviewer</small></span></span>
       </nav>
     </header>
     <div class="app-shell">
       <aside class="app-sidebar">
-        <p class="sidebar-label">Workspace</p>
+        <div class="sidebar-heading"><p class="sidebar-label">Workspace</p><button id="sidebar-toggle" type="button" aria-label="Collapse workspace navigation" aria-expanded="true">‹</button></div>
         <nav id="report-navigation" aria-label="Report workspaces">
           <button type="button" class="active" data-group="all"><span>All work</span><strong id="count-all">0</strong></button>
           <button type="button" data-group="valuation"><span>Valuation</span><strong id="count-valuation">0</strong></button>
@@ -28,33 +26,54 @@
           <button type="button" data-group="progress"><span>Progress</span><strong id="count-progress">0</strong></button>
           <button type="button" data-group="completion"><span>Completion</span><strong id="count-completion">0</strong></button>
         </nav>
-        <div class="sidebar-note"><strong>Workflow prototype</strong><p>Task data is stored on this browser until durable storage is added.</p></div>
+        <div class="sidebar-note"><strong>Workflow prototype</strong><p>Sample and test tasks remain in this browser only. The future database will begin with new records.</p></div>
       </aside>
       <main class="dashboard" id="dashboard">
         <section class="dashboard-heading">
           <div><p class="eyebrow">Work overview</p><h1 id="dashboard-title">All work</h1><p id="dashboard-description">Review assignments, continue reports and follow up on pending work.</p></div>
           <a class="button-link primary new-assignment" href="/tasks/new"><span aria-hidden="true">＋</span> New assignment</a>
         </section>
-        <section class="metric-grid" aria-label="Task status summary">
-          <button class="metric-card" type="button" data-status="Assigned"><span>Assigned</span><strong id="metric-assigned">0</strong><small>Ready to begin</small></button>
+        <section class="metric-grid metric-grid-five" aria-label="Task status summary">
+          <button class="metric-card" type="button" data-status="Unassigned"><span>Unassigned</span><strong id="metric-unassigned">0</strong><small>Needs assignment</small></button>
           <button class="metric-card" type="button" data-status="In Progress"><span>In progress</span><strong id="metric-progress">0</strong><small>Currently being worked</small></button>
-          <button class="metric-card warning" type="button" data-status="On Hold"><span>On hold</span><strong id="metric-hold">0</strong><small>Needs follow-up</small></button>
-          <button class="metric-card success" type="button" data-status="Awaiting Review"><span>Awaiting review</span><strong id="metric-review">0</strong><small>Submitted for checking</small></button>
+          <button class="metric-card warning" type="button" data-status="On Hold"><span>On hold</span><strong id="metric-hold">0</strong><small id="hold-review-count">Needs follow-up</small></button>
+          <button class="metric-card success" type="button" data-status="Completed"><span>Completed</span><strong id="metric-completed">0</strong><small>Payment tracking</small></button>
+          <button class="metric-card neutral" type="button" data-status="Closed"><span>Closed</span><strong id="metric-closed">0</strong><small>Payment settled</small></button>
         </section>
-        <section class="dashboard-grid">
-          <article class="work-card recent-card">
-            <div class="section-heading"><div><h2>Recently assigned</h2><p>The latest work added to this section.</p></div><a href="/tasks" id="view-all-assigned">View all</a></div>
-            <div class="task-stack" id="recent-assigned"></div>
+        <section class="father-business" id="father-business">
+          <article class="work-card institution-overview">
+            <div class="section-heading chart-heading"><div><h2>Institution workload</h2><p>Every configured bank and NBFC remains visible, including institutions with zero work.</p></div><div class="chart-heading-tools"><span id="workload-period-label" class="soft-badge"></span><div class="period-switch" aria-label="Institution workload period"><button type="button" data-dashboard-period="daily">Daily</button><button type="button" data-dashboard-period="weekly">Weekly</button><button type="button" data-dashboard-period="monthly">Monthly</button><button type="button" data-dashboard-period="yearly">Yearly</button></div></div></div>
+            <div id="institution-workload" class="institution-chart"></div>
           </article>
-          <article class="work-card recent-card">
-            <div class="section-heading"><div><h2>Recently completed</h2><p>Finished and closed assignments.</p></div><a href="/tasks?status=Completed" id="view-all-completed">View all</a></div>
-            <div class="task-stack" id="recent-completed"></div>
+          <article class="work-card finance-overview">
+            <div class="section-heading"><div><h2>Income and payments</h2><p>Institution-wise financial position for completed work in the selected period.</p></div><div class="finance-legend" aria-label="Chart legend"><span class="earned">Earned</span><span class="received">Received</span><span class="outstanding">Outstanding</span></div></div>
+            <div id="institution-finance-chart" class="institution-chart finance-chart"></div>
+            <div id="institution-finance-detail" class="institution-finance-detail"></div>
+            <div class="finance-strip" aria-label="Overall business payment summary">
+              <article><span>Income earned</span><strong id="income-earned">₹0</strong><small>Agreed fees for completed work</small></article>
+              <article><span>Payment received</span><strong id="income-received">₹0</strong><small>Received against completed work</small></article>
+              <article><span>Outstanding</span><strong id="income-outstanding">₹0</strong><small>Pending collection</small></article>
+            </div>
+          </article>
+        </section>
+        <section class="dashboard-grid dashboard-grid-wide">
+          <article class="work-card recent-card dashboard-span-two" id="payment-dashboard-card">
+            <div class="section-heading"><div><h2>Completed reports: payment tracking</h2><p>Update payment and close settled requests without opening the full assignment.</p></div><a href="/tasks?status=Completed" id="view-all-payments">View all</a></div>
+            <div class="task-stack" id="payment-tracking"></div>
+          </article>
+          <article class="work-card recent-card dashboard-span-two">
+            <div class="section-heading"><div><h2>Recent activity</h2><p>Updated assignments with useful details visible before opening.</p></div><div class="section-tools"><select id="recent-status-filter" aria-label="Filter recent activity by state"><option value="">All states</option><option>Unassigned</option><option>In Progress</option><option>On Hold</option><option>Completed</option><option>Closed</option><option>Cancelled</option></select><a href="/tasks" id="view-all-recent">View all</a></div></div>
+            <div class="task-stack" id="recent-activity"></div>
           </article>
         </section>
       </main>
     </div>
+    <script src="/assets/js/workflow-access.js"></script>
+    <script src="/assets/js/institutions.js"></script>
     <script src="/assets/js/task-store.js"></script>
     <script src="/assets/js/workflow-ui.js"></script>
+    <script src="/assets/js/institution-metrics.js"></script>
+    <script src="/assets/js/payment-dialog.js"></script>
     <script src="/assets/js/home.js"></script>
   </body>
 </html>

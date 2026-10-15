@@ -79,6 +79,8 @@ class Handler(BaseHTTPRequestHandler):
             "/tasks/new/": PAGES_DIR / "new-task.html",
             "/tasks/detail": PAGES_DIR / "task.html",
             "/tasks/detail/": PAGES_DIR / "task.html",
+            "/practice": PAGES_DIR / "practice.html",
+            "/practice/": PAGES_DIR / "practice.html",
             "/valuation/general": PAGES_DIR / "general.html",
             "/valuation/general/": PAGES_DIR / "general.html",
             "/valuation/agricultural": PAGES_DIR / "agricultural.html",

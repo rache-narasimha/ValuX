@@ -11,7 +11,13 @@ const state = {
   previewId: null,
   processing: false,
 };
-const STORAGE_KEY = "valuation-report-draft-v3";
+const PAGE_PARAMS = new URLSearchParams(window.location.search);
+const DRAFT_SCOPE = PAGE_PARAMS.get("practice") === "1"
+  ? "practice"
+  : PAGE_PARAMS.get("task")
+    ? `task-${PAGE_PARAMS.get("task")}`
+    : "standalone";
+const STORAGE_KEY = `valuation-report-draft-v3-${DRAFT_SCOPE}`;
 const groupId = (s) => s.toLowerCase().replaceAll(" ", "_");
 const {
   applyInstitutionOptions,
@@ -739,6 +745,7 @@ byId("valuation-form").addEventListener("submit", async (e) => {
       return data;
     });
     status.textContent = "Generated";
+    window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: state.format } }));
     location.href = response.download;
   } catch (error) {
     status.textContent = "Generation failed";

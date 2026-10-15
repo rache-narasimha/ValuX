@@ -10,24 +10,36 @@
   <body class="workflow-page">
     <header class="app-header">
       <a class="brand" href="/"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
-      <a class="button-link primary compact-button" href="/tasks/new">＋ New assignment</a>
+      <div class="top-actions"><div data-role-switcher></div><a class="button-link primary compact-button" href="/tasks/new">＋ New assignment</a></div>
     </header>
     <main class="page-frame">
-      <section class="page-intro list-intro"><div><p class="eyebrow">Work queue</p><h1>All tasks</h1><p>Search and filter assignments, then open a row for full details.</p></div><a class="quiet-link" href="/">← Dashboard</a></section>
-      <form id="task-filters" class="filter-bar">
+      <section class="page-intro list-intro"><div><p class="eyebrow">Work queue</p><h1 id="task-list-title">All work tasks</h1><p id="task-list-description">Search and filter assignments, then open a row for full details.</p></div><a class="quiet-link" href="/">← Dashboard</a></section>
+      <form id="task-filters" class="filter-bar filter-bar-extended">
         <div class="field search-field"><label for="task-search">Search</label><input id="task-search" type="search" placeholder="Task ID, applicant, report, assignee or institution" /></div>
         <div class="field"><label for="group-filter">Report section</label><select id="group-filter"><option value="all">All work</option><option value="valuation">Valuation</option><option value="estimation">Estimation</option><option value="progress">Progress</option><option value="completion">Completion</option></select></div>
+        <div class="field"><label for="institution-filter">Institution</label><select id="institution-filter"><option value="">All banks and NBFCs</option></select></div>
+        <div class="field"><label for="period-filter">Assigned during</label><select id="period-filter"><option value="">Any time</option><option value="daily">Today</option><option value="weekly">This week</option><option value="monthly">This month</option><option value="yearly">This year</option></select></div>
         <div class="field"><label for="status-filter">Status</label><select id="status-filter"><option value="">All statuses</option></select></div>
         <div class="field"><label for="assignee-filter">Assigned to</label><select id="assignee-filter"><option value="">Everyone</option><option value="K. Sivaprasad">K. Sivaprasad</option><option value="Lavakumar">Lavakumar</option></select></div>
+        <div class="field"><label for="hold-filter">On-hold reason</label><select id="hold-filter"><option value="">All reasons</option><option>Awaiting Documents</option><option>Scheduled Site Visit</option><option>Awaiting Review</option><option>Returned for Correction</option><option>Custom</option></select></div>
+        <div class="field"><label for="payment-filter">Payment</label><select id="payment-filter"><option value="">All payment states</option><option>Pending</option><option>Partially Received</option><option>Received</option></select></div>
       </form>
+      <section class="work-card institution-drilldown" id="institution-drilldown" hidden>
+        <div class="section-heading"><div><p class="eyebrow">Institution view</p><h2 id="institution-drilldown-title"></h2><p id="institution-drilldown-subtitle"></p></div><button type="button" class="quiet-button" id="clear-institution">View all institutions</button></div>
+        <div id="institution-workflow-mix" class="workflow-distribution-chart"></div>
+      </section>
       <section class="work-card task-list-card">
         <div class="section-heading"><div><h2>Assignments</h2><p id="result-count">0 tasks</p></div></div>
         <div id="task-list" class="task-stack"></div>
         <button id="load-more" class="load-more" type="button" hidden>Load more tasks</button>
       </section>
     </main>
+    <script src="/assets/js/workflow-access.js"></script>
+    <script src="/assets/js/institutions.js"></script>
     <script src="/assets/js/task-store.js"></script>
     <script src="/assets/js/workflow-ui.js"></script>
+    <script src="/assets/js/institution-metrics.js"></script>
+    <script src="/assets/js/payment-dialog.js"></script>
     <script src="/assets/js/task-list.js"></script>
   </body>
 </html>

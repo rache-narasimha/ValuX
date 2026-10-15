@@ -26,9 +26,13 @@ valuation_app/
 │   │   └── agricultural.html
 │   └── assets/
 │       ├── css/styles.css
+│       ├── css/workflow.css
 │       └── js/
 │           ├── task-store.js
+│           ├── workflow-access.js
 │           ├── workflow-ui.js
+│           ├── institution-metrics.js
+│           ├── payment-dialog.js
 │           ├── home.js
 │           ├── new-task.js
 │           ├── task-list.js
@@ -80,7 +84,15 @@ The backend does not contain editable form markup. It reads form definitions and
 - `assets/js/task-store.js` is the temporary task repository boundary. It uses
   browser storage during workflow discovery and is designed to be replaced by
   the future PostgreSQL API without changing the page controllers.
+- `assets/js/workflow-access.js` centralizes the temporary father/employee
+  identity adapter and all task permissions so role rules are not hard-coded
+  into individual pages.
 - `assets/js/workflow-ui.js` renders shared work-task rows and display values.
+- `assets/js/institution-metrics.js` owns configured-institution, period,
+  workload, report-mix and financial aggregations used by dashboards and task
+  lists. Institutions with no matching records remain present with zero values.
+- `assets/js/payment-dialog.js` provides the reusable completed-report payment
+  and close-request popup used wherever a completed task row appears.
 - `assets/js/task-context.js` adds task status, action-note validation and
   return links around either valuation form when it is opened from a task.
 - `assets/js/shared.js` contains reusable controls, parsing, date, institution
@@ -89,6 +101,8 @@ The backend does not contain editable form markup. It reads form definitions and
 - `pages/agricultural.html` and `assets/js/agricultural.js` implement agricultural valuation forms.
 - `assets/js/institutions.js` is the shared Bank/NBFC list for current and future forms.
 - `assets/css/styles.css` is shared by every page.
+- `assets/css/workflow.css` contains responsive dashboard and task-management
+  layout rules.
 
 ### Resources
 

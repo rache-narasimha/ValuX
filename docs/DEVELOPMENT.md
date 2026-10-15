@@ -5,8 +5,8 @@
 ```sh
 python3 valuation_app/tests/test_general_generation.py
 python3 valuation_app/tests/test_agricultural_generation.py
-node --check valuation_app/frontend/assets/js/general.js
-node --check valuation_app/frontend/assets/js/agricultural.js
+node valuation_app/tests/test_task_store.js
+for file in valuation_app/frontend/assets/js/*.js; do node --check "$file"; done
 ```
 
 ## Rebuild Docker
@@ -28,7 +28,8 @@ These directories can be cleared without affecting source code or templates.
 
 - Change form labels and field definitions in the relevant `resources/*/form_schema.json`.
 - Change Word placement and formatting in the relevant `resources/*/master_template.docx`.
-- Change calculations or generation rules in `backend/server.py`.
+- Change calculations or generation rules in `backend/app/calculations.py` or
+  report orchestration in `backend/app/reports.py`.
 - Change browser behavior in the matching file under `frontend/assets/js/`.
 - Change shared visual styling in `frontend/assets/css/styles.css`.
 - Do not make production changes inside `archive/`; it is historical evidence only.

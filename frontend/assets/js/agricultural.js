@@ -10,7 +10,13 @@ const state = {
   previewId: null,
   processing: false,
 };
-const STORAGE_KEY = "agricultural-valuation-draft-v1";
+const PAGE_PARAMS = new URLSearchParams(window.location.search);
+const DRAFT_SCOPE = PAGE_PARAMS.get("practice") === "1"
+  ? "practice"
+  : PAGE_PARAMS.get("task")
+    ? `task-${PAGE_PARAMS.get("task")}`
+    : "standalone";
+const STORAGE_KEY = `agricultural-valuation-draft-v1-${DRAFT_SCOPE}`;
 const {
   applyInstitutionOptions,
   areaFactors,
@@ -504,6 +510,7 @@ byId("agricultural-form").addEventListener("submit", async (event) => {
       return data;
     });
     status.textContent = "Generated";
+    window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: state.format } }));
     location.href = response.download;
   } catch (error) {
     status.textContent = "Generation failed";

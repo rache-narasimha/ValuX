@@ -10,7 +10,7 @@
   <body class="workflow-page">
     <header class="app-header">
       <a class="brand" href="/"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
-      <a class="quiet-link" href="/">Cancel and return</a>
+      <div class="top-actions"><div data-role-switcher></div><a class="quiet-link" href="/">Cancel and return</a></div>
     </header>
     <main class="page-frame narrow-page">
       <section class="page-intro"><p class="eyebrow">Work intake</p><h1>Create new assignment</h1><p>Create the work task first. Report fields and payment information remain separate.</p></section>
@@ -35,17 +35,18 @@
           <div class="form-grid">
             <div class="field"><label class="required" for="report-type">Report type</label><select id="report-type" required><option value="">Select report type</option><option value="valuation">Valuation</option><option value="estimation">Estimation</option><option value="progress">Progress report</option><option value="completion">Completion report</option></select></div>
             <div class="field" id="valuation-type-wrap" hidden><label class="required" for="valuation-type">Valuation type</label><select id="valuation-type"><option value="">Select valuation type</option><option value="general">General property valuation</option><option value="agricultural">Agricultural land valuation</option></select></div>
-            <div class="field"><label class="required" for="assignee">Assigned to</label><select id="assignee" required><option value="K. Sivaprasad">K. Sivaprasad</option><option value="Lavakumar">Lavakumar</option></select></div>
+            <div class="field"><label for="assignee">Assign to <span class="optional-label">Optional</span></label><select id="assignee"><option value="">Leave unassigned</option><option value="K. Sivaprasad">K. Sivaprasad</option><option value="Lavakumar">Lavakumar</option></select><small class="field-help">An assigned task starts In Progress. An unassigned task enters the Unassigned queue.</small></div>
             <div class="field"><label class="required" for="priority">Priority</label><select id="priority" required><option value="Normal">Normal</option><option value="High">High</option><option value="Urgent">Urgent</option></select></div>
             <div class="field"><label class="required" for="assigned-date">Assigned date</label><input id="assigned-date" type="date" required /></div>
             <div class="field"><label class="required" for="due-date">Due date</label><input id="due-date" type="date" required /><small class="field-help">Defaults to seven days and cannot exceed month-end in this phase.</small></div>
-            <div class="field full"><label for="initial-note">Initial work note</label><textarea id="initial-note" placeholder="Optional context for the assignee"></textarea></div>
+            <div class="field full"><label for="initial-note">Brief description</label><textarea id="initial-note" placeholder="Optional for an unassigned task; required when routing work to someone"></textarea><small class="field-help" id="initial-note-help">Use “Acknowledged” for self-assignment or briefly explain why the work is being routed to another employee.</small></div>
           </div>
         </section>
         <div id="task-error" class="form-error" role="alert" hidden></div>
         <div class="form-actions"><a class="button-link secondary" href="/">Cancel</a><button class="primary" type="submit">Create assignment</button></div>
       </form>
     </main>
+    <script src="/assets/js/workflow-access.js"></script>
     <script src="/assets/js/institutions.js"></script>
     <script src="/assets/js/task-store.js"></script>
     <script src="/assets/js/new-task.js"></script>

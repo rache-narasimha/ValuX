@@ -1,102 +1,164 @@
 (function () {
   "use strict";
 
-  const taskId = new URLSearchParams(window.location.search).get("task");
-  const task = taskId && window.TaskStore ? TaskStore.get(taskId) : null;
-  if (!task) return;
-
+  const params = new URLSearchParams(window.location.search);
+  const taskId = params.get("task");
+  const practiceMode = params.get("practice") === "1";
   const reportForm = document.querySelector("main form");
   if (!reportForm) return;
 
+  if (practiceMode && !taskId) {
+    const banner = document.createElement("section");
+    banner.className = "practice-banner";
+    banner.innerHTML = `<div><strong>Practice mode</strong><span>Preview and generate test documents safely. Nothing is linked to an assignment.</span></div><a href="/practice">Back to practice forms</a>`;
+    document.querySelector("header").insertAdjacentElement("afterend", banner);
+    return;
+  }
+
+  let task = taskId && window.TaskStore ? TaskStore.get(taskId) : null;
+  if (!task) return;
+  if (!WorkflowAccess.can("openReport", task)) {
+    alert("This report can be edited only after the task is assigned to you. Open assignment details to claim or transfer it first.");
+    window.location.replace(`/tasks/detail?id=${encodeURIComponent(task.id)}`);
+    return;
+  }
+
+  document.body.classList.add("report-linked");
+
   const top = document.createElement("section");
-  top.className = "report-task-context";
-  top.innerHTML = `
-    <div class="report-task-context__summary">
+  top.className = "report-task-context report-task-context-compact";
+  top.innerHTML = `<div class="report-task-context__summary">
       <span class="report-task-context__eyebrow">Assignment ${WorkflowUI.escape(task.id)}</span>
       <strong>${WorkflowUI.escape(task.reportName)}</strong>
-      <span id="report-task-status" class="status-badge"></span>
+      <span class="report-task-context__meta" id="report-task-meta"></span>
     </div>
-    <form id="report-status-form" class="report-task-context__action">
-      <label for="report-task-status-select">Status</label>
-      <select id="report-task-status-select"></select>
-      <label id="report-hold-reason-wrap" hidden>On-hold reason
-        <select id="report-hold-reason"><option value="">Select reason</option><option>Awaiting documents</option><option>Site visit scheduled</option><option>Awaiting review</option><option>Custom</option></select>
-      </label>
-      <label id="report-hold-custom-wrap" hidden>Custom reason<input id="report-hold-custom" /></label>
-      <label class="report-task-context__note" for="report-status-note">Work note <textarea id="report-status-note" placeholder="Required when the status changes"></textarea></label>
-      <button type="submit" class="primary">Update status</button>
-      <p id="report-status-error" class="report-task-context__error" role="alert" hidden></p>
-    </form>
-    <div class="report-task-context__links"><a id="back-to-assignment" href="/tasks/detail?id=${encodeURIComponent(task.id)}">Assignment details</a><a href="/">Work dashboard</a></div>`;
+    <div class="report-task-context__state"><span id="report-task-status" class="status-badge"></span></div>
+    <div class="report-direct-actions">
+      <button type="button" class="secondary" id="report-hold">Put on hold</button>
+      <button type="button" class="secondary" id="report-resume" hidden>Resume work</button>
+      <button type="button" class="secondary" id="report-add-note">Add note</button>
+      <button type="button" class="primary" id="report-complete-top" disabled>Mark Completed</button>
+    </div>
+    <div class="report-task-context__links"><a href="/tasks/detail?id=${encodeURIComponent(task.id)}">Assignment details</a></div>`;
   document.querySelector("header").insertAdjacentElement("afterend", top);
 
   const bottom = document.createElement("section");
   bottom.className = "report-task-notes";
-  bottom.innerHTML = `
-    <div><h2>Work notes</h2><p>Add a progress or review note without changing the assignment status.</p></div>
-    <form id="report-note-form"><label for="report-work-note">Add work note</label><textarea id="report-work-note" required placeholder="Record progress, ambiguity or review context"></textarea><button type="submit" class="secondary">Add work note</button></form>
+  bottom.innerHTML = `<div class="report-completion-heading"><div><h2>Work note</h2><p>Record progress, review context or completion details.</p></div><span id="generation-state" class="soft-badge">Report not generated</span></div>
+    <form id="report-note-form"><label for="report-work-note">Work note</label><textarea id="report-work-note" placeholder="Add a clear update for this assignment"></textarea><div class="report-note-actions"><button type="submit" class="secondary">Add note</button><button type="button" class="primary" id="complete-task" disabled>Mark Completed</button></div><p id="report-note-error" class="report-task-context__error" role="alert" hidden></p></form>
     <div class="report-task-notes__links"><a href="/tasks/detail?id=${encodeURIComponent(task.id)}">Back to assignment details</a><a href="/">Back to work dashboard</a></div>`;
   reportForm.insertAdjacentElement("afterend", bottom);
 
-  const statusSelect = document.getElementById("report-task-status-select");
+  const holdModal = document.createElement("div");
+  holdModal.className = "workflow-modal";
+  holdModal.id = "report-hold-modal";
+  holdModal.hidden = true;
+  holdModal.innerHTML = `<section class="workflow-dialog" role="dialog" aria-modal="true" aria-labelledby="report-hold-title">
+    <div class="dialog-heading"><div><h2 id="report-hold-title">Put task on hold</h2><p>Select a reason and add the required work note.</p></div><button type="button" class="modal-x" data-close-report-hold aria-label="Close">×</button></div>
+    <form id="report-hold-form" class="stack-form">
+      <div class="field"><label for="report-hold-reason">On-hold reason</label><select id="report-hold-reason"></select></div>
+      <div class="field"><label for="report-hold-note">Work note</label><textarea id="report-hold-note" placeholder="Explain what is awaited or what must happen next"></textarea></div>
+      <p id="report-hold-error" class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="secondary" data-close-report-hold>Cancel</button><button type="submit" class="primary">Put on hold</button></div>
+    </form>
+  </section>`;
+  document.body.append(holdModal);
+
   const statusBadge = document.getElementById("report-task-status");
-  const error = document.getElementById("report-status-error");
-  TaskStore.STATUSES.filter((status) => status !== "Cancelled").forEach((status) => statusSelect.add(new Option(status, status)));
+  const noteError = document.getElementById("report-note-error");
+  const workNote = document.getElementById("report-work-note");
+  const holdReason = document.getElementById("report-hold-reason");
+  TaskStore.HOLD_REASONS.forEach((item) => holdReason.add(new Option(item, item)));
 
   function currentTask() {
     return TaskStore.get(taskId);
   }
 
+  function requestWorkNote(message) {
+    noteError.textContent = message;
+    noteError.hidden = false;
+    bottom.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.setTimeout(() => workNote.focus(), 350);
+  }
+
   function render() {
-    const latest = currentTask();
-    if (!latest) return;
-    statusSelect.value = latest.status === "Cancelled" ? "Assigned" : latest.status;
-    statusBadge.textContent = latest.status;
-    statusBadge.className = `status-badge status-${latest.status.toLowerCase().replaceAll(" ", "-")}`;
-    document.getElementById("report-hold-reason").value = latest.holdReason || "";
-    refreshHoldFields();
+    task = currentTask();
+    statusBadge.textContent = `Task: ${task.status}`;
+    statusBadge.className = `status-badge ${WorkflowUI.statusClass(task.status)}`;
+    document.getElementById("report-task-meta").textContent = `${task.assignee} · Due ${WorkflowUI.date(task.dueDate)}`;
+    const canChange = WorkflowAccess.can("changeWorkflow", task);
+    document.getElementById("report-hold").hidden = !canChange || task.status !== "In Progress";
+    document.getElementById("report-resume").hidden = !canChange || task.status !== "On Hold";
+    const generated = Boolean(task.reportGeneratedAt);
+    document.getElementById("generation-state").textContent = generated ? `Generated ${WorkflowUI.date(task.reportGeneratedAt)}` : "Report not generated";
+    const canComplete = WorkflowAccess.can("completeTask", task);
+    document.getElementById("complete-task").disabled = !canComplete;
+    document.getElementById("report-complete-top").disabled = !canComplete;
   }
 
-  function refreshHoldFields() {
-    const isOnHold = statusSelect.value === "On Hold";
-    const reason = document.getElementById("report-hold-reason");
-    document.getElementById("report-hold-reason-wrap").hidden = !isOnHold;
-    document.getElementById("report-hold-custom-wrap").hidden = !isOnHold || reason.value !== "Custom";
-  }
-
-  function showError(message) {
-    error.textContent = message;
-    error.hidden = false;
-  }
-
-  statusSelect.addEventListener("change", refreshHoldFields);
-  document.getElementById("report-hold-reason").addEventListener("change", refreshHoldFields);
-  document.getElementById("report-status-form").addEventListener("submit", (event) => {
-    event.preventDefault();
-    error.hidden = true;
-    const latest = currentTask();
-    const note = document.getElementById("report-status-note");
-    if (statusSelect.value === latest.status) return showError("Choose a different status to update the assignment.");
-    if (!note.value.trim()) return showError("Add a work note for this status change.");
-    let reason = "";
-    if (statusSelect.value === "On Hold") {
-      reason = document.getElementById("report-hold-reason").value;
-      if (!reason) return showError("Select an on-hold reason.");
-      if (reason === "Custom") {
-        reason = document.getElementById("report-hold-custom").value.trim();
-        if (!reason) return showError("Enter the custom hold reason.");
-      }
+  function completeTask() {
+    noteError.hidden = true;
+    if (!workNote.value.trim()) {
+      requestWorkNote("Add the completion work note, then select Mark Completed again.");
+      return;
     }
-    TaskStore.updateStatus(taskId, statusSelect.value, note.value, reason);
-    note.value = "";
-    render();
+    try {
+      TaskStore.complete(taskId, workNote.value);
+      window.location.href = "/";
+    } catch (error) {
+      requestWorkNote(error.message);
+    }
+  }
+
+  function closeHoldModal() {
+    holdModal.hidden = true;
+    document.body.classList.remove("modal-open");
+  }
+
+  document.getElementById("report-hold").addEventListener("click", () => {
+    document.getElementById("report-hold-note").value = "";
+    document.getElementById("report-hold-error").hidden = true;
+    holdModal.hidden = false;
+    document.body.classList.add("modal-open");
+  });
+  holdModal.querySelectorAll("[data-close-report-hold]").forEach((button) => button.addEventListener("click", closeHoldModal));
+  document.getElementById("report-hold-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const errorOutput = document.getElementById("report-hold-error");
+    try {
+      TaskStore.putOnHold(taskId, holdReason.value, document.getElementById("report-hold-note").value);
+      closeHoldModal();
+      render();
+    } catch (error) {
+      errorOutput.textContent = error.message;
+      errorOutput.hidden = false;
+    }
+  });
+  document.getElementById("report-resume").addEventListener("click", () => {
+    noteError.hidden = true;
+    try {
+      TaskStore.resume(taskId, workNote.value);
+      workNote.value = "";
+      render();
+    } catch (error) { requestWorkNote(error.message); }
+  });
+  document.getElementById("report-add-note").addEventListener("click", () => {
+    bottom.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.setTimeout(() => workNote.focus(), 350);
   });
   document.getElementById("report-note-form").addEventListener("submit", (event) => {
     event.preventDefault();
-    const note = document.getElementById("report-work-note");
-    TaskStore.addNote(taskId, note.value);
-    note.value = "";
+    noteError.hidden = true;
+    try {
+      TaskStore.addNote(taskId, workNote.value);
+      workNote.value = "";
+    } catch (error) { requestWorkNote(error.message); }
   });
-
+  document.getElementById("complete-task").addEventListener("click", completeTask);
+  document.getElementById("report-complete-top").addEventListener("click", completeTask);
+  window.addEventListener("sln:report-generated", (event) => {
+    TaskStore.markReportGenerated(taskId, event.detail?.format || "report");
+    render();
+  });
   render();
 })();

@@ -10,66 +10,71 @@
   <body class="workflow-page">
     <header class="app-header">
       <a class="brand" href="/"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
-      <a class="quiet-link" href="/tasks">← All tasks</a>
+      <div class="top-actions"><div data-role-switcher></div><a class="quiet-link" href="/tasks">← All tasks</a></div>
     </header>
     <main class="page-frame" id="task-workspace">
       <div id="task-not-found" class="empty-state" hidden><strong>Task not found</strong><p>The requested assignment is not available in this browser.</p><a class="button-link primary" href="/tasks">Return to tasks</a></div>
       <div id="task-content" hidden>
         <section class="task-hero">
           <div><p class="task-id" id="task-id"></p><h1 id="task-name"></h1><p id="task-subtitle"></p><div class="badge-row" id="task-badges"></div></div>
-          <a id="open-report" class="button-link primary" href="#">Open report</a>
+          <div class="hero-actions"><button id="cancel-task-button" class="danger-ghost" type="button" hidden>Cancel task</button><a id="open-report" class="button-link primary" href="#">Open report</a></div>
         </section>
         <section class="detail-layout">
           <div class="detail-main">
             <article class="work-card">
-              <div class="section-heading"><div><h2>Assignment details</h2><p>Application information kept outside the report form.</p></div></div>
+              <div class="section-heading"><div><h2>Assignment details</h2></div></div>
               <dl class="detail-grid" id="assignment-details"></dl>
-              <section class="assignment-actions" aria-labelledby="workflow-actions-title">
-                <div class="section-heading"><div><h2 id="workflow-actions-title">Workflow actions</h2><p>A work note is required only when an action changes the assignment.</p></div></div>
-                <div class="assignment-actions-grid">
-                  <form id="status-form" class="stack-form action-panel">
-                    <h3>Change status</h3>
-                    <div class="field"><label for="task-status">Status</label><select id="task-status"></select></div>
-                    <div class="field" id="hold-reason-wrap" hidden><label for="hold-reason">On-hold reason</label><select id="hold-reason"><option value="">Select reason</option><option>Awaiting documents</option><option>Site visit scheduled</option><option>Awaiting review</option><option>Custom</option></select></div>
-                    <div class="field" id="hold-custom-wrap" hidden><label for="hold-custom">Custom reason</label><input id="hold-custom" /></div>
-                    <div class="field"><label for="status-note">Work note</label><textarea id="status-note" placeholder="Required when the status changes"></textarea></div>
-                    <button class="primary" type="submit">Update status</button>
-                  </form>
-                  <form id="reassign-form" class="stack-form action-panel">
-                    <h3>Reassign task</h3>
-                    <div class="field"><label for="new-assignee">Reassign to</label><select id="new-assignee"><option>K. Sivaprasad</option><option>Lavakumar</option></select></div>
-                    <div class="field"><label for="reassign-note">Work note</label><textarea id="reassign-note" required placeholder="Required when reassigned"></textarea></div>
-                    <button class="secondary" type="submit">Reassign task</button>
-                  </form>
-                  <form id="cancel-form" class="stack-form action-panel danger-panel">
-                    <h3>Cancel task</h3><p>Reviewer-only action. History is retained.</p>
-                    <div class="field"><label for="cancel-reason">Cancellation reason</label><textarea id="cancel-reason" required placeholder="Required when cancelled"></textarea></div>
-                    <button class="danger-button" type="submit">Cancel task</button>
-                  </form>
-                </div>
-              </section>
+              <div class="assignment-inline-actions">
+                <form id="assignment-form" class="assignment-inline-form">
+                  <label for="new-assignee" id="assignment-action-title">Assign to</label><select id="new-assignee"></select>
+                  <button class="secondary" type="submit">Apply</button>
+                  <small id="assignment-help">Add the routing note below before applying.</small>
+                </form>
+                <button id="hold-task-button" class="secondary compact-action" type="button" hidden>Put on hold</button>
+                <button id="resume-task-button" class="secondary compact-action" type="button" hidden>Resume work</button>
+              </div>
             </article>
-            <article class="work-card">
-              <div class="section-heading"><div><h2>Work notes and activity</h2><p>Updates remain in chronological order.</p></div></div>
-              <form id="note-form" class="inline-form"><label for="work-note">Add work note</label><textarea id="work-note" required placeholder="Record progress, ambiguity or review context"></textarea><button class="primary" type="submit">Add note</button></form>
+            <article class="work-card" id="activity-card">
+              <div class="section-heading"><div><h2>Work notes and activity</h2><p>Use this one work-note field for progress and for any action requiring context.</p></div></div>
+              <form id="note-form" class="inline-form"><label for="work-note">Add work note</label><textarea id="work-note" placeholder="Record acknowledgement, routing justification, progress, ambiguity or review context"></textarea><button class="primary" type="submit">Add note</button></form>
+              <p id="action-error" class="form-error" role="alert" hidden></p>
               <ol id="activity-list" class="activity-list"></ol>
             </article>
           </div>
           <aside class="detail-aside">
-            <article class="work-card action-card">
-              <h2>Payment</h2><p class="card-help">Task-specific payment only. It is not inserted in the report.</p>
+            <article class="work-card action-card" id="payment-card">
+              <h2>Payment</h2><p class="card-help">Update payment at any stage. These details are not inserted in the report.</p>
               <form id="payment-form" class="stack-form">
                 <div class="field"><label for="estimated-fee">Estimated fee</label><input id="estimated-fee" inputmode="decimal" /></div>
                 <div class="field"><label for="agreed-fee">Agreed fee</label><input id="agreed-fee" inputmode="decimal" /></div>
                 <div class="field"><label for="received-fee">Amount received</label><input id="received-fee" inputmode="decimal" /></div>
                 <div class="payment-summary"><span>Outstanding</span><strong id="outstanding-fee">₹0</strong><small id="payment-status">Pending</small></div>
-                <button class="secondary" type="submit">Update payment</button>
+                <button class="secondary" id="save-payment" type="submit">Save payment update</button>
+                <button class="primary" id="detail-close-request" type="button" disabled>Close request</button>
               </form>
             </article>
           </aside>
         </section>
       </div>
     </main>
+    <div class="workflow-modal" id="cancel-modal" hidden>
+      <section class="workflow-dialog" role="dialog" aria-modal="true" aria-labelledby="cancel-title">
+        <div class="dialog-heading"><div><h2 id="cancel-title">Cancel task</h2><p>This father-only action retains the complete history.</p></div><button type="button" class="modal-x" data-close-cancel aria-label="Close">×</button></div>
+        <form id="cancel-form" class="stack-form"><div class="field"><label for="cancel-reason">Reason</label><select id="cancel-reason"></select></div><p class="card-help">For Custom, enter the explanation in the main work-note field before cancelling.</p><div class="dialog-actions"><button class="secondary" type="button" data-close-cancel>Keep task</button><button class="danger-button" type="submit">Cancel task</button></div></form>
+      </section>
+    </div>
+    <div class="workflow-modal" id="hold-modal" hidden>
+      <section class="workflow-dialog" role="dialog" aria-modal="true" aria-labelledby="hold-title">
+        <div class="dialog-heading"><div><h2 id="hold-title">Put task on hold</h2><p>Select the reason and record the required work note.</p></div><button type="button" class="modal-x" data-close-hold aria-label="Close">×</button></div>
+        <form id="hold-form" class="stack-form">
+          <div class="field"><label for="hold-reason">On-hold reason</label><select id="hold-reason"></select></div>
+          <div class="field"><label for="hold-work-note">Work note</label><textarea id="hold-work-note" placeholder="Explain what is awaited or what must happen next"></textarea></div>
+          <p id="hold-error" class="form-error" role="alert" hidden></p>
+          <div class="dialog-actions"><button class="secondary" type="button" data-close-hold>Cancel</button><button class="primary" type="submit">Put on hold</button></div>
+        </form>
+      </section>
+    </div>
+    <script src="/assets/js/workflow-access.js"></script>
     <script src="/assets/js/task-store.js"></script>
     <script src="/assets/js/workflow-ui.js"></script>
     <script src="/assets/js/task-detail.js"></script>
