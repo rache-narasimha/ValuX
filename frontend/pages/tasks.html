@@ -26,15 +26,18 @@
         <div class="field"><label for="payment-filter">Payment</label><select id="payment-filter"><option value="">All payment states</option><option>Not Set</option><option>Pending</option><option>Partially Received</option><option>Overdue</option><option>Received</option></select></div>
       </form>
       <section class="work-card institution-drilldown" id="institution-drilldown" hidden>
-        <div class="section-heading"><div><p class="eyebrow">Institution view</p><h2 id="institution-drilldown-title"></h2><p id="institution-drilldown-subtitle"></p></div><button type="button" class="quiet-button" id="clear-institution">View all institutions</button></div>
-        <div id="institution-workflow-mix" class="workflow-distribution-chart"></div>
+        <div class="section-heading"><div><p class="eyebrow">Institution view</p><div class="institution-title-row"><span id="institution-monogram" class="institution-monogram"></span><div><h2 id="institution-drilldown-title"></h2><p id="institution-drilldown-subtitle"></p></div></div></div><button type="button" class="quiet-button" id="clear-institution">View all institutions →</button></div>
+        <div class="institution-summary-layout"><div id="institution-workflow-mix" class="workflow-distribution-chart"></div><div class="institution-summary-cards"><article><span>Total assignments</span><strong id="institution-total">0</strong><small>Selected period</small></article><article><span>Total earned</span><strong id="institution-earned">₹0</strong><small id="institution-earned-count">0 reports</small></article><article><span>Received</span><strong id="institution-received">₹0</strong><small id="institution-received-percent">0%</small></article><article><span>Outstanding</span><strong id="institution-outstanding">₹0</strong><small id="institution-outstanding-percent">0%</small></article></div></div>
       </section>
+      <section class="work-card institution-directory" id="institution-directory" hidden><div class="section-heading"><div><p class="eyebrow">Institution overview</p><h2>All banks and NBFCs</h2><p>Select an institution to view its assignments, status and payment position.</p></div></div><div id="institution-directory-list"></div></section>
       <section class="work-card task-list-card">
         <div class="section-heading"><div><h2>Assignments</h2><p id="result-count">0 tasks</p></div></div>
-        <div id="task-list" class="task-stack"></div>
+        <div class="task-table-viewport"><div class="task-table-head" aria-hidden="true"><span>Task ID</span><span>Applicant / report type</span><span>Property</span><span>Assigned to</span><span>Due date</span><span>Status</span><span>Payment</span><span>Action</span></div>
+        <div id="task-list" class="task-stack"></div></div>
         <button id="load-more" class="load-more" type="button" hidden>Load more tasks</button>
       </section>
     </main>
+    <script src="/assets/js/app-shell.js"></script>
     <script src="/assets/js/workflow-access.js"></script>
     <script src="/assets/js/institutions.js"></script>
     <script src="/assets/js/task-store.js"></script>

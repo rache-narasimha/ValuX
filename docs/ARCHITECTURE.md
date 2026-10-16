@@ -23,12 +23,14 @@ valuation_app/
 │   │   ├── new-task.html
 │   │   ├── task.html
 │   │   ├── institutions.html
+│   │   ├── practice.html
 │   │   ├── general.html
 │   │   └── agricultural.html
 │   └── assets/
 │       ├── css/styles.css
 │       ├── css/workflow.css
 │       └── js/
+│           ├── app-shell.js
 │           ├── task-store.js
 │           ├── workflow-access.js
 │           ├── workflow-ui.js
@@ -59,7 +61,8 @@ valuation_app/
 ├── tests/
 │   ├── fixtures/agricultural_sample_payload.json
 │   ├── test_general_generation.py
-│   └── test_agricultural_generation.py
+│   ├── test_agricultural_generation.py
+│   └── test_task_store.js
 ├── outputs/
 │   ├── generated_reports/
 │   └── test_artifacts/
@@ -83,6 +86,9 @@ The backend does not contain editable form markup. It reads form definitions and
 
 ### Frontend
 
+- `assets/js/app-shell.js` owns the shared Peach & Cream application header,
+  icon navigation, assignment-state submenu, responsive drawer and persisted
+  sidebar collapse state. Page controllers keep ownership of data and actions.
 - `pages/index.html` and `assets/js/home.js` provide the work dashboard.
 - `pages/new-task.html`, `tasks.html`, and `task.html` implement assignment
   creation, the searchable work queue, and the task workspace.
@@ -113,6 +119,8 @@ The backend does not contain editable form markup. It reads form definitions and
   report-form navigation.
 - `pages/institutions.html` and `assets/js/institution-settings.js` provide the
   father-only institution configuration surface.
+- `pages/practice.html` provides safe links to report forms in practice mode,
+  without creating or updating a workflow assignment.
 - `assets/js/shared.js` contains reusable controls, parsing, date, institution
   and file-reading helpers used by every valuation form.
 - `pages/general.html` and `assets/js/general.js` implement residential, commercial and industrial valuation forms.
@@ -120,6 +128,27 @@ The backend does not contain editable form markup. It reads form definitions and
 - `assets/css/styles.css` is shared by every page.
 - `assets/css/workflow.css` contains responsive dashboard and task-management
   layout rules.
+
+### Browser script loading order
+
+The frontend intentionally uses browser globals rather than a bundler. Script
+order in each page is therefore part of the runtime contract:
+
+1. `appearance.js` runs in the document head so the saved theme is applied
+   before the page is displayed.
+2. `app-shell.js` builds the shared header and navigation shell.
+3. Repository and access modules (`institutions.js`, `workflow-access.js`, and
+   `task-store.js`) publish the data and permission APIs used by page code.
+4. Shared presentation modules such as `workflow-ui.js`,
+   `institution-metrics.js`, `payment-dialog.js`, and `employee-picker.js`
+   load before the page controller that consumes them.
+5. Valuation pages load `shared.js` before their report-specific controller;
+   `task-context.js` and `report-layout.js` then add assignment and navigation
+   behavior around the completed form.
+
+These globals and their order are compatibility boundaries. Moving scripts or
+renaming their exported objects requires coordinated changes to every page that
+loads them.
 
 ### Resources
 

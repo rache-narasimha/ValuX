@@ -1,3 +1,4 @@
+/** Searchable employee selector shared by assignment and transfer workflows. */
 (function () {
   "use strict";
 

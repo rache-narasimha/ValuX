@@ -1,3 +1,4 @@
+/** Central role adapter and permission policy for father and employee prototype views. */
 (function () {
   "use strict";
 

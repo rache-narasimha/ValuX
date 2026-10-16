@@ -1,3 +1,4 @@
+/** Temporary browser task repository and the single authority for workflow state transitions. */
 (function () {
   "use strict";
 
@@ -24,6 +25,8 @@
   const REOPEN_WINDOW_DAYS = 7;
   let storageIssue = null;
 
+  // Persistence and normalization keep older browser records compatible with
+  // the current temporary task shape.
   function authorName() {
     return window.WorkflowAccess ? WorkflowAccess.currentUser().name : "K. Sivaprasad";
   }
@@ -89,6 +92,7 @@
     window.dispatchEvent(new CustomEvent("sln:tasks-changed"));
   }
 
+  // Shared identifiers, dates, periods, and payment calculations.
   function timestamp() { return new Date().toISOString(); }
   function randomId() {
     if (window.crypto && typeof window.crypto.randomUUID === "function") return window.crypto.randomUUID();
@@ -200,6 +204,8 @@
     return { suggested: addDays(assignedDate, rule.suggested), maximum: addDays(assignedDate, rule.maximum) };
   }
 
+  // Task lifecycle mutations. Permission and transition checks remain here so
+  // page controllers cannot accidentally apply different workflow rules.
   function create(input) {
     const tasks = load();
     const report = REPORTS[input.reportKey];
@@ -421,6 +427,7 @@
     });
   }
 
+  // Read models used by dashboards, lists, and status cards.
   function storageStatus() {
     load();
     return { ok: !storageIssue, error: storageIssue };
@@ -462,6 +469,8 @@
       completed: count("Completed"), closed: count("Closed"), cancelled: count("Cancelled"),
     };
   }
+
+  // Prototype records are created only when browser storage has no tasks.
   function ensureSamples() {
     if (load().length) return;
     const now = new Date();

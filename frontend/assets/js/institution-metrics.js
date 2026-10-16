@@ -1,3 +1,4 @@
+/** Pure institution-level workload, finance, report-mix, and period aggregation helpers. */
 (function () {
   "use strict";
 

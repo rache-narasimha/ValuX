@@ -72,14 +72,6 @@ def set_text_node_with_breaks(text_node, value):
         position += 1
 
 
-AREA_TO_SQFT = {
-    "sq_ft": 1.0,
-    "sq_yd": 9.0,
-    "cent": 435.6,
-    "acre": 43560.0,
-    "sq_m": 10.7639104167,
-}
-
 def prepare_general_document_rows(root, values):
     old_tags = {
         "documents.deed_type", "documents.deed_details", "documents.approved_plan",

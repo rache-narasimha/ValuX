@@ -1,3 +1,4 @@
+/** Assignment workspace controller: workflow actions, payment, activity, and final-report access. */
 (function () {
   "use strict";
 
@@ -15,6 +16,7 @@
   const cancelModal = element("cancel-modal");
   const reopenModal = element("reopen-modal");
 
+  // Initial task lookup and common dialog/error helpers.
   function showMissingTask() {
     const storage = TaskStore.storageStatus();
     notFound.querySelector("strong").textContent = storage.ok ? "Task not found" : "Saved task data needs attention";
@@ -93,6 +95,7 @@
     openModal(assignmentModal);
   }
 
+  // State-dependent controls for workflow, report access, payments, and closure.
   function configureWorkflow() {
     const canChange = WorkflowAccess.can("changeWorkflow", task);
     element("hold-task-button").hidden = !canChange || task.status !== "In Progress";
@@ -180,6 +183,7 @@
     }
   }
 
+  // Assignment detail rendering and page-level event handlers.
   function renderBadges() {
     const assigneeLabel = task.assignee ? `Assigned to ${WorkflowUI.escape(task.assignee)}` : "Unassigned";
     const assignee = assignmentAccess()

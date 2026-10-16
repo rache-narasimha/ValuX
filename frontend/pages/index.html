@@ -19,28 +19,25 @@
       </nav>
     </header>
     <div class="app-shell">
-      <aside class="app-sidebar">
-        <div class="sidebar-heading"><p class="sidebar-label">Workspace</p><button id="sidebar-toggle" type="button" aria-label="Collapse workspace navigation" aria-expanded="true">‹</button></div>
-        <nav id="report-navigation" aria-label="Report workspaces">
+      <aside class="app-sidebar"></aside>
+      <main class="dashboard" id="dashboard">
+        <section class="dashboard-heading">
+          <div><p class="eyebrow">Work overview</p><h1 id="dashboard-title">All work</h1><p id="dashboard-description">Review assignments, continue reports and follow up on pending work.</p></div>
+          <div class="dashboard-heading-actions"><div id="dashboard-period-summary" class="date-summary"></div><a class="button-link primary new-assignment" href="/tasks/new"><span aria-hidden="true">＋</span> New assignment</a></div>
+        </section>
+        <section class="report-category-tabs" id="report-navigation" aria-label="Report workspaces">
           <button type="button" class="active" data-group="all"><span>All work</span><strong id="count-all">0</strong></button>
           <button type="button" data-group="valuation"><span>Valuation</span><strong id="count-valuation">0</strong></button>
           <button type="button" data-group="estimation"><span>Estimation</span><strong id="count-estimation">0</strong></button>
           <button type="button" data-group="progress"><span>Progress</span><strong id="count-progress">0</strong></button>
           <button type="button" data-group="completion"><span>Completion</span><strong id="count-completion">0</strong></button>
-        </nav>
-        <div class="sidebar-note"><strong>Workflow prototype</strong><p>Sample and test tasks remain in this browser only. The future database will begin with new records.</p></div>
-      </aside>
-      <main class="dashboard" id="dashboard">
-        <section class="dashboard-heading">
-          <div><p class="eyebrow">Work overview</p><h1 id="dashboard-title">All work</h1><p id="dashboard-description">Review assignments, continue reports and follow up on pending work.</p></div>
-          <a class="button-link primary new-assignment" href="/tasks/new"><span aria-hidden="true">＋</span> New assignment</a>
         </section>
         <section class="metric-grid metric-grid-five" aria-label="Task status summary">
-          <button class="metric-card" type="button" data-status="Unassigned"><span>Unassigned</span><strong id="metric-unassigned">0</strong><small>Needs assignment</small></button>
-          <button class="metric-card" type="button" data-status="In Progress"><span>In progress</span><strong id="metric-progress">0</strong><small>Currently being worked</small></button>
-          <button class="metric-card warning" type="button" data-status="On Hold"><span>On hold</span><strong id="metric-hold">0</strong><small id="hold-review-count">Needs follow-up</small></button>
-          <button class="metric-card success" type="button" data-status="Completed"><span>Completed</span><strong id="metric-completed">0</strong><small>Payment tracking</small></button>
-          <button class="metric-card neutral" type="button" data-status="Closed"><span>Closed</span><strong id="metric-closed">0</strong><small>Payment settled</small></button>
+          <button class="metric-card metric-unassigned" type="button" data-status="Unassigned"><span class="metric-symbol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h8l4 4V20.5H7z"/><path d="M15 3.5v4h4M10 12h6M10 16h6"/></svg></span><span class="metric-copy"><span>Unassigned</span><strong id="metric-unassigned">0</strong><small>Needs assignment</small></span></button>
+          <button class="metric-card metric-progress" type="button" data-status="In Progress"><span class="metric-symbol"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m10 8.5 5.5 3.5-5.5 3.5z"/></svg></span><span class="metric-copy"><span>In progress</span><strong id="metric-progress">0</strong><small>Currently being worked</small></span></button>
+          <button class="metric-card warning" type="button" data-status="On Hold"><span class="metric-symbol"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 8.5v7M14.5 8.5v7"/></svg></span><span class="metric-copy"><span>On hold</span><strong id="metric-hold">0</strong><small id="hold-review-count">Needs follow-up</small></span></button>
+          <button class="metric-card success" type="button" data-status="Completed"><span class="metric-symbol"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12 2.3 2.4 4.9-5"/></svg></span><span class="metric-copy"><span>Completed</span><strong id="metric-completed">0</strong><small>Payment tracking</small></span></button>
+          <button class="metric-card neutral" type="button" data-status="Closed"><span class="metric-symbol"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6M15 9l-6 6"/></svg></span><span class="metric-copy"><span>Closed</span><strong id="metric-closed">0</strong><small>Payment settled</small></span></button>
         </section>
         <section class="father-business" id="father-business">
           <article class="work-card institution-overview">
@@ -79,6 +76,7 @@
         </section>
       </main>
     </div>
+    <script src="/assets/js/app-shell.js"></script>
     <script src="/assets/js/workflow-access.js"></script>
     <script src="/assets/js/institutions.js"></script>
     <script src="/assets/js/task-store.js"></script>

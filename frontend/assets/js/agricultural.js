@@ -1,3 +1,4 @@
+/** Agricultural valuation form controller: fields, calculations, drafts, media, preview, and generation. */
 const state = {
   schema: null,
   sections: [],
@@ -30,6 +31,7 @@ const {
   title,
 } = window.ValuationUI;
 
+// Assignment context and report-specific field helpers.
 function linkedTaskValues() {
   const taskId = PAGE_PARAMS.get("task");
   const task = taskId && window.TaskStore ? TaskStore.get(taskId) : null;
@@ -52,6 +54,7 @@ function readonlyField(id, label) {
   return wrap;
 }
 
+// Repeatable document controls and form value handling.
 function renderDocuments(saved = {}) {
   const host = byId("agricultural-document-list");
   if (!host) return;
@@ -248,6 +251,7 @@ function addCalculatedValues(panel) {
   panel.append(block);
 }
 
+// Uploaded-media previews and report request state.
 function mediaSection(panel) {
   panel.innerHTML +=
     '<section class="subgroup"><h3>Property photographs</h3><p class="hint">New selections are added to the photographs already shown. The report uses one photo per row for 1–4 photos, two per row for 5–6, and three per row for 7–9. More than nine continues on the next page. Every image is rotated from its camera metadata, scaled proportionally and never cropped.</p><input id="photo-upload" type="file" accept="image/*" multiple><p class="hint media-save-note">Photographs are kept for this browser session but are not stored in the local draft after a page refresh.</p><div id="photo-preview" class="preview-grid"></div></section><section class="subgroup"><h3>Route map</h3><p class="hint">Upload one map screenshot. It is placed on its own page after the photographs.</p><input id="map-upload" type="file" accept="image/*"><div id="map-preview" class="map-preview"></div></section>';
@@ -324,6 +328,7 @@ function setProcessing(active, titleText = "", stage = "") {
   byId("agricultural-form").setAttribute("aria-busy", String(active));
 }
 
+// Section navigation, local drafts, and input event wiring.
 function updateNavigation() {
   state.sections.forEach((panel, index) =>
     panel.classList.toggle("active", index === state.current),
@@ -389,6 +394,7 @@ function wireInputs() {
     });
 }
 
+// Page assembly and report-generation event wiring.
 async function init() {
   state.schema = await fetch("/api/agricultural/schema").then((response) => {
     if (!response.ok)

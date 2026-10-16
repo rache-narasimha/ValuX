@@ -1,3 +1,4 @@
+/** New-assignment controller: validation, local draft recovery, dates, routing, and creation. */
 (function () {
   "use strict";
 
@@ -24,6 +25,7 @@
     label: "Assign to employee",
   });
 
+  // Institution/report options and priority-derived dates.
   function iso(date) {
     return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
   }
@@ -68,6 +70,7 @@
     };
   }
 
+  // Local draft persistence for an unfinished assignment.
   function showDraftState(message, canDiscard = true) {
     draftStatus.textContent = message;
     discardDraft.hidden = !canDiscard;
@@ -143,6 +146,7 @@
     showDraftState("Draft discarded", false);
   }
 
+  // Form initialization, event handling, and submission.
   institutionType.addEventListener("change", refreshInstitutions);
   reportType.addEventListener("change", refreshReportType);
   assignedDate.addEventListener("change", refreshDates);

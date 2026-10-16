@@ -1,3 +1,4 @@
+/** Browser repository for configurable bank/NBFC records and the legacy institution view. */
 (function () {
   "use strict";
 

@@ -34,6 +34,7 @@ docker compose -f valuation_app/compose.yaml down
 | `backend/app/web.py`            | HTTP routes, previews, static files and downloads                      |
 | `frontend/pages/`               | Dashboard, task workflow and report-form HTML                          |
 | `frontend/pages/institutions.html` | Father-only bank/NBFC configuration                                 |
+| `frontend/assets/js/app-shell.js` | Shared header, sidebar navigation and responsive application shell    |
 | `frontend/assets/js/shared.js`  | Shared controls, parsing, dates, institutions and file-reading helpers  |
 | `frontend/assets/js/`           | Report-specific browser controllers and home-page behavior              |
 | `frontend/assets/css/`          | Shared application styling                                             |
@@ -72,3 +73,5 @@ The archive is retained for reference but is not copied into the Docker image an
   recompletion.
 
 For a deeper explanation, continue with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+For a practical developer map of responsibilities and safe change locations,
+read [docs/CODEBASE_GUIDE.md](docs/CODEBASE_GUIDE.md).

@@ -1,3 +1,4 @@
+/** Father-view controller for adding, editing, enabling, and disabling institutions. */
 (function () {
   "use strict";
 

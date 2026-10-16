@@ -1,3 +1,4 @@
+/** General-property valuation form controller: fields, floors, calculations, drafts, media, preview, and generation. */
 const state = {
   schema: null,
   sections: [],
@@ -32,6 +33,7 @@ const {
   title,
 } = window.ValuationUI;
 
+// Assignment context and report-section configuration.
 function linkedTaskValues() {
   const taskId = PAGE_PARAMS.get("task");
   const task = taskId && window.TaskStore ? TaskStore.get(taskId) : null;
@@ -90,6 +92,8 @@ const excluded = new Set([
   "documents.legal_scrutiny",
   "documents.tax_receipt",
 ]);
+
+// Dynamic document, land, floor, and media controls.
 function customField(id, label, type = "text", value = "") {
   return fieldControl({ id, label, type }, { [id]: value });
 }
@@ -397,6 +401,8 @@ function renderPreviews() {
       ? `<img src="${state.map.data}" alt="Map preview">`
       : "";
 }
+
+// Preview state, navigation, persistence, and calculated values.
 function markDirty() {
   state.previewReady = false;
   state.previewId = null;
@@ -590,6 +596,8 @@ function wireInputs() {
       });
     });
 }
+
+// Page assembly and report-generation event wiring.
 async function init() {
   state.schema = await fetch("/api/schema").then((r) => r.json());
   const labels = Object.fromEntries(

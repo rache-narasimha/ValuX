@@ -1,3 +1,4 @@
+/** Searchable task-list and institution drill-down controller. */
 (function () {
   "use strict";
 
@@ -16,6 +17,7 @@
   };
   let visible = PAGE_SIZE;
   let periodReference = new Date();
+  let directoryMode = false;
   const GROUP_LABELS = {
     all: "All work",
     valuation: "Valuation",
@@ -32,6 +34,7 @@
     return;
   }
 
+  // Filter state, query construction, and task-row rendering.
   function populateFilters() {
     TaskStore.STATUSES.forEach((item) => fields.status.add(new Option(item, item)));
     Object.entries(window.INSTITUTIONS).forEach(([type, institutions]) => {
@@ -41,6 +44,7 @@
       fields.institution.append(group);
     });
     const initial = new URLSearchParams(window.location.search);
+    directoryMode = initial.get("view") === "institutions";
     if (initial.get("periodReference")) periodReference = new Date(`${initial.get("periodReference")}T00:00:00`);
     fields.group.value = initial.get("group") || "all";
     fields.institution.value = initial.get("institution") || "";
@@ -65,18 +69,19 @@
   function renderRows(tasks) {
     if (!tasks.length) return WorkflowUI.empty("No assignments match the selected search and filters.");
     if (fields.status.value !== "On Hold" || WorkflowAccess.currentRole() !== "father") {
-      return tasks.map((task) => WorkflowUI.taskRow(task)).join("");
+      return tasks.map((task) => WorkflowUI.taskRow(task, { variant: "table" })).join("");
     }
     const review = tasks.filter((task) => task.holdReason === "Awaiting Review");
     const other = tasks.filter((task) => task.holdReason !== "Awaiting Review");
-    return `${review.length ? `<section class="task-list-group"><div class="task-list-group-heading"><h3>Awaiting my review</h3><span>${review.length}</span></div>${review.map((task) => WorkflowUI.taskRow(task)).join("")}</section>` : ""}
-      ${other.length ? `<section class="task-list-group"><div class="task-list-group-heading"><h3>Other on-hold tasks</h3><span>${other.length}</span></div>${other.map((task) => WorkflowUI.taskRow(task)).join("")}</section>` : ""}`;
+    return `${review.length ? `<section class="task-list-group"><div class="task-list-group-heading"><h3>Awaiting my review</h3><span>${review.length}</span></div>${review.map((task) => WorkflowUI.taskRow(task, { variant: "table" })).join("")}</section>` : ""}
+      ${other.length ? `<section class="task-list-group"><div class="task-list-group-heading"><h3>Other on-hold tasks</h3><span>${other.length}</span></div>${other.map((task) => WorkflowUI.taskRow(task, { variant: "table" })).join("")}</section>` : ""}`;
   }
 
   function selectedInstitution() {
     return InstitutionMetrics.configured().find((institution) => institution.code === fields.institution.value);
   }
 
+  // Institution drill-down and all-institutions directory rendering.
   function renderInstitutionDrilldown() {
     const institution = selectedInstitution();
     const host = document.getElementById("institution-drilldown");
@@ -92,6 +97,8 @@
     const mix = InstitutionMetrics.workflowMix(tasks);
     const maximum = Math.max(1, ...mix.map((item) => item.count));
     document.getElementById("institution-drilldown-title").textContent = `${institution.code} · ${institution.name}`;
+    document.getElementById("institution-monogram").textContent = institution.code.slice(0, 4);
+    document.getElementById("institution-monogram").style.setProperty("--institution-color", institution.color);
     document.getElementById("institution-drilldown-subtitle").textContent = fields.period.value
       ? `${tasks.length} assignments · ${InstitutionMetrics.periodLabel(fields.period.value, periodReference)}`
       : `${tasks.length} assignments · all dates`;
@@ -101,11 +108,37 @@
         <span>${WorkflowUI.escape(item.label)}</span><i><b style="--width:${width}%;--state-color:${item.color}"></b></i><strong>${item.count}</strong>
       </button>`;
     }).join("");
+    const billable = tasks.filter((task) => task.status !== "Cancelled");
+    const earned = billable.reduce((sum, task) => sum + Number(TaskStore.paymentSummary(task).basis || 0), 0);
+    const received = billable.reduce((sum, task) => sum + Number(task.payment.received || 0), 0);
+    const outstanding = billable.reduce((sum, task) => sum + Number(TaskStore.paymentSummary(task).outstanding || 0), 0);
+    const percent = (value) => earned ? `${Math.round((value / earned) * 100)}%` : "0%";
+    document.getElementById("institution-total").textContent = tasks.length;
+    document.getElementById("institution-earned").textContent = WorkflowUI.currency(earned);
+    document.getElementById("institution-earned-count").textContent = `${billable.length} ${billable.length === 1 ? "report" : "reports"}`;
+    document.getElementById("institution-received").textContent = WorkflowUI.currency(received);
+    document.getElementById("institution-received-percent").textContent = percent(received);
+    document.getElementById("institution-outstanding").textContent = WorkflowUI.currency(outstanding);
+    document.getElementById("institution-outstanding-percent").textContent = percent(outstanding);
     document.querySelectorAll("[data-workflow-state]").forEach((button) => button.addEventListener("click", () => {
       fields.status.value = button.dataset.workflowState;
       reset();
       document.querySelector(".task-list-card").scrollIntoView({ behavior: "smooth", block: "start" });
     }));
+  }
+
+  function renderInstitutionDirectory() {
+    const host = document.getElementById("institution-directory");
+    host.hidden = !directoryMode || Boolean(selectedInstitution());
+    if (host.hidden) return;
+    const allTasks = TaskStore.all().filter(WorkflowAccess.visible);
+    document.getElementById("institution-directory-list").innerHTML = InstitutionMetrics.configured().map((institution) => {
+      const institutionTasks = allTasks.filter((task) => task.institutionCode === institution.code);
+      const inProgress = institutionTasks.filter((task) => task.status === "In Progress").length;
+      const onHold = institutionTasks.filter((task) => task.status === "On Hold").length;
+      const outstanding = institutionTasks.reduce((sum, task) => sum + Number(TaskStore.paymentSummary(task).outstanding || 0), 0);
+      return `<a class="institution-directory-row" href="/tasks?institution=${encodeURIComponent(institution.code)}&period=monthly"><span class="institution-monogram" style="--institution-color:${WorkflowUI.escape(institution.color)}">${WorkflowUI.escape(institution.code.slice(0, 4))}</span><span><strong>${WorkflowUI.escape(institution.code)} · ${WorkflowUI.escape(institution.name)}</strong><small>${WorkflowUI.escape(institution.type)}</small></span><span><small>Total</small><strong>${institutionTasks.length}</strong></span><span><small>In progress</small><strong>${inProgress}</strong></span><span><small>On hold</small><strong>${onHold}</strong></span><span><small>Outstanding</small><strong>${WorkflowUI.currency(outstanding)}</strong></span><b aria-hidden="true">›</b></a>`;
+    }).join("");
   }
 
   function renderContext() {
@@ -117,10 +150,16 @@
     document.getElementById("task-list-description").textContent = institution
       ? `Showing ${fields.group.value === "all" ? "all report types" : label.toLowerCase()} for ${institution.name}. Change any filter below when required.`
       : `Search and filter ${label.toLowerCase()} assignments.`;
+    if (directoryMode && !institution) {
+      document.getElementById("task-list-title").textContent = "Institutions";
+      document.getElementById("task-list-description").textContent = "Review workload and payment position across every configured bank and NBFC.";
+    }
   }
 
+  // Page render cycle, URL synchronization, and event wiring.
   function updateUrl() {
     const params = new URLSearchParams();
+    if (directoryMode && !selectedInstitution()) params.set("view", "institutions");
     if (fields.group.value !== "all") params.set("group", fields.group.value);
     if (fields.period.value) params.set("periodReference", periodReference.toISOString().slice(0, 10));
     ["institution", "period", "status", "assignee", "holdReason", "payment"].forEach((key) => {
@@ -137,6 +176,9 @@
     loadMore.hidden = !result.hasMore;
     renderContext();
     renderInstitutionDrilldown();
+    renderInstitutionDirectory();
+    document.querySelector(".task-list-card").hidden = directoryMode && !selectedInstitution();
+    document.getElementById("task-filters").hidden = directoryMode && !selectedInstitution();
     updateUrl();
   }
 
@@ -147,7 +189,7 @@
 
   populateFilters();
   Object.entries(fields).forEach(([key, field]) => field.addEventListener(key === "search" ? "input" : "change", reset));
-  document.getElementById("clear-institution").addEventListener("click", () => { fields.institution.value = ""; reset(); });
+  document.getElementById("clear-institution").addEventListener("click", () => { window.location.href = "/tasks?view=institutions"; });
   loadMore.addEventListener("click", () => { visible += PAGE_SIZE; render(); });
   window.addEventListener("sln:tasks-changed", render);
   window.addEventListener("sln:payment-updated", render);

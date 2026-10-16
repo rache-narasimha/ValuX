@@ -1,3 +1,4 @@
+/** Persists and applies the light/dark appearance preference before page rendering. */
 (function () {
   "use strict";
 

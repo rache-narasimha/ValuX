@@ -110,12 +110,3 @@ def insert_uploaded_media(docx_path, photos, map_image):
         else:
             map_paragraph.add_run("\nNo map screenshot uploaded.")
     document.save(docx_path)
-
-
-AREA_LABELS = {
-    "sq_ft": "Sq.ft",
-    "sq_yd": "Sq.yd",
-    "cent": "Cent",
-    "acre": "Acre",
-    "sq_m": "Sq.m",
-}

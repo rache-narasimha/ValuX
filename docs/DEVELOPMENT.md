@@ -2,6 +2,9 @@
 
 ## Run automated checks
 
+The Python report checks and the task-store check are executable regression
+scripts. Run them directly as shown; they are not collected by a test runner.
+
 ```sh
 python3 valuation_app/tests/test_general_generation.py
 python3 valuation_app/tests/test_agricultural_generation.py
@@ -16,6 +19,12 @@ docker compose -f valuation_app/compose.yaml up --build -d
 docker compose -f valuation_app/compose.yaml ps
 docker compose -f valuation_app/compose.yaml logs --tail=100
 ```
+
+The Compose service bind-mounts `backend/`, `frontend/`, and `resources/`
+read-only into the running container. Frontend and resource-file changes are
+therefore available without rebuilding the image; backend Python changes need
+only a container restart. Rebuilding is required when the Dockerfile or Python
+dependencies change.
 
 ## Generated files
 

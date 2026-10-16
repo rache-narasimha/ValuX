@@ -1,3 +1,4 @@
+/** Reusable completed-task payment editor and close-request dialog. */
 (function () {
   "use strict";
 

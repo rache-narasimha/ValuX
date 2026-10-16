@@ -53,11 +53,6 @@ def currency(value, prefix=False):
     return f"{'Rs.' if prefix else ''}{indian_number(amount)}/-"
 
 
-ONES = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
-        "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
-        "seventeen", "eighteen", "nineteen"]
-TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
-
 def under_thousand(n):
     parts = []
     if n >= 100:

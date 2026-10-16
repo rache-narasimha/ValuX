@@ -1,3 +1,4 @@
+/** Shared escaping, formatting, status styling, and task-row rendering helpers. */
 (function () {
   "use strict";
 
@@ -39,6 +40,19 @@
       : task.status === "Closed" && options.paymentAction !== false
         ? '<button class="row-action" type="button" disabled title="Payment is locked after closure">Payment locked</button>'
         : `<span class="row-arrow" aria-hidden="true">›</span>`;
+    if (options.variant === "table") {
+      return `<article class="task-table-row" data-task-id="${escape(task.id)}">
+        <a class="task-row-link" href="/tasks/detail?id=${encodeURIComponent(task.id)}" aria-label="Open ${escape(task.reportName)}"></a>
+        <div class="task-table-id"><span class="task-id">${escape(task.id)}</span></div>
+        <div class="task-table-person"><strong>${escape(task.customerName)}</strong><small>${escape(task.reportLabel)}</small></div>
+        <div class="task-table-property"><span>${escape(task.propertyBrief)}</span><small>${escape(task.institutionName)} · ${escape(task.branch)}</small></div>
+        <div class="task-table-assignee"><span class="table-avatar">${escape(assignee.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase())}</span><strong>${escape(assignee)}</strong></div>
+        <div class="task-table-due"><strong>${date(task.dueDate)}</strong></div>
+        <div class="task-table-status"><span class="status-badge ${statusClass(task.status)}">${escape(task.status)}</span>${hold}</div>
+        <div class="task-table-payment"><span class="payment-badge ${paymentClass(payment)}">${escape(payment)}</span><small>${paymentSummary.outstanding === null ? "N/A" : `${currency(paymentSummary.outstanding)} due`}</small></div>
+        <div class="task-table-action">${quickPayment}</div>
+      </article>`;
+    }
     return `<article class="task-row" data-task-id="${escape(task.id)}">
       <a class="task-row-link" href="/tasks/detail?id=${encodeURIComponent(task.id)}" aria-label="Open ${escape(task.reportName)}"></a>
       <div class="task-row-main">

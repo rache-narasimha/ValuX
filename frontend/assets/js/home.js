@@ -1,3 +1,4 @@
+/** Dashboard controller: status summaries, institution workload, finance charts, and recent work. */
 (function () {
   "use strict";
 
@@ -23,6 +24,7 @@
   }
   TaskStore.ensureSamples();
 
+  // Shared dashboard data access and rendering helpers.
   function setText(id, value) {
     document.getElementById(id).textContent = value;
   }
@@ -63,20 +65,21 @@
   function renderWorkload(tasks) {
     const entries = InstitutionMetrics.workload(tasks, selectedWorkloadPeriod, selectedWorkloadReference);
     const maximum = Math.max(1, ...entries.map((entry) => entry.count));
-    document.getElementById("institution-workload").innerHTML = chartGroups(entries, (group) => `<div class="vertical-chart workload-chart" style="--columns:${group.length}">
+    document.getElementById("institution-workload").innerHTML = chartGroups(entries, (group) => `<div class="horizontal-chart workload-chart">
       ${group.map((entry) => {
-        const height = entry.count ? Math.max(8, Math.round((entry.count / maximum) * 100)) : 0;
+        const width = entry.count ? Math.max(8, Math.round((entry.count / maximum) * 100)) : 0;
         const href = buildQuery({ institution: entry.code, period: selectedWorkloadPeriod });
-        return `<a class="chart-column" href="${href}" title="${WorkflowUI.escape(entry.name)}: ${entry.count} reports" aria-label="View ${WorkflowUI.escape(entry.name)} tasks">
-          <span class="chart-value">${entry.count}</span>
-          <span class="chart-track"><i style="--height:${height}%;--chart-color:${WorkflowUI.chartColor(entry)}"></i></span>
+        return `<a class="horizontal-chart-row" href="${href}" title="${WorkflowUI.escape(entry.name)}: ${entry.count} reports" aria-label="View ${WorkflowUI.escape(entry.name)} tasks">
           <strong>${WorkflowUI.escape(entry.code)}</strong>
+          <span class="horizontal-track"><i style="--width:${width}%;--chart-color:${WorkflowUI.chartColor(entry)}"></i></span>
+          <span class="chart-value">${entry.count}</span>
         </a>`;
       }).join("")}
-    </div>`);
+    </div><p class="chart-total">Total: <strong>${group.reduce((sum, entry) => sum + entry.count, 0)} reports</strong></p>`);
     setText("workload-period-label", InstitutionMetrics.periodLabel(selectedWorkloadPeriod, selectedWorkloadReference));
   }
 
+  // Finance chart rendering and selected-institution detail.
   function renderFinanceSelection(entries) {
     const selected = entries.find((entry) => entry.code === selectedFinanceInstitution);
     const panel = document.getElementById("institution-finance-detail");
@@ -89,21 +92,24 @@
 
   function renderFinance(tasks) {
     const entries = InstitutionMetrics.finance(tasks, selectedFinancePeriod, selectedFinanceReference);
-    const visibleValues = selectedFinanceMetric === "all"
-      ? entries.flatMap((entry) => [entry.earned, entry.received, entry.outstanding])
-      : entries.map((entry) => entry[selectedFinanceMetric]);
-    const maximum = Math.max(1, ...visibleValues);
-    const height = (value) => value ? Math.max(7, Math.round((value / maximum) * 100)) : 0;
-    document.getElementById("institution-finance-chart").innerHTML = chartGroups(entries, (group) => `<div class="vertical-chart finance-column-chart" style="--columns:${group.length}">
+    const maximum = Math.max(1, ...entries.map((entry) => selectedFinanceMetric === "all" ? entry.earned : entry[selectedFinanceMetric]));
+    const width = (value) => value ? Math.max(2, Math.round((value / maximum) * 100)) : 0;
+    const segment = (kind, value, earned) => {
+      const chartWidth = width(value);
+      const share = earned ? Math.round((value / earned) * 100) : 0;
+      const label = share >= 16 ? `<span>${share}%</span>` : "";
+      return `<i class="${kind}" style="--width:${chartWidth}%" title="${kind === "received" ? "Received" : "Outstanding"}: ${share}%">${label}</i>`;
+    };
+    document.getElementById("institution-finance-chart").innerHTML = chartGroups(entries, (group) => `<div class="horizontal-chart finance-horizontal-chart">
       ${group.map((entry) => {
         const metricValue = selectedFinanceMetric === "all" ? entry.earned : entry[selectedFinanceMetric];
         const bars = selectedFinanceMetric === "all"
-          ? `<i class="earned" style="--height:${height(entry.earned)}%"></i><i class="received" style="--height:${height(entry.received)}%"></i><i class="outstanding" style="--height:${height(entry.outstanding)}%"></i>`
-          : `<i class="${selectedFinanceMetric} single" style="--height:${height(metricValue)}%"></i>`;
-        return `<button type="button" class="chart-column finance-column${entry.code === selectedFinanceInstitution ? " selected" : ""}" data-finance-institution="${WorkflowUI.escape(entry.code)}" title="${WorkflowUI.escape(entry.name)}" style="--institution-color:${entry.color}">
-        <span class="chart-value">${WorkflowUI.currency(metricValue)}</span>
-        <span class="chart-track grouped-bars">${bars}</span>
+          ? `${segment("received", entry.received, entry.earned)}${segment("outstanding", entry.outstanding, entry.earned)}`
+          : `<i class="${selectedFinanceMetric} single" style="--width:${width(metricValue)}%"></i>`;
+        return `<button type="button" class="horizontal-chart-row finance-column${entry.code === selectedFinanceInstitution ? " selected" : ""}" data-finance-institution="${WorkflowUI.escape(entry.code)}" title="${WorkflowUI.escape(entry.name)}" style="--institution-color:${entry.color}">
         <strong>${WorkflowUI.escape(entry.code)}</strong>
+        <span class="horizontal-track grouped-bars">${bars}</span>
+        <span class="chart-value">${WorkflowUI.currency(metricValue)}</span>
       </button>`;
       }).join("")}
     </div>`);
@@ -117,7 +123,9 @@
     setText("income-received", WorkflowUI.currency(received));
     setText("income-outstanding", WorkflowUI.currency(Math.max(0, earned - received)));
     setText("finance-period-label", InstitutionMetrics.periodLabel(selectedFinancePeriod, selectedFinanceReference));
-    document.getElementById("finance-legend").hidden = selectedFinanceMetric !== "all";
+    const legend = document.getElementById("finance-legend");
+    legend.hidden = selectedFinanceMetric !== "all";
+    legend.innerHTML = '<span class="received">Received</span><span class="outstanding">Outstanding</span>';
     renderFinanceSelection(entries);
   }
 
@@ -129,6 +137,7 @@
     renderFinance(tasks);
   }
 
+  // Date/period controls used by workload and finance views.
   function renderPeriodControls() {
     document.querySelectorAll("[data-dashboard-period]").forEach((button) => {
       const active = button.dataset.dashboardPeriod === selectedWorkloadPeriod;
@@ -211,6 +220,7 @@
     setText("metric-completed", summary.completed);
     setText("metric-closed", summary.closed);
     setText("hold-review-count", role === "father" && summary.awaitingReview ? `${summary.awaitingReview} awaiting my review` : "Needs follow-up");
+    document.getElementById("dashboard-period-summary").textContent = InstitutionMetrics.periodLabel(selectedWorkloadPeriod, selectedWorkloadReference);
     setText("count-all", allVisibleTasks().length);
     ["valuation", "estimation", "progress", "completion"].forEach((group) => {
       setText(`count-${group}`, allVisibleTasks().filter((task) => task.reportGroup === group).length);
@@ -224,6 +234,7 @@
     document.getElementById("view-all-payments").href = buildQuery({ status: "Completed" });
   }
 
+  // Dashboard interactions and initial rendering.
   document.querySelectorAll("#report-navigation button").forEach((button) => button.addEventListener("click", () => {
     selectedGroup = button.dataset.group;
     document.querySelectorAll("#report-navigation button").forEach((item) => item.classList.toggle("active", item === button));
@@ -246,17 +257,7 @@
     render();
   });
   document.getElementById("recent-status-filter").addEventListener("change", render);
-  document.getElementById("sidebar-toggle").addEventListener("click", () => {
-    const shell = document.querySelector(".app-shell");
-    const collapsed = shell.classList.toggle("sidebar-collapsed");
-    document.getElementById("sidebar-toggle").setAttribute("aria-expanded", String(!collapsed));
-    localStorage.setItem("sln.dashboard.sidebar-collapsed", String(collapsed));
-  });
   window.addEventListener("sln:tasks-changed", render);
   window.addEventListener("sln:payment-updated", render);
-  if (localStorage.getItem("sln.dashboard.sidebar-collapsed") === "true") {
-    document.querySelector(".app-shell").classList.add("sidebar-collapsed");
-    document.getElementById("sidebar-toggle").setAttribute("aria-expanded", "false");
-  }
   render();
 })();

@@ -1,3 +1,4 @@
+/** Connects a valuation form to its assignment workflow, completion action, and work notes. */
 (function () {
   "use strict";
 
@@ -7,6 +8,7 @@
   const reportForm = document.querySelector("main form");
   if (!reportForm) return;
 
+  // Practice mode intentionally does not create a task context.
   if (practiceMode && !taskId) {
     const banner = document.createElement("section");
     banner.className = "practice-banner";
@@ -71,6 +73,7 @@
   const holdReason = document.getElementById("report-hold-reason");
   TaskStore.HOLD_REASONS.forEach((item) => holdReason.add(new Option(item, item)));
 
+  // Linked-task state and report-completion validation.
   function currentTask() {
     return TaskStore.get(taskId);
   }
@@ -138,6 +141,7 @@
     document.body.classList.remove("modal-open");
   }
 
+  // Form and workflow event handlers.
   document.getElementById("report-hold").addEventListener("click", () => {
     document.getElementById("report-hold-note").value = "";
     document.getElementById("report-hold-error").hidden = true;

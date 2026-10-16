@@ -1,3 +1,4 @@
+/** Persists collapse/expand state for long report-form navigation. */
 (function () {
   "use strict";
 
