@@ -17,12 +17,10 @@
   const reopenModal = element("reopen-modal");
 
   // Initial task lookup and common dialog/error helpers.
-  function showMissingTask() {
+  function showMissingTask(title, message) {
     const storage = TaskStore.storageStatus();
-    notFound.querySelector("strong").textContent = storage.ok ? "Task not found" : "Saved task data needs attention";
-    notFound.querySelector("p").textContent = storage.ok
-      ? "The requested assignment is not available in this browser."
-      : storage.error;
+    notFound.querySelector("strong").textContent = title || (storage.ok ? "Task not found" : "Saved task data needs attention");
+    notFound.querySelector("p").textContent = message || (storage.ok ? "The requested assignment is not available in this browser." : storage.error);
     notFound.hidden = false;
   }
 
@@ -168,7 +166,7 @@
       ? TaskStore.canReopen(task)
         ? `Reopening is available through ${WorkflowUI.date(deadline)}.`
         : `The reopening window ended on ${WorkflowUI.date(deadline)}.`
-      : "Only the father/reviewer can reopen a closed task.";
+      : "Only the CEO can reopen a closed task.";
   }
 
   async function verifyFinalReport(artifact) {

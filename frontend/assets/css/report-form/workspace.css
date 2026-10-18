@@ -4,6 +4,7 @@ body:not(.workflow-page) .shared-app-header { position: sticky; top: 0; z-index:
 .report-shell-title { display: grid; min-width: 0; margin-left: 22px; padding-left: 22px; border-left: 1px solid #efd8cb; }
 .report-shell-title strong { overflow: hidden; color: #4b2016; font-size: .85rem; text-overflow: ellipsis; white-space: nowrap; }
 .report-shell-title small { overflow: hidden; max-width: 420px; margin-top: 2px; color: #86766f; font-size: .67rem; text-overflow: ellipsis; white-space: nowrap; }
+body.report-linked .report-shell-title { display: none; }
 .report-status { padding: 7px 12px; border-radius: 999px; background: #fff0e7; color: #a84124; font-size: .72rem; font-weight: 850; white-space: nowrap; }
 body:not(.workflow-page) main { min-height: calc(100vh - 68px); }
 body:not(.workflow-page) main > aside { background: linear-gradient(180deg, #a94125, #7f2e1b); }

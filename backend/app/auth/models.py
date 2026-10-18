@@ -34,7 +34,7 @@ def public_user(user: dict[str, Any]) -> dict[str, Any]:
         "userId": user["user_id"],
         "name": user["display_name"],
         "role": user["role"],
-        "roleLabel": "Father / reviewer" if user["role"] == "father" else "Employee",
+        "roleLabel": "CEO" if user["role"] == "father" else "Employee",
         "initials": "".join(
             part[0].upper() for part in user["display_name"].split() if part
         )[:2],

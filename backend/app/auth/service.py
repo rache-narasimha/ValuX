@@ -37,7 +37,7 @@ from .password_policy import (
 
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 USER_ID_PATTERN = re.compile(r"^[a-z][a-z0-9._-]{2,31}$")
-DUMMY_PASSWORD_HASH = security.hash_password("ValSphere-Dummy!Password2026")
+DUMMY_PASSWORD_HASH = security.hash_password("ValuX-Dummy!Password2026")
 
 
 def provision_user(

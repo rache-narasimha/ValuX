@@ -388,7 +388,7 @@
     if (!CANCELLATION_REASONS.includes(reason)) throw new Error("Select a valid cancellation reason.");
     if (reason === "Custom" && !String(note || "").trim()) throw new Error("For Custom, explain the cancellation in the work note.");
     return replace(taskId, (task) => {
-      requirePermission("cancelTask", task, "Only the father/reviewer can cancel this task.");
+      requirePermission("cancelTask", task, "Only the CEO can cancel this task.");
       if (["Closed", "Cancelled"].includes(task.status)) throw new Error("This task can no longer be cancelled.");
       task.status = "Cancelled";
       task.holdReason = "";
@@ -414,7 +414,7 @@
     const workNote = String(note || "").trim();
     if (!workNote) throw new Error("Add a work note explaining why the closed task is being reopened.");
     return replace(taskId, (task) => {
-      if (window.WorkflowAccess?.currentRole() !== "father") throw new Error("Only the father/reviewer can reopen a closed task.");
+      if (window.WorkflowAccess?.currentRole() !== "father") throw new Error("Only the CEO can reopen a closed task.");
       if (!canReopen(task)) throw new Error(`Closed tasks can be reopened only within ${REOPEN_WINDOW_DAYS} calendar days of closure.`);
       task.status = "In Progress";
       task.closedAt = null;

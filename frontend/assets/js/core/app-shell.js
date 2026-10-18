@@ -30,7 +30,7 @@
   }
 
   function count(status) {
-    return tasks().filter((task) => !status || task.status === status).length;
+    return tasks().filter((task) => (!window.WorkflowAccess || WorkflowAccess.visible(task)) && (!status || task.status === status)).length;
   }
 
   function activeFor(path, search, target) {
@@ -54,6 +54,17 @@
     return `<div class="assignment-subnav">${statuses.map((status) => `<a href="/tasks?status=${encodeURIComponent(status)}"><span>${status}</span><strong>${count(status)}</strong></a>`).join("")}</div>`;
   }
 
+  function headerShortcuts() {
+    const path = location.pathname.replace(/\/$/, "") || "/";
+    if (path === "/") return '<a href="/tasks">All tasks</a>';
+    if (path === "/tasks") {
+      return '<a href="/">Dashboard</a><a class="header-primary-link" href="/tasks/new">＋ New assignment</a>';
+    }
+    if (path === "/tasks/new") return '<a href="/tasks">Cancel and return</a>';
+    if (path === "/practice" || path.startsWith("/settings/")) return '<a href="/">← Dashboard</a>';
+    return `<a${location.pathname.startsWith("/tasks") ? ' class="active"' : ""} href="/tasks">All tasks</a>`;
+  }
+
   function sidebarMarkup() {
     const assignmentActive = activeFor(location.pathname, location.search, "assignments");
     return `<div class="sidebar-brand-mobile"><span class="brand-mark">SLN</span><strong>Property Reports</strong></div>
@@ -73,13 +84,12 @@
   }
 
   function headerMarkup(report = null) {
-    const allTasksActive = location.pathname.startsWith("/tasks");
-    const identity = window.__VALSPHERE_AUTH_CONTEXT__?.user || {};
+    const identity = window.__VALUX_AUTH_CONTEXT__?.user || {};
     return `<button class="mobile-menu-button" type="button" aria-label="Open application navigation">${icons.menu}</button>
       <a class="brand" href="/" aria-label="SLN work dashboard"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
       ${report ? `<div class="report-shell-title"><strong>${report.title}</strong><small>${report.description}</small></div>` : ""}
-      <nav class="header-shortcuts" aria-label="Quick navigation"><a${allTasksActive ? ' class="active"' : ""} href="/tasks">All tasks</a></nav>
-      <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button>${report ? `<span id="status" class="report-status" aria-live="polite">${report.status}</span>` : ""}<details class="account-menu"><summary class="user-chip"><span class="avatar" data-current-user-initials>${identity.initials || "VS"}</span><span><strong data-current-user-name>${identity.name || "ValSphere user"}</strong><small data-current-user-role>${identity.roleLabel || "Authenticated user"}</small></span></summary><div class="account-menu-panel"><span>${identity.userId || ""}</span>${identity.email ? `<small>${identity.email}</small>` : ""}<button type="button" data-sign-out>Sign out</button></div></details></div>`;
+      <nav class="header-shortcuts" aria-label="Quick navigation">${headerShortcuts()}</nav>
+      <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button>${report ? `<span id="status" class="report-status" aria-live="polite">${report.status}</span>` : ""}<details class="account-menu"><summary class="user-chip"><span class="avatar" data-current-user-initials>${identity.initials || "VX"}</span><span><strong data-current-user-name>${identity.name || "ValuX user"}</strong><small data-current-user-role>${identity.roleLabel || "Authenticated user"}</small></span></summary><div class="account-menu-panel"><span>${identity.userId || ""}</span>${identity.email ? `<small>${identity.email}</small>` : ""}<button type="button" data-sign-out>Sign out</button></div></details></div>`;
   }
 
   function installHeader() {

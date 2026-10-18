@@ -112,22 +112,22 @@ def main() -> int:
         "SMTP_USERNAME": "",
         "SMTP_PASSWORD": "",
         "SMTP_USE_TLS": "false",
-        "EMAIL_FROM": "ValSphere <no-reply@valsphere.local>",
-        "VALSPHERE_TEST_FATHER_ID": "father01",
-        "VALSPHERE_TEST_FATHER_NAME": "K. Sivaprasad",
-        "VALSPHERE_TEST_FATHER_PASSWORD": father_password,
-        "VALSPHERE_TEST_EMPLOYEE_ID": "lavk0401",
-        "VALSPHERE_TEST_EMPLOYEE_NAME": "Lavakumar",
-        "VALSPHERE_TEST_EMPLOYEE_PASSWORD": employee_password,
+        "EMAIL_FROM": "ValuX <no-reply@valux.local>",
+        "VALUX_TEST_FATHER_ID": "racheshiva01",
+        "VALUX_TEST_FATHER_NAME": "K. Sivaprasad",
+        "VALUX_TEST_FATHER_PASSWORD": father_password,
+        "VALUX_TEST_EMPLOYEE_ID": "lavk0401",
+        "VALUX_TEST_EMPLOYEE_NAME": "Lavakumar",
+        "VALUX_TEST_EMPLOYEE_PASSWORD": employee_password,
     }
     ENV_FILE.write_text(
         "\n".join(f"{key}={value}" for key, value in values.items()) + "\n"
     )
     ENV_FILE.chmod(0o600)
     CREDENTIAL_FILE.write_text(
-        "ValSphere development test accounts\n"
+        "ValuX development test accounts\n"
         "===================================\n"
-        f"Father User ID: father01\nOne-time password: {father_password}\n\n"
+        f"Father User ID: racheshiva01\nOne-time password: {father_password}\n\n"
         f"Employee User ID: lavk0401\nOne-time password: {employee_password}\n\n"
         "These passwords expire after seven days once the accounts are provisioned.\n"
         "Delete this file after the test accounts have been activated.\n"

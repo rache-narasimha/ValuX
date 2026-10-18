@@ -32,9 +32,9 @@ def send_verification(recipient: str, display_name: str, token: str) -> None:
     link = f"{APP_BASE_URL}/auth#verify-email={token}"
     send_email(
         recipient,
-        "Verify your ValSphere recovery email",
+        "Verify your ValuX recovery email",
         f"Hello {display_name},\n\n"
-        "Verify this recovery email to finish activating your ValSphere account:\n"
+        "Verify this recovery email to finish activating your ValuX account:\n"
         f"{link}\n\n"
         "This single-use link expires in 24 hours. If you did not request it, "
         "contact the account operator.",
@@ -45,9 +45,9 @@ def send_password_reset(recipient: str, display_name: str, token: str) -> None:
     link = f"{APP_BASE_URL}/auth#reset-password={token}"
     send_email(
         recipient,
-        "Reset your ValSphere password",
+        "Reset your ValuX password",
         f"Hello {display_name},\n\n"
-        "A password reset was requested for your ValSphere account:\n"
+        "A password reset was requested for your ValuX account:\n"
         f"{link}\n\n"
         "This single-use link expires in 30 minutes. Your authenticator is still "
         "required at the next login. If you did not request this, ignore this message.",

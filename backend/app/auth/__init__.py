@@ -1,1 +1,1 @@
-"""ValSphere authentication and authorization boundary."""
+"""ValuX authentication and authorization boundary."""

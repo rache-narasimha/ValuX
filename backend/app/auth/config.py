@@ -12,8 +12,8 @@ APP_DATABASE_USER = os.environ.get("APP_DATABASE_USER", "valsphere_app")
 APP_DATABASE_PASSWORD = os.environ.get("APP_DATABASE_PASSWORD", "")
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:4180").rstrip("/")
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "false").lower() == "true"
-SESSION_COOKIE = "valsphere_session"
-CSRF_COOKIE = "valsphere_csrf"
+SESSION_COOKIE = "valux_session"
+CSRF_COOKIE = "valux_csrf"
 SESSION_IDLE_MINUTES = int(os.environ.get("SESSION_IDLE_MINUTES", "30"))
 SESSION_ABSOLUTE_HOURS = int(os.environ.get("SESSION_ABSOLUTE_HOURS", "12"))
 ACTIVATION_DAYS = 7
@@ -36,7 +36,7 @@ SMTP_PORT = int(os.environ.get("SMTP_PORT", "1025"))
 SMTP_USERNAME = os.environ.get("SMTP_USERNAME", "")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "false").lower() == "true"
-EMAIL_FROM = os.environ.get("EMAIL_FROM", "ValSphere <no-reply@valsphere.local>")
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "ValuX <no-reply@valux.local>")
 
 
 def validate_secrets() -> None:

@@ -1,4 +1,4 @@
-# ValSphere Authentication
+# ValuX Authentication
 
 ## Boundary of this phase
 
@@ -10,7 +10,7 @@ their own authenticated views from different devices, but they do not yet
 share workflow records.
 
 All identity objects live in the dedicated `auth` schema. The `public` schema
-contains no ValSphere tables and does not allow general object creation. A
+contains no ValuX tables and does not allow general object creation. A
 one-shot migration service uses the database owner account; the web process
 uses the non-superuser `valsphere_app` role with only the DML privileges needed
 by authentication workflows. The migration ledger is not readable or writable

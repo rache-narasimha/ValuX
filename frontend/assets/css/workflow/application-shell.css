@@ -13,6 +13,8 @@
 .header-shortcuts { margin-left: auto; margin-right: 18px; }
 .header-shortcuts a { padding: 22px 16px 20px; border-bottom: 3px solid transparent; color: var(--ink); font-size: .84rem; font-weight: 800; text-decoration: none; }
 .header-shortcuts a:hover, .header-shortcuts a.active { border-color: var(--peach); color: var(--peach-dark); }
+.header-shortcuts .header-primary-link { margin-block: 13px; padding: 9px 13px; border: 0; border-radius: 8px; background: linear-gradient(135deg, #dc6c3d, #b74927); color: #fff; box-shadow: 0 7px 15px rgba(178, 65, 33, .16); }
+.header-shortcuts .header-primary-link:hover { border: 0; color: #fff; background: linear-gradient(135deg, #cc5b30, #9f351c); }
 .shared-app-header .appearance-toggle { min-width: 80px; justify-content: center; border-color: var(--line); }
 .shared-app-header .role-switch { border-color: var(--line); background: var(--cream); }
 .shared-app-header .role-switch button.active { background: linear-gradient(135deg, #d76a3d, #ad4325); color: #fff; box-shadow: 0 4px 10px rgba(178, 68, 36, .2); }
@@ -77,7 +79,9 @@ html[data-theme="dark"] .app-nav-link.active { background: #513025; color: #ffc4
 .sidebar-collapsed .sidebar-collapse { width: 44px; justify-content: center; margin-inline: 5px; }
 .sidebar-collapsed .sidebar-collapse svg { transform: none; }
 
-.dashboard, .page-frame { max-width: 1540px; padding: 24px 26px 48px; }
+.dashboard, .page-frame { min-width: 0; max-width: 1540px; padding: 24px 26px 48px; }
+.dashboard > *, .dashboard-heading > div { min-width: 0; }
+.dashboard-heading p { overflow-wrap: anywhere; }
 .dashboard-heading { align-items: center; margin-bottom: 12px; }
 .dashboard-heading h1, .page-intro h1, .task-hero h1 { color: var(--ink); font-size: 1.7rem; }
 .eyebrow { color: var(--peach-dark) !important; letter-spacing: .04em; }

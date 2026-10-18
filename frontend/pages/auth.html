@@ -3,44 +3,55 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Sign in · ValSphere</title>
-    <meta name="description" content="Secure access to the ValSphere valuation workflow." />
+    <title>Sign in · ValuX</title>
+    <link rel="icon" href="/assets/images/valux-monogram.png" type="image/png" />
+    <meta name="description" content="Secure access to the ValuX banking and valuation workflow." />
     <link rel="stylesheet" href="/assets/css/auth.css" />
     <script src="/assets/js/core/appearance.js"></script>
   </head>
   <body class="auth-page">
     <main class="auth-layout">
-      <section class="auth-story" aria-labelledby="valsphere-title">
+      <section class="auth-story" aria-labelledby="valux-title">
         <div class="auth-story-inner">
-          <a class="valsphere-brand" href="/auth" aria-label="ValSphere sign in">
-            <span class="sln-mark" aria-hidden="true"><i></i><b></b><em></em></span>
-            <span class="brand-copy">
-              <strong id="valsphere-title">SLN</strong>
-              <small>Consultancy &amp; Engineering Services</small>
-            </span>
-          </a>
-          <div class="auth-promise">
-            <p class="auth-eyebrow">ValSphere access portal</p>
-            <h1>Engineering values<br />for clear decisions.</h1>
-            <p>A secure workspace for SLN valuation, estimation, review, and report delivery.</p>
+          <header class="auth-story-header">
+            <a class="valux-brand" href="/auth" aria-label="ValuX sign in">
+              <span class="valux-lettermark" aria-hidden="true"><img src="/assets/images/valux-monogram.png" alt="" /></span>
+              <span class="valux-brand-copy"><strong id="valux-title">Valu<span>X</span></strong><small>Banking &amp; valuation workflow</small></span>
+            </a>
+            <p class="auth-brand-promise"><strong>Your X-factor</strong> for seamless banking and valuation networks.</p>
+          </header>
+          <div class="auth-story-body">
+            <div class="auth-promise">
+              <p class="auth-eyebrow">Connected valuation workflow</p>
+              <h1>One workspace.<br /><span>Every decision.</span></h1>
+              <p>A connected operating view for instructions, field activity, assessments, and audit-ready delivery.</p>
+            </div>
+            <div class="auth-dashboard-collage" aria-label="Generalized management and employee dashboard preview">
+              <article class="dashboard-preview management-preview">
+                <header><strong><i></i>Management overview</strong><small>Portfolio snapshot</small></header>
+                <div class="preview-metrics"><span><small>Active</small><b>128</b></span><span><small>In review</small><b>24</b></span><span><small>Delivered</small><b>86</b></span></div>
+                <div class="preview-chart" aria-hidden="true"><i style="height:38%"></i><i style="height:64%"></i><i style="height:49%"></i><i style="height:77%"></i><i style="height:59%"></i><i style="height:88%"></i></div>
+              </article>
+              <article class="dashboard-preview employee-preview">
+                <header><strong><i></i>Field workspace</strong><small>Today</small></header>
+                <div class="preview-task"><span>⌖</span><p><b>Site verification</b><small>Property evidence and location</small></p><em>Active</em></div>
+                <div class="preview-task"><span>▧</span><p><b>Report drafting</b><small>Assessment documentation</small></p><em>Review</em></div>
+                <div class="preview-task"><span>✓</span><p><b>Completion check</b><small>Final quality confirmation</small></p><em>Ready</em></div>
+              </article>
+            </div>
           </div>
-          <div class="auth-capabilities" aria-label="ValSphere workflow">
-            <article><span aria-hidden="true">V</span><strong>Valuation</strong><small>Property reports</small></article>
-            <article><span aria-hidden="true">E</span><strong>Estimation</strong><small>Cost assessments</small></article>
-            <article><span aria-hidden="true">P</span><strong>Progress</strong><small>Work monitoring</small></article>
-            <article><span aria-hidden="true">C</span><strong>Completion</strong><small>Final reporting</small></article>
-          </div>
-          <p class="auth-story-note">Valuation <i></i> Estimation <i></i> Advisory</p>
+          <div class="auth-partner"><span>For banking institutions and valuation partners</span><a href="mailto:?subject=ValuX%20Platform%20Onboarding">Request Platform Onboarding <b aria-hidden="true">→</b></a></div>
         </div>
       </section>
       <section class="auth-access">
         <div class="auth-access-tools">
           <button class="appearance-toggle" type="button" data-appearance-toggle></button>
         </div>
+        <a class="valux-mobile-brand" href="/auth" aria-label="ValuX sign in"><span class="valux-lettermark" aria-hidden="true"><img src="/assets/images/valux-monogram.png" alt="" /></span><strong>Valu<span>X</span></strong></a>
         <div class="auth-card" id="auth-card" aria-live="polite">
           <div class="auth-loading"><span></span><strong>Preparing secure sign in…</strong></div>
         </div>
-        <p class="auth-footnote">ValSphere · Connecting the World of Valuation.</p>
+        <p class="auth-footnote"><span aria-hidden="true">🔒</span> Enterprise 256-bit Secure Session Link</p>
       </section>
     </main>
     <script src="/assets/js/pages/auth.js"></script>

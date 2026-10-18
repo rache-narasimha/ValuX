@@ -109,7 +109,7 @@ database owner.
 - `assets/js/components/report-layout.js` owns the persisted collapse state of the long
   report-form navigation.
 - `pages/institutions.html` and `assets/js/pages/institution-settings.js` provide the
-  father-only institution configuration surface.
+  CEO-only institution configuration surface.
 - `pages/practice.html` provides safe links to report forms in practice mode,
   without creating or updating a workflow assignment.
 - `assets/js/core/shared.js` contains reusable controls, parsing, date, institution
@@ -162,7 +162,7 @@ Generated files are data, not source code. They are isolated in `outputs/` and e
 ### Authentication request flow
 
 ```text
-ValSphere login
+ValuX login
     ↓ User ID/email + password
 Temporary activation or MFA-scoped server session
     ↓ Password setup / TOTP / verified recovery email
@@ -202,7 +202,7 @@ Reuse the same DOCX/PDF when Generate is clicked
 - Assigning or transferring a task moves it to **In Progress** and requires a
   work note.
 - **Closed** tasks retain their payment values as read-only data.
-- The father/reviewer may reopen a closed task for seven calendar days. A
+- The CEO may reopen a closed task for seven calendar days. A
   reopened task requires a newly generated DOCX before it can be completed
   again.
 - Every generated DOCX receives a unique download path. Closing snapshots the

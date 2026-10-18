@@ -1,6 +1,6 @@
-# ValSphere / SLN Property Reports
+# ValuX / SLN Property Reports
 
-ValSphere provides the authenticated entry point for the SLN workspace used to
+ValuX provides the authenticated entry point for the SLN workspace used to
 manage property-report assignments, prepare valuation forms, and generate
 matching DOCX and PDF reports.
 
@@ -19,7 +19,7 @@ docker compose -f valuation_app/compose.yaml up --build -d
 ```
 
 Open <http://127.0.0.1:4180>. The application redirects unauthenticated users
-to the ValSphere sign-in page. Mailpit's local regression inbox is available
+to the ValuX sign-in page. Mailpit's local regression inbox is available
 only on the host at <http://127.0.0.1:8026>.
 
 Provision the two configured development accounts:
@@ -54,11 +54,11 @@ docker compose -f valuation_app/compose.yaml down
 | `backend/app/web/handler.py`            | HTTP routes, previews, static files and downloads                      |
 | `backend/app/auth/`             | PostgreSQL authentication, sessions, MFA, email and operator commands  |
 | `backend/app/auth/migrations.py` | Transactional migrations and least-privilege runtime grants          |
-| `frontend/pages/auth.html`      | ValSphere login and activation shell                                  |
+| `frontend/pages/auth.html`      | ValuX login and activation shell                                  |
 | `frontend/assets/js/pages/auth.js` | Login, MFA, email verification and recovery flow                  |
-| `frontend/assets/css/auth.css`  | Responsive ValSphere authentication presentation                       |
+| `frontend/assets/css/auth.css`  | Responsive ValuX authentication presentation                       |
 | `frontend/pages/`               | Dashboard, task workflow and report-form HTML                          |
-| `frontend/pages/institutions.html` | Father-only bank/NBFC configuration                                 |
+| `frontend/pages/institutions.html` | CEO-only bank/NBFC configuration                                    |
 | `frontend/assets/js/core/`      | Shared state, shell, access policy and form utilities                 |
 | `frontend/assets/js/components/` | Reusable UI, workflow, payment and metrics components               |
 | `frontend/assets/js/pages/`     | Page-specific browser controllers                                     |
@@ -106,7 +106,7 @@ The archive is retained for reference but is not copied into the Docker image an
 - Generated report downloads use unique filenames beneath
   `outputs/generated_reports/`, allowing a closed task to retain only its
   final DOCX reference.
-- Closed payments are read-only. The father/reviewer can reopen a closed task
+- Closed payments are read-only. The CEO can reopen a closed task
   within seven calendar days, after which a new DOCX must be generated before
   recompletion.
 

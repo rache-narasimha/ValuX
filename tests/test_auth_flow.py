@@ -102,7 +102,7 @@ def token_from(text: str, marker: str) -> str:
 
 def activate(role: str):
     user_id = f"{PREFIX}{'f' if role == 'father' else 'e'}"
-    email = f"{user_id}@valsphere.test"
+    email = f"{user_id}@valux.test"
     temporary = strong_password()
     permanent = strong_password()
     provision_user(user_id, f"QA {role.title()}", role, temporary, actor="integration-test")
@@ -116,7 +116,7 @@ def activate(role: str):
     assert browser.post("/api/auth/mfa/recovery-codes/confirm", {})["next"] == "email_setup"
     assert browser.post("/api/auth/email", {"email": email})["next"] == "email_verify"
     verification = token_from(
-        mail_text(email, "Verify your ValSphere recovery email"), "#verify-email="
+        mail_text(email, "Verify your ValuX recovery email"), "#verify-email="
     )
     verified = browser.post("/api/auth/email/verify", {"token": verification})
     assert verified["signedIn"] is True
@@ -166,7 +166,7 @@ try:
     father.context()
     father.post("/api/auth/forgot-password", {"identifier": father_id})
     reset_token = token_from(
-        mail_text(father_email, "Reset your ValSphere password"), "#reset-password="
+        mail_text(father_email, "Reset your ValuX password"), "#reset-password="
     )
     replacement = strong_password()
     father.post("/api/auth/reset-password", {"token": reset_token, "password": replacement})

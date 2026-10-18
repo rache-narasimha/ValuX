@@ -1,4 +1,4 @@
-"""HTTP delivery layer for ValSphere."""
+"""HTTP delivery layer for ValuX."""
 
 from .handler import Handler
 

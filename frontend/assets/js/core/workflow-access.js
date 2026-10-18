@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  const authenticated = window.__VALSPHERE_AUTH_CONTEXT__?.user;
+  const authenticated = window.__VALUX_AUTH_CONTEXT__?.user;
   const user = authenticated ? {
     role: authenticated.role,
     name: authenticated.name,
@@ -18,7 +18,7 @@
   }
 
   function currentUser() {
-    if (!user) throw new Error("Your ValSphere session is not available.");
+    if (!user) throw new Error("Your ValuX session is not available.");
     return user;
   }
 
@@ -30,6 +30,7 @@
 
     const rules = {
       viewTask: true,
+      viewFinance: true,
       createTask: true,
       addNote: !task || task.status !== "Cancelled",
       updatePayment: Boolean(task && !["Closed", "Cancelled"].includes(task.status)),

@@ -64,4 +64,4 @@ ALTER INDEX auth.auth_login_attempts_identifier_idx RENAME TO login_attempts_ide
 ALTER INDEX auth.auth_audit_user_idx RENAME TO audit_events_user_idx;
 ALTER INDEX auth.auth_password_history_recent_idx RENAME TO password_history_recent_idx;
 
-COMMENT ON SCHEMA auth IS 'ValSphere identity, authentication, session, and access-audit data';
+COMMENT ON SCHEMA auth IS 'ValuX identity, authentication, session, and access-audit data';

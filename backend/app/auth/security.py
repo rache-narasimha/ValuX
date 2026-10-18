@@ -159,8 +159,8 @@ def decrypt_secret(encrypted: str) -> str:
 
 
 def totp_uri(secret: str, user_id: str) -> str:
-    label = quote(f"ValSphere:{user_id}")
-    issuer = quote("ValSphere")
+    label = quote(f"ValuX:{user_id}")
+    issuer = quote("ValuX")
     return (
         f"otpauth://totp/{label}?secret={secret}&issuer={issuer}"
         f"&algorithm=SHA1&digits={TOTP_DIGITS}&period={TOTP_PERIOD}"

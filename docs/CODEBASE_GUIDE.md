@@ -91,7 +91,7 @@ order as a local cleanup. Those changes affect multiple pages at once.
 - `task-context.js`: workflow controls shown around a report form opened from a task.
 - `general.js`: general-property valuation form only.
 - `agricultural.js`: agricultural valuation form only.
-- `institution-settings.js`: father-only institution maintenance.
+- `institution-settings.js`: CEO-only institution maintenance.
 - `report-layout.js`: long-form navigation collapse state.
 
 ## Backend boundaries

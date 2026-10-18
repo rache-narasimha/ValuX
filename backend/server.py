@@ -15,7 +15,7 @@ def main():
     validate_secrets()
     wait_for_database()
     address = (os.environ.get("HOST", "0.0.0.0"), int(os.environ.get("PORT", "4173")))
-    print(f"ValSphere running at http://{address[0]}:{address[1]}")
+    print(f"ValuX running at http://{address[0]}:{address[1]}")
     ThreadingHTTPServer(address, Handler).serve_forever()
 
 

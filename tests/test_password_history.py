@@ -10,7 +10,7 @@ from backend.app.auth.database import connection
 
 def password(index: int) -> str:
     suffix = "".join(secrets.choice(string.ascii_letters) for _ in range(10))
-    return f"ValSphere!{index:02d}aA{suffix}9"
+    return f"ValuX!{index:02d}aA{suffix}9"
 
 
 user_id = f"history{uuid.uuid4().hex[:12]}"

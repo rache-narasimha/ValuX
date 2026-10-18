@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Configure ValSphere Gmail delivery without printing or committing secrets."""
+"""Configure ValuX Gmail delivery without printing or committing secrets."""
 
 from email.message import EmailMessage
 from getpass import getpass
@@ -32,7 +32,7 @@ def update_env(values: dict[str, str]) -> None:
 
 
 def main() -> int:
-    print("ValSphere — Gmail sender setup")
+    print("ValuX — Gmail sender setup")
     print("The App Password is hidden and saved only in the ignored .env file.")
     sender = input("Gmail or Google Workspace sender address: ").strip().lower()
     if "@" not in sender or any(character.isspace() for character in sender):
@@ -43,10 +43,10 @@ def main() -> int:
         print("Google App Passwords normally contain 16 characters.", file=sys.stderr)
         return 1
     message = EmailMessage()
-    message["From"] = f"ValSphere <{sender}>"
+    message["From"] = f"ValuX <{sender}>"
     message["To"] = sender
-    message["Subject"] = "ValSphere email delivery test"
-    message.set_content("Gmail SMTP delivery is configured for ValSphere development testing.")
+    message["Subject"] = "ValuX email delivery test"
+    message.set_content("Gmail SMTP delivery is configured for ValuX development testing.")
     try:
         with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as smtp:
             smtp.starttls()
@@ -64,7 +64,7 @@ def main() -> int:
             "SMTP_USERNAME": sender,
             "SMTP_PASSWORD": app_password,
             "SMTP_USE_TLS": "true",
-            "EMAIL_FROM": f"ValSphere <{sender}>",
+            "EMAIL_FROM": f"ValuX <{sender}>",
         }
     )
     subprocess.run(

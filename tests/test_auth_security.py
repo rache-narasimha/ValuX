@@ -5,7 +5,7 @@ import time
 from backend.app.auth import security
 
 
-password = "ValSphere-Secure!2026"
+password = "ValuX-Secure!2026"
 stored = security.hash_password(password)
 assert security.verify_password(password, stored)
 assert not security.verify_password("incorrect", stored)

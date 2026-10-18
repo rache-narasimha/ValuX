@@ -1,9 +1,9 @@
-/** ValSphere login, account activation, MFA, and recovery experience. */
+/** ValuX login, account activation, MFA, and recovery experience. */
 (function () {
   "use strict";
 
   const card = document.getElementById("auth-card");
-  const RECOVERY_STORAGE = "valsphere.activation.recovery-codes";
+  const RECOVERY_STORAGE = "valux.activation.recovery-codes";
   let csrf = "";
   let context = null;
   let busy = false;
@@ -22,8 +22,9 @@
     return value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/auth") ? value : "/";
   }
 
-  function head(title, description, mark = "VS") {
-    return `<div class="auth-card-head"><span class="step-mark">${escape(mark)}</span><h2>${escape(title)}</h2><p>${escape(description)}</p></div>`;
+  function head(title, description, mark = "VX") {
+    const markClass = mark === "VX" ? "step-mark valux-auth-mark" : "step-mark";
+    return `<div class="auth-card-head"><span class="${markClass}">${escape(mark)}</span><h2>${escape(title)}</h2><p>${escape(description)}</p></div>`;
   }
 
   function message(text, kind = "") {
@@ -64,15 +65,15 @@
   }
 
   function loginView(note = "") {
-    render(`${head("Welcome to ValSphere", "Sign in with your assigned User ID or verified recovery email.")}
+    render(`${head("Welcome to ValuX", "Sign in to access your role-based dashboard tools.", "VX")}
       ${message(note, note ? "success" : "")}
       <form class="auth-form" id="login-form">
         <span data-form-message></span>
         <div class="auth-field"><label for="identifier">Email or User ID</label><input id="identifier" name="identifier" autocomplete="username" required placeholder="Enter your email or User ID" /></div>
         <div class="auth-field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required placeholder="Enter your password" /></div>
         <div class="auth-form-row"><button class="auth-link" id="forgot-link" type="button">Forgot password?</button></div>
-        <button class="auth-primary" type="submit">Sign in →</button>
-        <p class="auth-note">Accounts are issued by SLN. Contact the account operator if your activation password has expired.</p>
+        <button class="auth-primary" type="submit">Sign in securely</button>
+        <p class="auth-note">Accounts are issued by your ValuX administrator. Contact the account operator if your activation password has expired.</p>
       </form>`);
     document.getElementById("forgot-link").addEventListener("click", forgotView);
     document.getElementById("login-form").addEventListener("submit", (event) => {
@@ -149,7 +150,7 @@
   }
 
   function emailSetupView() {
-    render(`${head("Add a recovery email", "Verification is required before your ValSphere account can be activated.", "4")}
+    render(`${head("Add a recovery email", "Verification is required before your ValuX account can be activated.", "4")}
       <form class="auth-form" id="email-form">
         <span data-form-message></span>
         <div class="auth-field"><label for="recovery-email">Recovery email</label><input id="recovery-email" name="email" type="email" autocomplete="email" required placeholder="you@example.com" /><small>You can use this verified address to sign in and recover your password.</small></div>
@@ -166,7 +167,7 @@
   }
 
   function emailVerifyView(email, note = "") {
-    render(`${head("Check your email", "Open the ValSphere verification link to complete activation.", "5")}
+    render(`${head("Check your email", "Open the ValuX verification link to complete activation.", "5")}
       ${message(note, "success")}
       <p class="auth-note">We sent a single-use verification link to <strong>${escape(email || "your recovery email")}</strong>. The link expires in 24 hours.</p>
       <div class="auth-form" style="margin-top:18px"><button class="auth-secondary" id="resend-email" type="button">Resend verification email</button><button class="auth-link" id="change-email" type="button">Use a different email</button></div>`);
@@ -286,7 +287,7 @@
       }
       routeStep(context.next);
     } catch (_error) {
-      render(`${head("ValSphere is unavailable", "The authentication service could not be reached.", "!")}${message("Check that Docker and PostgreSQL are running, then refresh this page.", "error")}`);
+      render(`${head("ValuX is unavailable", "The authentication service could not be reached.", "!")}${message("Check that Docker and PostgreSQL are running, then refresh this page.", "error")}`);
     }
   }
 

@@ -219,6 +219,8 @@
     setText("metric-hold", summary.onHold);
     setText("metric-completed", summary.completed);
     setText("metric-closed", summary.closed);
+    setText("completed-card-note", "Payment tracking");
+    setText("closed-card-note", "Payment settled");
     setText("hold-review-count", role === "father" && summary.awaitingReview ? `${summary.awaitingReview} awaiting my review` : "Needs follow-up");
     document.getElementById("dashboard-period-summary").textContent = InstitutionMetrics.periodLabel(selectedWorkloadPeriod, selectedWorkloadReference);
     setText("count-all", allVisibleTasks().length);

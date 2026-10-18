@@ -137,7 +137,7 @@ def run_migrations() -> None:
 def main() -> int:
     wait_for_database(MIGRATION_DATABASE_URL)
     run_migrations()
-    print("ValSphere authentication migrations completed.")
+    print("ValuX authentication migrations completed.")
     return 0
 
 

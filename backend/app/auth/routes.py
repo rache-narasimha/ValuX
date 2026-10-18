@@ -1,4 +1,4 @@
-"""HTTP adapter for ValSphere authentication endpoints."""
+"""HTTP adapter for ValuX authentication endpoints."""
 
 import json
 import secrets
@@ -283,4 +283,4 @@ def handle_post(handler, path: str) -> bool:
 def authentication_context_script(session) -> bytes:
     user = service.public_user(service.user_for_id(session["user_id"]))
     safe_json = json.dumps({"user": user}, separators=(",", ":")).replace("<", "\\u003c")
-    return f"<script>window.__VALSPHERE_AUTH_CONTEXT__={safe_json};</script>".encode("utf-8")
+    return f"<script>window.__VALUX_AUTH_CONTEXT__={safe_json};</script>".encode("utf-8")

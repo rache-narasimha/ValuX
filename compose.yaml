@@ -62,13 +62,13 @@ services:
       SMTP_USERNAME: "${SMTP_USERNAME:-}"
       SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
       SMTP_USE_TLS: "${SMTP_USE_TLS:-false}"
-      EMAIL_FROM: "${EMAIL_FROM:-ValSphere <no-reply@valsphere.local>}"
-      VALSPHERE_TEST_FATHER_ID: "${VALSPHERE_TEST_FATHER_ID:-father01}"
-      VALSPHERE_TEST_FATHER_NAME: "${VALSPHERE_TEST_FATHER_NAME:-K. Sivaprasad}"
-      VALSPHERE_TEST_FATHER_PASSWORD: "${VALSPHERE_TEST_FATHER_PASSWORD:-}"
-      VALSPHERE_TEST_EMPLOYEE_ID: "${VALSPHERE_TEST_EMPLOYEE_ID:-lavk0401}"
-      VALSPHERE_TEST_EMPLOYEE_NAME: "${VALSPHERE_TEST_EMPLOYEE_NAME:-Lavakumar}"
-      VALSPHERE_TEST_EMPLOYEE_PASSWORD: "${VALSPHERE_TEST_EMPLOYEE_PASSWORD:-}"
+      EMAIL_FROM: "${EMAIL_FROM:-ValuX <no-reply@valux.local>}"
+      VALUX_TEST_FATHER_ID: "${VALUX_TEST_FATHER_ID:-racheshiva01}"
+      VALUX_TEST_FATHER_NAME: "${VALUX_TEST_FATHER_NAME:-K. Sivaprasad}"
+      VALUX_TEST_FATHER_PASSWORD: "${VALUX_TEST_FATHER_PASSWORD:-}"
+      VALUX_TEST_EMPLOYEE_ID: "${VALUX_TEST_EMPLOYEE_ID:-lavk0401}"
+      VALUX_TEST_EMPLOYEE_NAME: "${VALUX_TEST_EMPLOYEE_NAME:-Lavakumar}"
+      VALUX_TEST_EMPLOYEE_PASSWORD: "${VALUX_TEST_EMPLOYEE_PASSWORD:-}"
     volumes:
       # Mount source read-only so local development changes are available without
       # rebuilding the dependency-heavy image on every edit.

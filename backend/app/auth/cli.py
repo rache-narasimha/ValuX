@@ -55,20 +55,20 @@ def recover(args) -> None:
 def seed_dev(_args) -> None:
     accounts = [
         (
-            os.environ.get("VALSPHERE_TEST_FATHER_ID", "father01"),
-            os.environ.get("VALSPHERE_TEST_FATHER_NAME", "K. Sivaprasad"),
+            os.environ.get("VALUX_TEST_FATHER_ID", "racheshiva01"),
+            os.environ.get("VALUX_TEST_FATHER_NAME", "K. Sivaprasad"),
             "father",
-            os.environ.get("VALSPHERE_TEST_FATHER_PASSWORD", ""),
+            os.environ.get("VALUX_TEST_FATHER_PASSWORD", ""),
         ),
         (
-            os.environ.get("VALSPHERE_TEST_EMPLOYEE_ID", "lavk0401"),
-            os.environ.get("VALSPHERE_TEST_EMPLOYEE_NAME", "Lavakumar"),
+            os.environ.get("VALUX_TEST_EMPLOYEE_ID", "lavk0401"),
+            os.environ.get("VALUX_TEST_EMPLOYEE_NAME", "Lavakumar"),
             "employee",
-            os.environ.get("VALSPHERE_TEST_EMPLOYEE_PASSWORD", ""),
+            os.environ.get("VALUX_TEST_EMPLOYEE_PASSWORD", ""),
         ),
     ]
     if any(not account[3] for account in accounts):
-        raise AuthError("Set both VALSPHERE_TEST_*_PASSWORD values in the ignored .env file.")
+        raise AuthError("Set both VALUX_TEST_*_PASSWORD values in the ignored .env file.")
     for user_id, name, role, password in accounts:
         try:
             provision_user(user_id, name, role, password, actor="seed-dev")
@@ -80,7 +80,7 @@ def seed_dev(_args) -> None:
 
 
 def parser() -> argparse.ArgumentParser:
-    root = argparse.ArgumentParser(description="ValSphere authentication account operator")
+    root = argparse.ArgumentParser(description="ValuX authentication account operator")
     commands = root.add_subparsers(dest="command", required=True)
 
     create = commands.add_parser("provision", help="Provision a father or employee account")

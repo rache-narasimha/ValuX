@@ -92,7 +92,7 @@
     if (current.reopenedAt && (!current.latestDocx || new Date(current.latestDocx.generatedAt) < new Date(current.reopenedAt))) {
       return "Generate a new DOCX after reopening before marking this task Completed.";
     }
-    if (!WorkflowAccess.can("completeTask", current)) return "Only the assigned employee or father/reviewer can complete this task.";
+    if (!WorkflowAccess.can("completeTask", current)) return "Only the assigned employee or CEO can complete this task.";
     return "";
   }
 
