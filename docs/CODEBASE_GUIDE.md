@@ -26,19 +26,22 @@ Before changing a feature:
 
 | Need | Primary owner | Related files to inspect |
 | --- | --- | --- |
-| Start the server or change static-file mapping | `backend/server.py`, `backend/app/web.py` | `compose.yaml` |
+| Start the server or change static-file mapping | `backend/server.py`, `backend/app/web/handler.py` | `compose.yaml` |
+| Change login, sessions or account recovery | `backend/app/auth/service.py` | `routes.py`, `frontend/assets/js/pages/auth.js` |
+| Change authenticator behavior | `backend/app/auth/mfa.py` | `security.py`, auth migrations |
+| Change password reuse rules | `backend/app/auth/password_policy.py` | `config.py`, `security.py` |
 | Add or change a report field | `resources/<type>/form_schema.json` | matching page controller and mapping |
-| Change report placeholder placement | `resources/<type>/template_mapping.json` | `backend/app/ooxml.py` |
-| Change calculations or depreciation | `backend/app/calculations.py` | `frontend/assets/js/general.js` when the live form also displays it |
-| Change DOCX assembly | `backend/app/reports.py` | `backend/app/ooxml.py`, `backend/app/media.py` |
-| Change photo/map behavior | `backend/app/media.py` | general or agricultural controller |
-| Change task lifecycle or payment rules | `frontend/assets/js/task-store.js` | `workflow-access.js` |
-| Change father/employee access | `frontend/assets/js/workflow-access.js` | page controller only for display changes |
-| Change dashboard totals or charts | `frontend/assets/js/institution-metrics.js` | `home.js` |
-| Change assignment list/filter behavior | `frontend/assets/js/task-list.js` | `workflow-ui.js` |
-| Change one task's workspace | `frontend/assets/js/task-detail.js` | `payment-dialog.js`, `employee-picker.js` |
-| Change form workflow context | `frontend/assets/js/task-context.js` | general/agricultural controller |
-| Change global page chrome | `frontend/assets/js/app-shell.js` | `workflow.css` |
+| Change report placeholder placement | `resources/<type>/template_mapping.json` | `backend/app/valuation/ooxml.py` |
+| Change calculations or depreciation | `backend/app/valuation/calculations.py` | `frontend/assets/js/pages/general.js` when the live form also displays it |
+| Change DOCX assembly | `backend/app/valuation/reports.py` | `backend/app/valuation/ooxml.py`, `backend/app/valuation/media.py` |
+| Change photo/map behavior | `backend/app/valuation/media.py` | general or agricultural controller |
+| Change task lifecycle or payment rules | `frontend/assets/js/core/task-store.js` | `core/workflow-access.js` |
+| Change father/employee task policy | `frontend/assets/js/core/workflow-access.js` | authenticated role from `backend/app/auth/` |
+| Change dashboard totals or charts | `frontend/assets/js/components/institution-metrics.js` | `pages/home.js` |
+| Change assignment list/filter behavior | `frontend/assets/js/pages/task-list.js` | `components/workflow-ui.js` |
+| Change one task's workspace | `frontend/assets/js/pages/task-detail.js` | `components/payment-dialog.js`, `components/employee-picker.js` |
+| Change form workflow context | `frontend/assets/js/components/task-context.js` | general/agricultural page controller |
+| Change global page chrome | `frontend/assets/js/core/app-shell.js` | `workflow.css` imports |
 | Change report-form visual primitives | `frontend/assets/css/styles.css` | matching page HTML |
 | Change dashboard/task visual styling | `frontend/assets/css/workflow.css` | matching workflow page |
 
@@ -46,20 +49,14 @@ Before changing a feature:
 
 ```text
 Browser page
-  ├─ app-shell.js              shared header and sidebar
-  ├─ workflow-access.js        current prototype role and permissions
-  ├─ institutions.js           configured bank/NBFC browser repository
-  ├─ task-store.js             task browser repository and workflow invariants
-  ├─ shared UI helper modules   formatting, metrics, dialogs, employee picker
-  └─ page controller            one page's interactive behavior
+  ├─ core/                      shared state, shell, access and utilities
+  ├─ components/                reusable UI and workflow components
+  └─ pages/                     one controller per HTML page
 
 Python HTTP server
-  ├─ web.py                    routes, static files, preview/download responses
-  ├─ schemas.py                resource-backed form schemas
-  ├─ calculations.py           report values and depreciation rules
-  ├─ reports.py                report orchestration
-  ├─ ooxml.py                  Word table, token, and paragraph operations
-  └─ media.py                  EXIF correction and document media layout
+  ├─ auth/                     users, sessions, MFA, email, migration and CLI
+  ├─ web/handler.py            routes, static files, preview/download responses
+  └─ valuation/                form schemas, calculations, DOCX and media generation
 ```
 
 ## Frontend boundaries
@@ -71,16 +68,16 @@ script tags rather than imports. Their public names are integration boundaries:
 
 | Global | Owner | Responsibility |
 | --- | --- | --- |
-| `TaskStore` | `task-store.js` | Browser persistence, lifecycle transitions, payment rules, task queries |
-| `WorkflowAccess` | `workflow-access.js` | Current role, visible tasks, permission decisions |
-| `Institutions` / `INSTITUTIONS` | `institutions.js` | Configurable institutions and compatibility view |
-| `InstitutionMetrics` | `institution-metrics.js` | Workload, finance, period and report-mix aggregation |
-| `WorkflowUI` | `workflow-ui.js` | Escaping, display formatting and shared task rows |
-| `EmployeePicker` | `employee-picker.js` | Assignment/transfer employee selector |
-| `PaymentDialog` | `payment-dialog.js` | Completed-task payment popup |
-| `ValuationUI` | `shared.js` | Shared report-form controls, parsing, dates and file reading |
-| `Appearance` | `appearance.js` | Persisted light/dark preference |
-| `AppShell` | `app-shell.js` | Header, sidebar and responsive navigation |
+| `TaskStore` | `core/task-store.js` | Browser persistence, lifecycle transitions, payment rules, task queries |
+| `WorkflowAccess` | `core/workflow-access.js` | Current role, visible tasks, permission decisions |
+| `Institutions` / `INSTITUTIONS` | `core/institutions.js` | Configurable institutions and compatibility view |
+| `InstitutionMetrics` | `components/institution-metrics.js` | Workload, finance, period and report-mix aggregation |
+| `WorkflowUI` | `components/workflow-ui.js` | Escaping, display formatting and shared task rows |
+| `EmployeePicker` | `components/employee-picker.js` | Assignment/transfer employee selector |
+| `PaymentDialog` | `components/payment-dialog.js` | Completed-task payment popup |
+| `ValuationUI` | `core/shared.js` | Shared report-form controls, parsing, dates and file reading |
+| `Appearance` | `core/appearance.js` | Persisted light/dark preference |
+| `AppShell` | `core/app-shell.js` | Header, sidebar and responsive navigation |
 
 Do not rename these globals, alter their public methods, or change their script
 order as a local cleanup. Those changes affect multiple pages at once.
@@ -99,28 +96,41 @@ order as a local cleanup. Those changes affect multiple pages at once.
 
 ## Backend boundaries
 
-The backend modules are intentionally organized by responsibility rather than
-by HTTP endpoint:
+The backend modules are intentionally organized by domain responsibility rather
+than by HTTP endpoint:
 
-- `config.py`: filesystem paths and XML namespace utilities.
-- `schemas.py`: loads and prepares field schemas from `resources/`.
-- `formatting.py`: parsing and presentation utilities shared by reports.
-- `calculations.py`: valuation-only arithmetic and result assembly.
-- `ooxml.py`: low-level WordprocessingML edits. Keep business decisions out.
-- `media.py`: image normalization and Word media placement. Keep form rules out.
-- `reports.py`: coordinates schema values, templates, calculations and output.
-- `web.py`: HTTP parsing, validation, static delivery, previews and downloads.
+- `valuation/config.py`: filesystem paths and XML namespace utilities.
+- `valuation/schemas.py`: loads and prepares field schemas from `resources/`.
+- `valuation/formatting.py`: parsing and presentation utilities shared by reports.
+- `valuation/calculations.py`: valuation-only arithmetic and result assembly.
+- `valuation/ooxml.py`: low-level WordprocessingML edits. Keep business decisions out.
+- `valuation/media.py`: image normalization and Word media placement. Keep form rules out.
+- `valuation/reports.py`: coordinates schema values, templates, calculations and output.
+- `web/handler.py`: HTTP parsing, validation, static delivery, previews and downloads.
+- `auth/`: PostgreSQL identity boundary. `routes.py` adapts HTTP, `service.py`
+  owns account/session use cases, `security.py` owns cryptographic primitives,
+  `database.py` owns runtime connections, `migrations.py` owns migration and
+  role orchestration, and `migrations/` contains ordered SQL changes for the
+  dedicated `auth` schema.
+
+When durable business data is introduced, add a feature package such as
+`workflow/`, `billing/`, or `reference/` for the owning domain. Create a small
+shared persistence package only when more than one domain genuinely needs the
+same connection or transaction helper; do not place unrelated database code in
+`auth/` merely because it uses PostgreSQL.
 
 ## CSS ownership
 
-- `styles.css` owns universal report-form elements: fields, panels, document
-  previews, uploads and report-form responsive rules.
-- `workflow.css` owns the shell, dashboard, task pages, workflow dialogs,
-  status/presentation components and dark-mode rules.
+- `styles.css` is the stable report-form entry point. Its ordered files under
+  `css/report-form/` separate foundational controls from workspace additions.
+- `workflow.css` is the stable application entry point. Its ordered files under
+  `css/workflow/` separate the shell, dashboard, institution pages,
+  visualizations, and final compatibility adjustments.
+- `auth.css` is the stable authentication entry point. Its files under
+  `css/auth/` separate tokens, layout, components, and responsive behavior.
 
-`workflow.css` contains deliberate compatibility overrides accumulated during
-the UI redesign. Do not move, merge or reorder selector groups without visual
-regression checks at desktop and mobile widths in both themes.
+Do not reorder these imports without desktop, mobile, light, and dark visual
+regression checks. The entry-point URLs remain stable for page compatibility.
 
 ## Resources and generated files
 
@@ -149,12 +159,11 @@ used at runtime.
 
 The following are known candidates, but should be separate, fully tested work:
 
-- Consolidating or reordering `workflow.css`.
 - Extracting common report-form behavior from `general.js` and
   `agricultural.js`.
 - Replacing browser-global JavaScript with bundled modules.
 - Replacing temporary browser storage with the durable database layer.
-- Moving source files into a different folder hierarchy.
 
-They are not ordinary cleanup because each can affect page load order, visual
-cascade, report values, drafts, or workflow state.
+The report controllers remain cohesive because they share page-local mutable
+form state. Extracting pieces without introducing a real module boundary would
+obscure dependencies and risk report values, drafts, and media behavior.

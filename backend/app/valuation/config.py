@@ -4,7 +4,9 @@ import os
 import shutil
 from pathlib import Path
 
-APP_ROOT = Path(__file__).resolve().parents[2]
+# ``config.py`` lives at backend/app/valuation/.  Keep all runtime paths rooted
+# at the repository/application directory rather than at a feature package.
+APP_ROOT = Path(__file__).resolve().parents[3]
 FRONTEND_DIR = APP_ROOT / "frontend"
 PAGES_DIR = FRONTEND_DIR / "pages"
 ASSETS_DIR = FRONTEND_DIR / "assets"

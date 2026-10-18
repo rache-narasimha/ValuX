@@ -1,4 +1,45 @@
 services:
+  postgres:
+    image: postgres:16
+    ports:
+      # Local pgAdmin access only; the database is not exposed to the Wi-Fi network.
+      - "127.0.0.1:5434:5432"
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-valsphere}"
+      POSTGRES_USER: "${POSTGRES_USER:-valsphere}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+    volumes:
+      - valsphere-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:v1.31.2
+    ports:
+      - "127.0.0.1:8026:8025"
+    restart: unless-stopped
+
+  db-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /app
+    command: ["python", "-m", "backend.app.auth.migrations"]
+    environment:
+      MIGRATION_DATABASE_URL: "postgresql://${POSTGRES_USER:-valsphere}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-valsphere}"
+      APP_DATABASE_USER: "${APP_DATABASE_USER:-valsphere_app}"
+      APP_DATABASE_PASSWORD: "${APP_DATABASE_PASSWORD:?Set APP_DATABASE_PASSWORD in .env}"
+    volumes:
+      - ./backend:/app/backend:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   valuation-report:
     build:
       context: .
@@ -7,14 +48,50 @@ services:
       - "4180:4173"
     working_dir: /app
     command: ["python", "-m", "backend.server"]
+    environment:
+      DATABASE_URL: "postgresql://${APP_DATABASE_USER:-valsphere_app}:${APP_DATABASE_PASSWORD:?Set APP_DATABASE_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-valsphere}"
+      AUTH_ENCRYPTION_KEY: "${AUTH_ENCRYPTION_KEY:?Set AUTH_ENCRYPTION_KEY in .env}"
+      AUTH_RECOVERY_PEPPER: "${AUTH_RECOVERY_PEPPER:?Set AUTH_RECOVERY_PEPPER in .env}"
+      APP_BASE_URL: "${APP_BASE_URL:-http://localhost:4180}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-false}"
+      SESSION_IDLE_MINUTES: "${SESSION_IDLE_MINUTES:-30}"
+      SESSION_ABSOLUTE_HOURS: "${SESSION_ABSOLUTE_HOURS:-12}"
+      EMAIL_MODE: "${EMAIL_MODE:-mailpit}"
+      SMTP_HOST: "${SMTP_HOST:-mailpit}"
+      SMTP_PORT: "${SMTP_PORT:-1025}"
+      SMTP_USERNAME: "${SMTP_USERNAME:-}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
+      SMTP_USE_TLS: "${SMTP_USE_TLS:-false}"
+      EMAIL_FROM: "${EMAIL_FROM:-ValSphere <no-reply@valsphere.local>}"
+      VALSPHERE_TEST_FATHER_ID: "${VALSPHERE_TEST_FATHER_ID:-father01}"
+      VALSPHERE_TEST_FATHER_NAME: "${VALSPHERE_TEST_FATHER_NAME:-K. Sivaprasad}"
+      VALSPHERE_TEST_FATHER_PASSWORD: "${VALSPHERE_TEST_FATHER_PASSWORD:-}"
+      VALSPHERE_TEST_EMPLOYEE_ID: "${VALSPHERE_TEST_EMPLOYEE_ID:-lavk0401}"
+      VALSPHERE_TEST_EMPLOYEE_NAME: "${VALSPHERE_TEST_EMPLOYEE_NAME:-Lavakumar}"
+      VALSPHERE_TEST_EMPLOYEE_PASSWORD: "${VALSPHERE_TEST_EMPLOYEE_PASSWORD:-}"
     volumes:
       # Mount source read-only so local development changes are available without
       # rebuilding the dependency-heavy image on every edit.
       - ./backend:/app/backend:ro
       - ./frontend:/app/frontend:ro
       - ./resources:/app/resources:ro
+      - ./tests:/app/tests:ro
+      - ./scripts:/app/scripts:ro
       - ./outputs/generated_reports:/app/outputs/generated_reports
       # Compatibility mount for containers created before the source reorganization.
       # It can be removed after every installation has rebuilt the current image.
       - ./outputs/generated_reports:/workspace/valuation_app/generated_reports
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4173/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     restart: unless-stopped
+
+volumes:
+  valsphere-postgres-data:

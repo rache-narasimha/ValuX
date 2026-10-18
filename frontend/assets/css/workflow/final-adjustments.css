@@ -1,0 +1,155 @@
+/* Final shell safeguards: these intentionally follow the legacy compatibility
+   rules above so the shared navigation remains predictable at every width. */
+.task-list-card > .task-stack { gap: 0; }
+.task-table-row .task-row-meta { justify-items: start; }
+body:not(.workflow-page) .mobile-menu-button { display: none; }
+#sidebar-toggle.sidebar-collapse {
+  display: flex;
+  width: calc(100% - 20px);
+  height: auto;
+  place-items: normal;
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  color: var(--muted);
+  font-size: .72rem;
+  transform: none;
+}
+.sidebar-collapsed #sidebar-toggle.sidebar-collapse { width: 44px; transform: none; }
+
+@media (max-width: 900px) {
+  .app-sidebar .application-navigation { display: grid; min-width: 0; }
+  .sidebar-collapsed .assignment-subnav { display: grid; }
+  #sidebar-toggle.sidebar-collapse { display: none; }
+}
+
+/* Corrections pass: compact navigation, semantic finance bars, and an
+   isolated assignment table that does not inherit dashboard-card geometry. */
+.metric-symbol svg {
+  display: block;
+  width: 25px;
+  height: 25px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#sidebar-toggle.sidebar-collapse {
+  width: 36px;
+  height: 36px;
+  margin: 18px 8px 0 auto;
+  padding: 8px;
+  place-items: center;
+  justify-content: center;
+  border-radius: 9px;
+}
+#sidebar-toggle.sidebar-collapse:hover { border-color: #e4a98c; color: var(--peach-dark); background: var(--surface); }
+.sidebar-collapsed #sidebar-toggle.sidebar-collapse { width: 36px; margin-inline: auto; }
+
+.finance-horizontal-chart .grouped-bars { width: 100%; }
+.finance-horizontal-chart .grouped-bars > i {
+  position: relative;
+  display: grid;
+  width: var(--width);
+  place-items: center;
+  overflow: hidden;
+  border-radius: 0;
+  color: #fff;
+  font-style: normal;
+  font-size: .55rem;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .2);
+}
+.finance-horizontal-chart .grouped-bars > i:first-child { border-radius: 999px 0 0 999px; }
+.finance-horizontal-chart .grouped-bars > i:last-child { border-radius: 0 999px 999px 0; }
+.finance-horizontal-chart .grouped-bars > i:only-child { border-radius: 999px; }
+.finance-horizontal-chart .grouped-bars .earned { background: var(--peach); }
+.finance-horizontal-chart .grouped-bars .received { background: var(--green); }
+.finance-horizontal-chart .grouped-bars .outstanding { background: var(--amber); }
+.finance-column.selected .horizontal-track { outline-color: color-mix(in srgb, var(--peach) 42%, transparent); }
+
+.workflow-distribution-chart button { grid-template-columns: 110px minmax(120px, 1fr) 28px; }
+.workflow-distribution-chart button::after { content: none; }
+
+.task-list-card { overflow: hidden; }
+.task-table-viewport { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; padding-bottom: 2px; }
+.task-table-viewport > .task-stack { min-width: 1060px; gap: 0; }
+.task-table-head,
+.task-table-row {
+  grid-template-columns: minmax(190px, 1.15fr) minmax(170px, 1.15fr) minmax(135px, 1fr) minmax(110px, .8fr) 85px 95px 105px 75px;
+  min-width: 1060px;
+}
+.task-table-head { display: grid; }
+.task-table-row {
+  position: relative;
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  min-height: 72px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0;
+  background: var(--surface);
+}
+.task-table-row:hover { background: var(--cream); }
+.task-table-row > div { min-width: 0; }
+.task-table-row strong,
+.task-table-row span { overflow: hidden; text-overflow: ellipsis; }
+.task-table-row .task-row-link { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+.task-table-status,
+.task-table-payment { display: grid; min-width: 0; justify-items: start; gap: 4px; pointer-events: none; }
+.task-table-status .task-secondary,
+.task-table-payment small { color: var(--muted); font-size: .64rem; }
+.task-list-group { min-width: 1060px; gap: 0; }
+.task-list-group-heading { margin: 14px 0 8px; }
+.task-list-group:first-child .task-list-group-heading { margin-top: 6px; }
+html[data-theme="dark"] .task-table-row { border-color: var(--line); background: var(--surface); }
+html[data-theme="dark"] .task-table-row:hover { background: var(--cream); }
+.filter-bar .field { min-width: 0; }
+.filter-bar input,
+.filter-bar select { width: 100%; min-width: 0; }
+.filter-bar-extended { grid-template-columns: minmax(190px, 1.6fr) repeat(7, minmax(105px, 1fr)); }
+
+@media (max-width: 1280px) {
+  .filter-bar-extended { grid-template-columns: repeat(4, minmax(150px, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .task-table-viewport { overflow-x: visible; }
+  .task-table-viewport > .task-stack,
+  .task-list-group { min-width: 0; gap: 9px; }
+  .task-table-head { display: none; }
+  .task-table-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "id action"
+      "person action"
+      "status action"
+      "payment action";
+    min-width: 0;
+    gap: 8px 12px;
+    border-top: 1px solid var(--line);
+    border-radius: 9px;
+  }
+  .task-table-id { grid-area: id; }
+  .task-table-person { grid-area: person; }
+  .task-table-status { grid-area: status; }
+  .task-table-payment { grid-area: payment; }
+  .task-table-action { grid-area: action; align-self: center; }
+  .task-table-property,
+  .task-table-assignee,
+  .task-table-due { display: none; }
+}
+/* Center SVG icons inside their colored backgrounds */
+.metric-card .metric-symbol {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.metric-card .metric-symbol svg {
+  display: block;
+}

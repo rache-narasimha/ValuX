@@ -16,7 +16,7 @@ NS = {"w": W}
 
 def load_reports():
     sys.path.insert(0, str(APP_ROOT))
-    from backend.app import reports
+    from backend.app.valuation import reports
     return reports
 
 

@@ -1,38 +1,25 @@
-/** Central role adapter and permission policy for father and employee prototype views. */
+/** Authenticated identity adapter and centralized father/employee permission policy. */
 (function () {
   "use strict";
 
-  const STORAGE_KEY = "sln.workflow.prototype-role.v1";
-  const USERS = {
-    father: {
-      role: "father",
-      name: "K. Sivaprasad",
-      initials: "KS",
-      label: "Father / reviewer",
-      reportGroups: ["valuation", "estimation", "progress", "completion"],
-    },
-    employee: {
-      role: "employee",
-      name: "Lavakumar",
-      initials: "LK",
-      label: "Employee",
-      reportGroups: ["valuation", "estimation", "progress", "completion"],
-    },
-  };
+  const authenticated = window.__VALSPHERE_AUTH_CONTEXT__?.user;
+  const user = authenticated ? {
+    role: authenticated.role,
+    name: authenticated.name,
+    userId: authenticated.userId,
+    initials: authenticated.initials,
+    label: authenticated.roleLabel,
+    email: authenticated.email,
+    reportGroups: ["valuation", "estimation", "progress", "completion"],
+  } : null;
 
   function currentRole() {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return USERS[saved] ? saved : "father";
+    return currentUser().role;
   }
 
   function currentUser() {
-    return USERS[currentRole()];
-  }
-
-  function setRole(role) {
-    if (!USERS[role]) return;
-    localStorage.setItem(STORAGE_KEY, role);
-    window.location.reload();
+    if (!user) throw new Error("Your ValSphere session is not available.");
+    return user;
   }
 
   function can(action, task) {
@@ -63,18 +50,8 @@
     return currentUser().reportGroups.includes(task.reportGroup);
   }
 
-  function installSwitcher() {
-    const host = document.querySelector("[data-role-switcher]");
-    if (!host) return;
-    const activeRole = currentRole();
-    host.innerHTML = `<span class="prototype-label">Prototype view</span><div class="role-switch" role="group" aria-label="Prototype user view"><button type="button" data-role="father">Father</button><button type="button" data-role="employee">Employee</button></div>`;
-    host.querySelectorAll("button").forEach((button) => {
-      const active = button.dataset.role === activeRole;
-      button.classList.toggle("active", active);
-      button.setAttribute("aria-pressed", String(active));
-      button.addEventListener("click", () => setRole(button.dataset.role));
-    });
-    const user = currentUser();
+  function installIdentity() {
+    if (!user) return;
     document.querySelectorAll("[data-current-user-name]").forEach((node) => { node.textContent = user.name; });
     document.querySelectorAll("[data-current-user-role]").forEach((node) => { node.textContent = user.label; });
     document.querySelectorAll("[data-current-user-initials]").forEach((node) => { node.textContent = user.initials; });
@@ -82,10 +59,10 @@
     document.querySelectorAll("[data-father-only]").forEach((node) => { node.hidden = user.role !== "father"; });
   }
 
-  window.WorkflowAccess = { USERS, currentRole, currentUser, setRole, can, visible, installSwitcher };
+  window.WorkflowAccess = { currentRole, currentUser, can, visible, installIdentity, installSwitcher: installIdentity };
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", installSwitcher);
+    document.addEventListener("DOMContentLoaded", installIdentity);
   } else {
-    installSwitcher();
+    installIdentity();
   }
 })();

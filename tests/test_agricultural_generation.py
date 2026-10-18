@@ -19,7 +19,7 @@ OUTPUT_PATH = OUTPUT_DIR / "agricultural_photo_layout_test.docx"
 
 def load_reports():
     sys.path.insert(0, str(APP_ROOT))
-    from backend.app import reports
+    from backend.app.valuation import reports
     return reports
 
 

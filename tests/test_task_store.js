@@ -26,7 +26,10 @@ context.window.WorkflowAccess = {
 };
 context.WorkflowAccess = context.window.WorkflowAccess;
 
-const source = fs.readFileSync(path.join(__dirname, "..", "frontend", "assets", "js", "task-store.js"), "utf8");
+const source = fs.readFileSync(
+  path.join(__dirname, "..", "frontend", "assets", "js", "core", "task-store.js"),
+  "utf8",
+);
 vm.runInNewContext(source, context);
 const store = context.window.TaskStore;
 

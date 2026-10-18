@@ -1,0 +1,223 @@
+/* Prototype role switch and finalized workflow dashboard. */
+[data-role-switcher] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.prototype-label {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+.role-switch {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f3f7f8;
+}
+.role-switch button {
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 9px;
+  background: transparent;
+  color: #526b75;
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.role-switch button.active { background: var(--navy); color: #fff; }
+.metric-grid-five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.metric-card.neutral strong { color: #536d77; }
+.father-business { display: grid; gap: 16px; margin-bottom: 20px; }
+.father-business[hidden] { display: none; }
+.finance-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.finance-strip article { padding: 15px 17px; border: 1px solid var(--line); border-radius: 11px; background: #fff; }
+.finance-strip span,
+.finance-strip strong,
+.finance-strip small { display: block; }
+.finance-strip span { color: var(--muted); font-size: .75rem; font-weight: 800; }
+.finance-strip strong { margin: 5px 0 2px; color: var(--navy); font-size: 1.25rem; }
+.finance-strip small { color: #7b8e95; font-size: .68rem; }
+.institution-overview { padding: 18px 20px; }
+.institution-bars { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 9px; }
+.institution-bars button { display: grid; grid-template-columns: minmax(0, 1fr) 70px auto; align-items: center; gap: 10px; padding: 10px; border: 1px solid #e0e8eb; border-radius: 9px; background: #fbfdfd; color: var(--ink); text-align: left; cursor: pointer; }
+.institution-bars button:hover { border-color: #92bac7; }
+.institution-bars span { display: grid; min-width: 0; }
+.institution-bars strong { color: var(--blue); font-size: .76rem; }
+.institution-bars small { overflow: hidden; color: var(--muted); font-size: .66rem; text-overflow: ellipsis; white-space: nowrap; }
+.institution-bars i { position: relative; height: 6px; overflow: hidden; border-radius: 999px; background: #e2ecef; }
+.institution-bars i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--bar); border-radius: inherit; background: var(--blue); }
+.institution-bars b { color: var(--navy); font-size: .78rem; }
+.dashboard-grid-wide { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dashboard-span-two { grid-column: 1 / -1; }
+body[data-role="employee"] #payment-dashboard-card { grid-column: 1 / -1; }
+.section-tools { display: flex; align-items: center; gap: 12px; }
+.section-tools select {
+  min-height: 34px;
+  border: 1px solid #aec2ca;
+  border-radius: 7px;
+  padding: 5px 8px;
+  background: #fff;
+  color: var(--ink);
+}
+.task-row {
+  position: relative;
+  grid-template-columns: minmax(260px, 2.4fr) minmax(115px, 0.8fr) minmax(95px, 0.7fr) minmax(120px, 0.9fr) minmax(120px, 0.9fr) auto;
+  gap: 14px;
+}
+.task-row-link { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+.task-row-main,
+.task-row-detail,
+.task-row-meta,
+.task-row-payment,
+.row-arrow { pointer-events: none; }
+.task-row-detail,
+.task-row-payment { display: grid; gap: 4px; min-width: 0; }
+.task-row-detail small,
+.task-row-payment small,
+.task-secondary { color: var(--muted); font-size: 0.68rem; }
+.task-row-detail strong { overflow: hidden; color: var(--ink); font-size: 0.76rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.task-row-meta { justify-items: start; }
+.task-row-payment { justify-items: start; }
+.payment-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  min-height: 26px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 0.67rem;
+  font-weight: 850;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.payment-received { background: var(--green-soft); color: var(--green); }
+.payment-partially-received { background: var(--amber-soft); color: var(--amber); }
+.payment-overdue { background: var(--red-soft); color: var(--red); }
+.payment-not-set { background: color-mix(in srgb, var(--surface) 75%, var(--line)); color: var(--muted); }
+.row-action {
+  position: relative;
+  z-index: 2;
+  border: 1px solid #a9c2ca;
+  border-radius: 7px;
+  padding: 7px 9px;
+  background: #fff;
+  color: var(--blue);
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.status-unassigned { background: #edf2f4; color: #526b75; }
+.status-in-progress { background: var(--blue-soft); color: #075d79; }
+.filter-bar-extended { grid-template-columns: minmax(260px, 2fr) repeat(5, minmax(140px, 1fr)); }
+.optional-label { color: var(--muted); font-size: 0.72rem; font-weight: 500; }
+.hero-actions { display: flex; align-items: flex-start; gap: 9px; }
+.danger-ghost {
+  border: 1px solid rgba(255,255,255,.55);
+  border-radius: 8px;
+  padding: 11px 15px;
+  background: transparent;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+.assignment-actions-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.is-disabled { opacity: .65; }
+.workflow-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(5, 35, 47, .55);
+}
+.workflow-modal[hidden] { display: none; }
+.workflow-dialog {
+  width: min(600px, 100%);
+  max-height: calc(100vh - 44px);
+  overflow: auto;
+  padding: 22px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(0,0,0,.25);
+}
+.dialog-heading { display: flex; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+.dialog-heading h2 { margin-bottom: 4px; color: var(--navy); font-size: 1.12rem; }
+.dialog-heading p { margin: 0; color: var(--muted); font-size: .78rem; }
+.modal-x { border: 0; background: transparent; color: var(--muted); font-size: 1.6rem; cursor: pointer; }
+.dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
+.dialog-actions button { border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 800; cursor: pointer; }
+.dialog-actions button:disabled { opacity: .5; cursor: not-allowed; }
+body.modal-open { overflow: hidden; }
+.practice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.practice-card { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: start; }
+.practice-card .button-link,
+.practice-card > .soft-badge { grid-column: 2; justify-self: start; }
+.practice-card h2 { margin-bottom: 6px; color: var(--navy); font-size: 1.1rem; }
+.practice-card p,
+.practice-card li { color: var(--muted); font-size: .82rem; line-height: 1.5; }
+.practice-card ul { margin: 12px 0 0; padding-left: 19px; }
+.practice-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 11px; background: var(--blue-soft); color: var(--blue); font-size: .72rem; font-weight: 900; }
+.pending-card { grid-column: 1 / -1; }
+.practice-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px max(5vw, 28px);
+  border-bottom: 1px solid #d5c27d;
+  background: #fff8dc;
+  color: #70500f;
+}
+.practice-banner div { display: grid; gap: 3px; }
+.practice-banner span { font-size: .8rem; }
+.practice-banner a { color: #74500a; font-size: .8rem; font-weight: 800; }
+.report-task-context-compact { grid-template-columns: minmax(230px, .9fr) minmax(0, 2fr) auto; }
+.report-completion-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; }
+.report-note-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+.report-note-actions button:disabled { opacity: .5; cursor: not-allowed; }
+
+@media (max-width: 1250px) {
+  .metric-grid-five { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .filter-bar-extended { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .task-row { grid-template-columns: minmax(230px, 2fr) minmax(110px, .8fr) minmax(110px, .8fr) auto; }
+  .task-row-detail.task-wide { display: none; }
+}
+
+@media (max-width: 900px) {
+  .prototype-label,
+  .user-chip { display: none; }
+  .dashboard-grid-wide,
+  .practice-grid { grid-template-columns: 1fr; }
+  .dashboard-span-two,
+  .pending-card { grid-column: auto; }
+  .task-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .task-row .task-wide { display: none; }
+  .task-row-meta { grid-column: 1; grid-row: 2; }
+  .task-row .row-action,
+  .task-row .row-arrow { grid-column: 2; grid-row: 1 / span 2; }
+  .report-task-context-compact { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  .top-actions { gap: 8px; }
+  .top-actions > a { display: none; }
+  .role-switch button { padding: 6px 8px; }
+  .metric-grid-five,
+  .finance-strip,
+  .filter-bar-extended,
+  .assignment-actions-two { grid-template-columns: 1fr; }
+  .section-heading,
+  .section-tools,
+  .dialog-actions,
+  .report-completion-heading { display: grid; }
+  .practice-card { grid-template-columns: 1fr; }
+  .practice-card .button-link,
+  .practice-card > .soft-badge { grid-column: auto; }
+  .hero-actions { display: grid; width: 100%; }
+}

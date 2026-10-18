@@ -1,4 +1,6 @@
 .DS_Store
+.env
+development-credentials.txt
 __pycache__/
 *.pyc
 outputs/generated_reports/*

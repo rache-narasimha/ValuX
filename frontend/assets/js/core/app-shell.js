@@ -74,11 +74,12 @@
 
   function headerMarkup(report = null) {
     const allTasksActive = location.pathname.startsWith("/tasks");
+    const identity = window.__VALSPHERE_AUTH_CONTEXT__?.user || {};
     return `<button class="mobile-menu-button" type="button" aria-label="Open application navigation">${icons.menu}</button>
       <a class="brand" href="/" aria-label="SLN work dashboard"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
       ${report ? `<div class="report-shell-title"><strong>${report.title}</strong><small>${report.description}</small></div>` : ""}
       <nav class="header-shortcuts" aria-label="Quick navigation"><a${allTasksActive ? ' class="active"' : ""} href="/tasks">All tasks</a></nav>
-      <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button><div data-role-switcher></div>${report ? `<span id="status" class="report-status" aria-live="polite">${report.status}</span>` : `<span class="user-chip"><span class="avatar" data-current-user-initials>KS</span><span><strong data-current-user-name>K. Sivaprasad</strong><small data-current-user-role>Father / reviewer</small></span></span>`}</div>`;
+      <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button>${report ? `<span id="status" class="report-status" aria-live="polite">${report.status}</span>` : ""}<details class="account-menu"><summary class="user-chip"><span class="avatar" data-current-user-initials>${identity.initials || "VS"}</span><span><strong data-current-user-name>${identity.name || "ValSphere user"}</strong><small data-current-user-role>${identity.roleLabel || "Authenticated user"}</small></span></summary><div class="account-menu-panel"><span>${identity.userId || ""}</span>${identity.email ? `<small>${identity.email}</small>` : ""}<button type="button" data-sign-out>Sign out</button></div></details></div>`;
   }
 
   function installHeader() {
@@ -138,7 +139,29 @@
   function install() {
     installHeader();
     installSidebar();
+    installAccountMenu();
     window.Appearance?.install();
+  }
+
+  async function signOut(button) {
+    button.disabled = true;
+    try {
+      const context = await fetch("/api/auth/context", { credentials: "same-origin" }).then((response) => response.json());
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": context.csrf },
+        body: "{}",
+      });
+    } finally {
+      window.location.assign("/auth");
+    }
+  }
+
+  function installAccountMenu() {
+    document.querySelectorAll("[data-sign-out]").forEach((button) => {
+      button.addEventListener("click", () => signOut(button));
+    });
   }
 
   window.AppShell = { install, icons };

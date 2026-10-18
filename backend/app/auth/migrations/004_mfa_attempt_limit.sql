@@ -1,0 +1,3 @@
+ALTER TABLE auth_sessions
+    ADD COLUMN IF NOT EXISTS mfa_failed_attempts INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS mfa_locked_until TIMESTAMPTZ;

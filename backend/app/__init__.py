@@ -1,6 +1,5 @@
-"""Valuation application backend package."""
+"""ValSphere backend application package.
 
-from .reports import generate_agricultural_docx, generate_docx
-
-__all__ = ["generate_agricultural_docx", "generate_docx"]
-
+Feature packages own their domain logic. Import report generation from
+``backend.app.valuation`` and authentication from ``backend.app.auth``.
+"""
