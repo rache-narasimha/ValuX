@@ -18,9 +18,9 @@
   const REPORTS = {
     "valuation-general": { group: "valuation", code: "VAL", label: "General Property Valuation", route: "/valuation/general" },
     "valuation-agricultural": { group: "valuation", code: "VAL", label: "Agricultural Land Valuation", route: "/valuation/agricultural" },
-    estimation: { group: "estimation", code: "EST", label: "Detailed Building Estimate", route: null },
-    progress: { group: "progress", code: "PRG", label: "Construction Progress Report", route: null },
-    completion: { group: "completion", code: "CMP", label: "Completion Report", route: null },
+    estimation: { group: "estimation", code: "EST", label: "Detailed Building Estimate", route: "/estimation" },
+    progress: { group: "progress", code: "PRG", label: "Construction Progress Report", route: "/progress-completion" },
+    completion: { group: "completion", code: "CMP", label: "Completion Report", route: "/progress-completion" },
   };
   const REOPEN_WINDOW_DAYS = 7;
   let storageIssue = null;
@@ -43,6 +43,11 @@
     copy.reportGeneratedAt = copy.reportGeneratedAt || null;
     copy.latestDocx = copy.latestDocx || null;
     copy.finalDocx = copy.finalDocx || null;
+    copy.latestXlsx = copy.latestXlsx || null;
+    copy.finalXlsx = copy.finalXlsx || null;
+    copy.linkedEstimationId = copy.linkedEstimationId || "";
+    copy.estimationSummary = copy.estimationSummary || null;
+    copy.progressSummary = copy.progressSummary || null;
     copy.completedAt = copy.completedAt || null;
     copy.closedAt = copy.closedAt || null;
     copy.reopenedAt = copy.reopenedAt || null;
@@ -219,6 +224,16 @@
     if (window.InstitutionStore && !InstitutionStore.active().some((item) => item.type === input.institutionType && item.code === input.institutionCode)) {
       throw new Error("The selected institution is inactive or no longer available.");
     }
+    const linkedEstimationId = String(input.linkedEstimationId || "").trim();
+    if (["progress", "completion"].includes(report.group)) {
+      const linked = tasks.find((candidate) => candidate.id === linkedEstimationId);
+      if (!linked || linked.reportGroup !== "estimation" || !["Completed", "Closed"].includes(linked.status) || !linked.latestXlsx?.url || !linked.estimationSummary?.components?.length) {
+        throw new Error("Select a finalized estimation report with retained component costs.");
+      }
+      if (linked.institutionCode !== input.institutionCode || linked.institutionType !== input.institutionType) {
+        throw new Error("The progress/completion institution must match the linked estimation report.");
+      }
+    }
     const now = timestamp();
     const assignee = String(input.assignee || "").trim();
     if (assignee && !EMPLOYEES.some((employee) => employee.name === assignee)) throw new Error("Select a valid employee.");
@@ -239,7 +254,9 @@
       propertyBrief: input.propertyBrief.trim(), assignee, priority: input.priority,
       status: assignee ? "In Progress" : "Unassigned", holdReason: "", assignedDate: input.assignedDate,
       dueDate: input.dueDate, createdAt: now, updatedAt: now, reportGeneratedAt: null,
-      latestDocx: null, finalDocx: null, completedAt: null, closedAt: null, reopenedAt: null,
+      latestDocx: null, finalDocx: null, latestXlsx: null, finalXlsx: null,
+      linkedEstimationId, estimationSummary: null, progressSummary: null,
+      completedAt: null, closedAt: null, reopenedAt: null,
       payment: { estimated: null, agreed: null, received: 0, dueDate: null, status: "Not Set", updatedAt: null }, activity: [],
     };
     addActivity(task, "created", assignee ? `Assignment created and routed to ${assignee}.` : "Assignment created without an assignee.");
@@ -334,17 +351,60 @@
           generatedAt,
         };
       }
-      addActivity(task, "report", `${normalizedFormat.toUpperCase()} report generated successfully.`);
+      if (normalizedFormat === "xlsx") {
+        const url = String(artifact.url || "");
+        if (!url.startsWith("/downloads/") || !url.toLowerCase().includes(".xlsx")) {
+          throw new Error("The completed Excel report reference is invalid.");
+        }
+        task.latestXlsx = {
+          url,
+          filename: String(artifact.filename || url.split("/").pop() || "Estimation report.xlsx"),
+          generatedAt,
+          source: String(artifact.source || "Generated Excel"),
+        };
+        if (task.reportGroup === "estimation" && artifact.estimationSummary?.components?.length) {
+          task.estimationSummary = copyTask(artifact.estimationSummary);
+        }
+      }
+      if (normalizedFormat === "docx" && ["progress", "completion"].includes(task.reportGroup) && artifact.progressSummary) {
+        task.progressSummary = copyTask(artifact.progressSummary);
+      }
+      const action = normalizedFormat === "xlsx" && String(artifact.source || "").toLowerCase().includes("upload")
+        ? "Completed Excel report attached successfully."
+        : `${normalizedFormat.toUpperCase()} report generated successfully.`;
+      addActivity(task, "report", action);
     });
   }
+
+  function requiredArtifactLabel(task) {
+    return task?.reportGroup === "estimation" ? "completed Excel report" : "DOCX";
+  }
+
+  function latestArtifact(task) {
+    return task?.reportGroup === "estimation" ? task.latestXlsx : task.latestDocx;
+  }
+
+  function finalArtifact(task) {
+    return task?.reportGroup === "estimation" ? task.finalXlsx : task.finalDocx;
+  }
+
+  function hasFreshRequiredArtifact(task) {
+    const artifact = latestArtifact(task);
+    if (!artifact?.url || !artifact.generatedAt) return false;
+    return !task.reopenedAt || new Date(artifact.generatedAt) >= new Date(task.reopenedAt);
+  }
+
   function complete(taskId, note) {
     const workNote = String(note || "").trim();
     if (!workNote) throw new Error("Add a completion work note.");
     return replace(taskId, (task) => {
       requirePermission("completeTask", task, "You do not have permission to complete this task.");
       if (task.status !== "In Progress" || !task.reportGeneratedAt) throw new Error("Generate the report successfully before completing the task.");
-      if (task.reopenedAt && (!task.latestDocx || new Date(task.latestDocx.generatedAt) < new Date(task.reopenedAt))) {
-        throw new Error("Generate a new DOCX after reopening before completing the task again.");
+      if (task.reportGroup === "estimation" && !hasFreshRequiredArtifact(task)) {
+        throw new Error(`Generate or attach a ${requiredArtifactLabel(task)} before completing the task.`);
+      }
+      if (task.reopenedAt && !hasFreshRequiredArtifact(task)) {
+        throw new Error(`Generate a new ${requiredArtifactLabel(task)} after reopening before completing the task again.`);
       }
       task.status = "Completed";
       task.completedAt = timestamp();
@@ -377,9 +437,11 @@
       requirePermission("closeTask", task, "You do not have permission to close this task.");
       const summary = paymentSummary(task);
       if (task.status !== "Completed" || summary.status !== "Received" || summary.outstanding !== 0) throw new Error("Complete the report and settle the full agreed or estimated fee before closing the request.");
+      if (task.reportGroup === "estimation" && !task.latestXlsx?.url) throw new Error("Attach or generate the completed Excel report before closing the request.");
       task.status = "Closed";
       task.closedAt = timestamp();
-      task.finalDocx = task.latestDocx ? copyTask(task.latestDocx) : null;
+      if (task.reportGroup === "estimation") task.finalXlsx = copyTask(task.latestXlsx);
+      else task.finalDocx = task.latestDocx ? copyTask(task.latestDocx) : null;
       addActivity(task, "status", "Request closed after payment settlement.");
       if (String(note || "").trim()) addActivity(task, "note", String(note).trim());
     });
@@ -422,6 +484,8 @@
       task.reopenedAt = timestamp();
       task.reportGeneratedAt = null;
       task.latestDocx = null;
+      task.latestXlsx = null;
+      if (["progress", "completion"].includes(task.reportGroup)) task.progressSummary = null;
       addActivity(task, "status", "Closed request reopened and returned to In Progress.");
       addActivity(task, "note", workNote);
     });
@@ -470,6 +534,18 @@
     };
   }
 
+  function estimationCandidates() {
+    return load()
+      .filter((task) => task.reportGroup === "estimation" && ["Completed", "Closed"].includes(task.status) && task.latestXlsx?.url && task.estimationSummary?.components?.length)
+      .sort((left, right) => new Date(right.reportGeneratedAt || right.updatedAt) - new Date(left.reportGeneratedAt || left.updatedAt));
+  }
+
+  function progressReportsFor(estimationId) {
+    return load()
+      .filter((task) => task.linkedEstimationId === estimationId && ["progress", "completion"].includes(task.reportGroup) && task.progressSummary)
+      .sort((left, right) => new Date(left.progressSummary.reportDate || left.reportGeneratedAt) - new Date(right.progressSummary.reportDate || right.reportGeneratedAt));
+  }
+
   // Prototype records are created only when browser storage has no tasks.
   function ensureSamples() {
     if (load().length) return;
@@ -500,6 +576,7 @@
     create, get, query, summary, addNote, assign, putOnHold, resume,
     markReportGenerated, complete, updatePayment, close, reopen, cancel, ensureSamples,
     matchesPeriod, periodBounds, dueDateRange, billingBasis, paymentSummary, all: load,
-    canReopen, reopenDeadline, storageStatus, REOPEN_WINDOW_DAYS,
+    canReopen, reopenDeadline, storageStatus, requiredArtifactLabel, latestArtifact,
+    finalArtifact, hasFreshRequiredArtifact, estimationCandidates, progressReportsFor, REOPEN_WINDOW_DAYS,
   };
 })();

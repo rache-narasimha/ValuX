@@ -52,7 +52,7 @@
             <article class="work-card action-card" id="final-report-card" hidden>
               <h2>Final report</h2>
               <p id="final-report-message" class="card-help"></p>
-              <a id="download-final-docx" class="button-link secondary" href="#" download>Download final DOCX</a>
+              <a id="download-final-docx" class="button-link secondary" href="#" download>Download final report</a>
               <small id="reopen-deadline" class="field-help"></small>
             </article>
           </aside>
@@ -78,7 +78,7 @@
     </div>
     <div class="workflow-modal" id="reopen-modal" hidden>
       <section class="workflow-dialog" role="dialog" aria-modal="true" aria-labelledby="reopen-title">
-        <div class="dialog-heading"><div><h2 id="reopen-title">Reopen closed task</h2><p>The task returns to In Progress and requires a newly generated DOCX before completion.</p></div><button type="button" class="modal-x" data-close-reopen aria-label="Close">×</button></div>
+        <div class="dialog-heading"><div><h2 id="reopen-title">Reopen closed task</h2><p id="reopen-artifact-message">The task returns to In Progress and requires a newly generated final report before completion.</p></div><button type="button" class="modal-x" data-close-reopen aria-label="Close">×</button></div>
         <form id="reopen-form" class="stack-form"><div class="field"><label for="reopen-work-note">Work note</label><textarea id="reopen-work-note" required placeholder="Explain why this closed request must be reopened"></textarea></div><p id="reopen-error" class="form-error" role="alert" hidden></p><div class="dialog-actions"><button class="secondary" type="button" data-close-reopen>Cancel</button><button class="primary" type="submit">Reopen task</button></div></form>
       </section>
     </div>

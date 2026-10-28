@@ -6,15 +6,38 @@ import re
 import shutil
 import subprocess
 import time
+from io import BytesIO
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, unquote, urlparse
+
+from openpyxl import load_workbook
 
 from ..auth import routes as auth_routes
 from ..auth.service import AuthError
+from ..estimation import extract_estimation_summary, generate_estimation_workbook
+from ..progress import generate_progress_report
 from ..valuation.config import AGRICULTURAL_TEMPLATE, ASSETS_DIR, OUTPUT_DIR, PAGES_DIR, SOFFICE
 from ..valuation.reports import generate_agricultural_docx, generate_docx
 from ..valuation.schemas import agricultural_schema_payload, schema_payload
+
+
+XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def report_content_type(file_path):
+    suffix = file_path.suffix.lower()
+    if suffix == ".pdf":
+        return "application/pdf"
+    if suffix == ".xlsx":
+        return XLSX_CONTENT_TYPE
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def safe_xlsx_name(value):
+    name = Path(unquote(str(value or "completed-estimation.xlsx"))).name
+    name = re.sub(r"[^a-z0-9._ -]+", "_", name, flags=re.IGNORECASE)
+    return name if name.lower().endswith(".xlsx") else "completed-estimation.xlsx"
 
 class Handler(BaseHTTPRequestHandler):
     def send_json(self, payload, status=200, headers=None):
@@ -61,9 +84,8 @@ class Handler(BaseHTTPRequestHandler):
         if not file_path.exists() or not file_path.is_file():
             self.send_error(404)
             return
-        content_type = "application/pdf" if file_path.suffix.lower() == ".pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         self.send_response(200)
-        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Type", report_content_type(file_path))
         self.send_header("Content-Length", str(file_path.stat().st_size))
         self.end_headers()
 
@@ -94,10 +116,9 @@ class Handler(BaseHTTPRequestHandler):
                 if not file_path.exists():
                     self.send_error(404)
                     return
-                content_type = "application/pdf" if file_path.suffix.lower() == ".pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 data = file_path.read_bytes()
                 self.send_response(200)
-                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Type", report_content_type(file_path))
                 self.send_header("Content-Disposition", f'attachment; filename="{file_path.name}"')
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
@@ -138,6 +159,10 @@ class Handler(BaseHTTPRequestHandler):
                 "/valuation/general/": PAGES_DIR / "general.html",
                 "/valuation/agricultural": PAGES_DIR / "agricultural.html",
                 "/valuation/agricultural/": PAGES_DIR / "agricultural.html",
+                "/estimation": PAGES_DIR / "estimation.html",
+                "/estimation/": PAGES_DIR / "estimation.html",
+                "/progress-completion": PAGES_DIR / "progress-completion.html",
+                "/progress-completion/": PAGES_DIR / "progress-completion.html",
             }
             file_path = pages.get(path)
             if file_path is None:
@@ -159,6 +184,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         request_path = urlparse(self.path).path
         if auth_routes.handle_post(self, request_path):
+            return
+        if request_path == "/api/estimation/upload":
+            self.handle_estimation_upload()
+            return
+        if request_path in {"/api/estimation/workbook", "/api/estimation/preview"}:
+            self.handle_estimation_generation(request_path)
+            return
+        if request_path in {"/api/progress/generate", "/api/progress/preview"}:
+            self.handle_progress_generation(request_path)
             return
         general_paths = {"/api/generate", "/api/preview"}
         agricultural_paths = {"/api/agricultural/generate", "/api/agricultural/preview"}
@@ -212,5 +246,137 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": True, "download": f"/downloads/{docx_name}"})
         except AuthError as exc:
             self.send_json({"ok": False, "error": str(exc), "code": exc.code}, exc.status)
+        except Exception as exc:
+            self.send_json({"ok": False, "error": str(exc)}, 500)
+
+    def handle_estimation_generation(self, request_path):
+        try:
+            auth_routes.require_full_session(self)
+            size = int(self.headers.get("Content-Length", "0"))
+            if size > 20 * 1024 * 1024:
+                raise ValueError("The estimation form payload is too large.")
+            payload = json.loads(self.rfile.read(size))
+            state = payload.get("state")
+            if not isinstance(state, dict):
+                raise ValueError("The estimation form state is missing.")
+            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            is_preview = request_path.endswith("/preview")
+            mode = "offline" if payload.get("mode") == "offline" else "completed"
+            generated = generate_estimation_workbook(state, mode=mode)
+            generation_id = str(time.time_ns())
+            if is_preview:
+                xlsx_path = OUTPUT_DIR / f"estimation-preview-{generation_id}.xlsx"
+                pdf_path = xlsx_path.with_suffix(".pdf")
+                xlsx_path.write_bytes(generated.content)
+                try:
+                    subprocess.run(
+                        [str(SOFFICE), "--headless", "--convert-to", "pdf", "--outdir", str(OUTPUT_DIR), str(xlsx_path)],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=90,
+                    )
+                finally:
+                    xlsx_path.unlink(missing_ok=True)
+                if not pdf_path.exists():
+                    raise RuntimeError("Workbook preview conversion did not produce a PDF.")
+                self.send_json({"ok": True, "preview": f"/previews/{pdf_path.name}?v={generation_id}"})
+                return
+
+            report_url = ""
+            if mode == "completed":
+                stored_path = OUTPUT_DIR / f"estimation-report-{generation_id}.xlsx"
+                stored_path.write_bytes(generated.content)
+                report_url = f"/downloads/{stored_path.name}"
+            self.send_file(
+                Path(generated.file_name),
+                data=generated.content,
+                headers=[
+                    ("Content-Disposition", f'attachment; filename="{generated.file_name}"'),
+                    ("X-Estimation-Sheets", quote("|".join(generated.sheet_names), safe="")),
+                    ("X-Report-Url", report_url),
+                ],
+            )
+        except AuthError as exc:
+            self.send_json({"ok": False, "error": str(exc), "code": exc.code}, exc.status)
+        except (ValueError, json.JSONDecodeError) as exc:
+            self.send_json({"ok": False, "error": str(exc)}, 400)
+        except Exception as exc:
+            self.send_json({"ok": False, "error": str(exc)}, 500)
+
+    def handle_estimation_upload(self):
+        try:
+            auth_routes.require_full_session(self)
+            size = int(self.headers.get("Content-Length", "0"))
+            if size <= 0:
+                raise ValueError("Select a completed Excel workbook to attach.")
+            if size > 25 * 1024 * 1024:
+                raise ValueError("The Excel upload is larger than the 25 MB limit.")
+            file_name = safe_xlsx_name(self.headers.get("X-File-Name"))
+            content = self.rfile.read(size)
+            if len(content) < 4 or content[:2] != b"PK":
+                raise ValueError("The selected file is not a valid Excel workbook package.")
+            workbook = load_workbook(BytesIO(content), read_only=True, data_only=False)
+            workbook.close()
+            estimation_summary = extract_estimation_summary(content)
+            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            stored_name = f"estimation-upload-{time.time_ns()}-{file_name}"
+            stored_path = OUTPUT_DIR / stored_name
+            stored_path.write_bytes(content)
+            self.send_json(
+                {
+                    "ok": True,
+                    "fileName": file_name,
+                    "savedName": stored_name,
+                    "size": len(content),
+                    "download": f"/downloads/{stored_name}",
+                    "estimationSummary": estimation_summary,
+                },
+                201,
+            )
+        except AuthError as exc:
+            self.send_json({"ok": False, "error": str(exc), "code": exc.code}, exc.status)
+        except Exception as exc:
+            self.send_json({"ok": False, "error": str(exc)}, 400)
+
+    def handle_progress_generation(self, request_path):
+        try:
+            auth_routes.require_full_session(self)
+            size = int(self.headers.get("Content-Length", "0"))
+            if size > 60 * 1024 * 1024:
+                raise ValueError("Upload is too large. Please reduce the photograph file sizes.")
+            payload = json.loads(self.rfile.read(size))
+            if not isinstance(payload, dict):
+                raise ValueError("The progress/completion report data is missing.")
+            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            is_preview = request_path.endswith("/preview")
+            generation_id = str(time.time_ns())
+            prefix = "progress-completion-preview" if is_preview else "progress-completion-report"
+            docx_path = OUTPUT_DIR / f"{prefix}-{generation_id}.docx"
+            generated = generate_progress_report(payload, docx_path)
+            if is_preview:
+                pdf_path = docx_path.with_suffix(".pdf")
+                subprocess.run(
+                    [str(SOFFICE), "--headless", "--convert-to", "pdf", "--outdir", str(OUTPUT_DIR), str(docx_path)],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=90,
+                )
+                if not pdf_path.exists():
+                    raise RuntimeError("Progress report preview conversion did not produce a PDF.")
+                self.send_json({"ok": True, "preview": f"/previews/{pdf_path.name}?v={generation_id}", "reportType": generated.report_type})
+                return
+            self.send_json({
+                "ok": True,
+                "download": f"/downloads/{docx_path.name}",
+                "filename": generated.file_name,
+                "reportType": generated.report_type,
+                "summary": generated.summary,
+            })
+        except AuthError as exc:
+            self.send_json({"ok": False, "error": str(exc), "code": exc.code}, exc.status)
+        except (ValueError, json.JSONDecodeError) as exc:
+            self.send_json({"ok": False, "error": str(exc)}, 400)
         except Exception as exc:
             self.send_json({"ok": False, "error": str(exc)}, 500)

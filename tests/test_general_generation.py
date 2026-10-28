@@ -61,6 +61,7 @@ def main():
     assert "10,00,000/-" in all_text
     assert "HDB Financial Services Limited" in all_text
     assert "HDB FINANCIAL SERVICES LIMITED" in all_text
+    assert "Canara Bank" in all_text
     assert "BANK OF MAHARASHTRA VALUATION REPORT" not in all_text
     assert "4(a)." in all_text and "Sample Owner, Adoni" in all_text
     assert "4(b)." in all_text and "Sample Purchaser, Adoni" in all_text

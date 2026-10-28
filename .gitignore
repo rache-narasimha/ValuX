@@ -3,6 +3,7 @@
 development-credentials.txt
 __pycache__/
 *.pyc
+~$*.xlsx
 outputs/generated_reports/*
 outputs/test_artifacts/*
 !outputs/generated_reports/.gitkeep

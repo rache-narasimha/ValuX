@@ -8,6 +8,7 @@
     { type: "Bank", code: "BOB", name: "Bank of Baroda", color: "#f58220", active: true },
     { type: "Bank", code: "BOI", name: "Bank of India", color: "#0072bc", active: true },
     { type: "Bank", code: "BOM", name: "Bank of Maharashtra", color: "#0b5ca8", active: true },
+    { type: "Bank", code: "CANARA", name: "Canara Bank", color: "#007f5f", active: true },
     { type: "Bank", code: "CBOI", name: "Central Bank of India", color: "#005baa", active: true },
     { type: "Bank", code: "CUB", name: "City Union Bank", color: "#7b1b2b", active: true },
     { type: "Bank", code: "KB", name: "Karnataka Bank", color: "#7a263a", active: true },
@@ -34,7 +35,10 @@
   function load() {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-      return Array.isArray(saved) ? saved.map(normalize) : DEFAULTS.map(normalize);
+      if (!Array.isArray(saved)) return DEFAULTS.map(normalize);
+      const normalized = saved.map(normalize);
+      const existingCodes = new Set(normalized.map((item) => item.code));
+      return [...normalized, ...DEFAULTS.map(normalize).filter((item) => !existingCodes.has(item.code))];
     } catch (_error) {
       return DEFAULTS.map(normalize);
     }

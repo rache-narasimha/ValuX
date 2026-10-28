@@ -151,15 +151,18 @@
     card.hidden = !closed;
     if (!closed) return;
     const download = element("download-final-docx");
-    if (task.finalDocx?.url) {
+    const artifact = TaskStore.finalArtifact(task);
+    const artifactLabel = task.reportGroup === "estimation" ? "Excel report" : "DOCX";
+    if (artifact?.url) {
       download.hidden = false;
-      download.href = task.finalDocx.url;
-      download.setAttribute("download", task.finalDocx.filename || "final-report.docx");
-      element("final-report-message").textContent = `Final DOCX generated ${WorkflowUI.date(task.finalDocx.generatedAt)} and retained at closure.`;
-      verifyFinalReport(task.finalDocx);
+      download.textContent = `Download final ${artifactLabel}`;
+      download.href = artifact.url;
+      download.setAttribute("download", artifact.filename || (task.reportGroup === "estimation" ? "final-estimation.xlsx" : "final-report.docx"));
+      element("final-report-message").textContent = `Final ${artifactLabel} recorded ${WorkflowUI.date(artifact.generatedAt)} and retained at closure.`;
+      verifyFinalReport(artifact);
     } else {
       download.hidden = true;
-      element("final-report-message").textContent = "A final DOCX is unavailable because no downloadable DOCX reference was captured before this request was closed.";
+      element("final-report-message").textContent = `The final ${artifactLabel} is unavailable because no downloadable file reference was captured before this request was closed.`;
     }
     const deadline = TaskStore.reopenDeadline(task);
     element("reopen-deadline").textContent = WorkflowAccess.currentRole() === "father"
@@ -175,9 +178,9 @@
       if (!response.ok) throw new Error("File not found");
     } catch (_error) {
       const current = TaskStore.get(taskId);
-      if (current?.status !== "Closed" || current.finalDocx?.url !== artifact.url) return;
+      if (current?.status !== "Closed" || TaskStore.finalArtifact(current)?.url !== artifact.url) return;
       element("download-final-docx").hidden = true;
-      element("final-report-message").textContent = "The final DOCX reference is recorded, but the file is no longer available on this installation.";
+      element("final-report-message").textContent = "The final report reference is recorded, but the file is no longer available on this installation.";
     }
   }
 
@@ -203,12 +206,14 @@
     element("task-name").textContent = task.reportName;
     element("task-subtitle").textContent = `${task.institutionName}, ${task.branch}`;
     renderBadges();
-    element("assignment-details").innerHTML = [
+    const assignmentDetails = [
       ["Applicant / customer", task.customerName], ["Property", task.propertyBrief],
       ["Institution", `${task.institutionName} (${task.institutionType})`], ["Branch", task.branch],
       ["Report type", task.reportLabel], ["Assigned date", WorkflowUI.date(task.assignedDate)],
       ["Due date", WorkflowUI.date(task.dueDate)], ["On-hold reason", task.holdReason || "—"],
-    ].map(([label, value]) => `<div><dt>${WorkflowUI.escape(label)}</dt><dd>${WorkflowUI.escape(value)}</dd></div>`).join("");
+    ];
+    if (task.linkedEstimationId) assignmentDetails.splice(5, 0, ["Linked estimation", task.linkedEstimationId]);
+    element("assignment-details").innerHTML = assignmentDetails.map(([label, value]) => `<div><dt>${WorkflowUI.escape(label)}</dt><dd>${WorkflowUI.escape(value)}</dd></div>`).join("");
 
     configureReportLink();
     configureWorkflow();
@@ -223,6 +228,9 @@
     element("payment-warning").hidden = !summary.outsideStandard;
     element("payment-warning").textContent = summary.outsideStandard ? "This payment due date is beyond the standard seven-day period after completion." : "";
     element("activity-list").innerHTML = task.activity.slice().reverse().map((event) => `<li><span class="activity-dot activity-${WorkflowUI.escape(event.type)}"></span><div><p>${WorkflowUI.escape(event.text)}</p><small>${WorkflowUI.escape(event.author)} · ${WorkflowUI.date(event.createdAt)}</small></div></li>`).join("");
+    element("reopen-artifact-message").textContent = task.reportGroup === "estimation"
+      ? "The task returns to In Progress and requires a newly generated or attached completed Excel report before completion."
+      : "The task returns to In Progress and requires a newly generated DOCX before completion.";
     configurePayment();
     configureFinalReport();
     element("note-form").hidden = !WorkflowAccess.can("addNote", task);

@@ -34,6 +34,8 @@ Before changing a feature:
 | Change report placeholder placement | `resources/<type>/template_mapping.json` | `backend/app/valuation/ooxml.py` |
 | Change calculations or depreciation | `backend/app/valuation/calculations.py` | `frontend/assets/js/pages/general.js` when the live form also displays it |
 | Change DOCX assembly | `backend/app/valuation/reports.py` | `backend/app/valuation/ooxml.py`, `backend/app/valuation/media.py` |
+| Change estimation XLSX assembly | `backend/app/estimation/generator.py` | `resources/estimation/`, `frontend/assets/js/pages/estimation-schema.js` |
+| Change progress/completion DOCX assembly | `backend/app/progress/generator.py` | `frontend/assets/js/pages/progress-completion.js` |
 | Change photo/map behavior | `backend/app/valuation/media.py` | general or agricultural controller |
 | Change task lifecycle or payment rules | `frontend/assets/js/core/task-store.js` | `core/workflow-access.js` |
 | Change father/employee task policy | `frontend/assets/js/core/workflow-access.js` | authenticated role from `backend/app/auth/` |
@@ -91,6 +93,8 @@ order as a local cleanup. Those changes affect multiple pages at once.
 - `task-context.js`: workflow controls shown around a report form opened from a task.
 - `general.js`: general-property valuation form only.
 - `agricultural.js`: agricultural valuation form only.
+- `estimation.js`: detailed-estimation configuration, measurements, drafts and XLSX workflow.
+- `progress-completion.js`: linked-estimation progress/completion entry, photographs, preview and DOCX generation.
 - `institution-settings.js`: CEO-only institution maintenance.
 - `report-layout.js`: long-form navigation collapse state.
 
@@ -106,6 +110,9 @@ than by HTTP endpoint:
 - `valuation/ooxml.py`: low-level WordprocessingML edits. Keep business decisions out.
 - `valuation/media.py`: image normalization and Word media placement. Keep form rules out.
 - `valuation/reports.py`: coordinates schema values, templates, calculations and output.
+- `estimation/generator.py`: copies approved XLSX masters, applies estimation form state and returns completed or offline workbooks.
+- `estimation/summary.py`: extracts the retained component-cost snapshot from an attached completed estimation workbook.
+- `progress/generator.py`: validates linked-estimation progress state and creates bank-aware Progress/Completion DOCX reports.
 - `web/handler.py`: HTTP parsing, validation, static delivery, previews and downloads.
 - `auth/`: PostgreSQL identity boundary. `routes.py` adapts HTTP, `service.py`
   owns account/session use cases, `security.py` owns cryptographic primitives,
@@ -134,9 +141,9 @@ regression checks. The entry-point URLs remain stable for page compatibility.
 
 ## Resources and generated files
 
-`resources/general/` and `resources/agricultural/` are production inputs, not
-examples. Their `.docx` templates, schemas and mappings must change together
-when a report format changes.
+`resources/general/`, `resources/agricultural/`, and `resources/estimation/`
+are production inputs, not examples. Their templates, schemas, mappings, and
+estimation manifest must change together when a report format changes.
 
 `outputs/` contains generated data. It is not source code. The historical
 `archive/template_development/` directory is retained for reference and is not

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Construction Progress and Completion Report</title>
+    <link rel="icon" href="/assets/images/valux-monogram.png" type="image/png" />
+    <link rel="stylesheet" href="/assets/css/styles.css" />
+    <link rel="stylesheet" href="/assets/css/workflow.css" />
+    <link rel="stylesheet" href="/assets/css/progress-completion.css" />
+    <script src="/assets/js/core/appearance.js"></script>
+  </head>
+  <body>
+    <header>
+      <div>
+        <div class="report-header-tools"><a class="report-home-logo" href="/" aria-label="Return to work dashboard">SLN</a><button class="appearance-toggle" type="button" data-appearance-toggle></button></div>
+        <h1>Construction progress and completion report</h1>
+        <p>Assess completed work against the linked estimation report.</p>
+      </div>
+      <div id="status" aria-live="polite">Draft</div>
+    </header>
+    <main>
+      <aside><nav id="nav" aria-label="Progress report sections"></nav></aside>
+      <section class="workspace">
+        <form id="progress-form">
+          <div class="progress-utility-bar"><span>The estimated-cost baseline is retained from the selected estimation report.</span><button type="button" class="secondary" id="discard-draft">Discard draft</button></div>
+
+          <section class="panel active" data-section="setup">
+            <h2>Report setup</h2>
+            <div id="link-error" class="notice error-notice" hidden></div>
+            <div class="linked-estimate-card">
+              <div><small>Linked estimation report</small><strong id="linked-estimate-name">Not selected</strong><span id="linked-estimate-meta"></span></div>
+              <div class="field" id="practice-estimation-wrap" hidden><label class="required" for="practice-estimation">Estimation report</label><select id="practice-estimation"><option value="">Select an estimation report</option></select></div>
+            </div>
+            <div class="grid">
+              <div class="field" id="practice-type-wrap" hidden><label class="required" for="practice-report-type">Report type</label><select id="practice-report-type"><option value="progress">Progress report</option><option value="completion">Completion report</option></select></div>
+              <div class="field"><label for="reference-number">Reference number <span class="optional-label">Karnataka Bank only</span></label><input id="reference-number" /></div>
+              <div class="field"><label class="required" for="report-date">Report date</label><input id="report-date" type="date" required /></div>
+              <div class="field"><label class="required" for="visit-date">Site-visit date</label><input id="visit-date" type="date" required /></div>
+              <div class="field"><label for="official-name">Accompanying bank official</label><input id="official-name" /></div>
+              <div class="field"><label for="official-designation">Official designation</label><input id="official-designation" /></div>
+              <div class="field"><label class="required" for="report-place">Place</label><input id="report-place" required value="Adoni" /></div>
+            </div>
+          </section>
+
+          <section class="panel" data-section="assessment">
+            <div class="section-title-row"><div><h2>Work progress assessment</h2><p>The estimated costs come from the linked estimation. Completion amounts calculate automatically and remain editable.</p></div><span id="derived-report-type" class="report-type-badge">Progress report</span></div>
+            <div class="progress-table-wrap">
+              <table class="progress-table">
+                <thead><tr><th>S.No.</th><th>Component / work</th><th>Estimated cost (Rs.)</th><th>Completion %</th><th>Cost completed (Rs.)</th><th>Balance work (Rs.)</th><th></th></tr></thead>
+                <tbody id="component-rows"></tbody>
+                <tfoot><tr><th colspan="2">Total</th><th id="estimated-total">₹0</th><th></th><th id="completed-total">₹0</th><th id="balance-total">₹0</th><th></th></tr></tfoot>
+              </table>
+            </div>
+            <div class="grid assessment-details">
+              <div class="field"><label for="materials-at-site">Cost of materials at site (Rs.)</label><input id="materials-at-site" type="number" min="0" step="any" value="0" /></div>
+              <div class="field calculated"><label>Total value put up till date</label><input id="total-value" readonly /></div>
+              <fieldset class="field full confirmation-field"><legend class="required">Construction follows the sanctioned plan without deviation</legend><div class="inline-options"><label><input type="radio" name="no-deviation" value="yes" /> Yes</label><label><input type="radio" name="no-deviation" value="no" /> No</label></div></fieldset>
+              <div class="field full" id="deviation-wrap" hidden><label class="required" for="deviation-remarks">Observed deviation</label><textarea id="deviation-remarks"></textarea></div>
+            </div>
+          </section>
+
+          <section class="panel" data-section="bank" id="bank-panel">
+            <h2>Karnataka Bank sanction details</h2>
+            <p class="hint">This page is generated only for Karnataka Bank. Leave bank-side fields blank when they will be completed by the branch.</p>
+            <div class="grid">
+              <div class="field"><label for="loan-account">TL/PSTL account number</label><input id="loan-account" /></div>
+              <div class="field"><label for="limit-sanctioned">Limit sanctioned (Rs.)</label><input id="limit-sanctioned" type="number" min="0" step="any" /></div>
+              <div class="field"><label for="balance-as-on">Balance outstanding as on</label><input id="balance-as-on" type="date" /></div>
+              <div class="field"><label for="balance-outstanding">Balance outstanding (Rs.)</label><input id="balance-outstanding" type="number" min="0" step="any" /></div>
+              <div class="field"><label for="margin-percent">Margin on cost incurred (%)</label><input id="margin-percent" type="number" min="0" max="100" step="any" /></div>
+              <div class="field"><label for="bank-page-date">Bank assessment date</label><input id="bank-page-date" type="date" /></div>
+            </div>
+            <section class="subgroup">
+              <div class="section-title-row"><div><h3>Loan amount already released</h3><p>Add each previous release used in the branch assessment.</p></div><button type="button" class="secondary" id="add-release">Add release</button></div>
+              <div id="release-rows" class="release-list"></div>
+            </section>
+            <div class="bank-calculation-grid" id="bank-calculations"></div>
+          </section>
+
+          <section class="panel" data-section="photos">
+            <h2>Photographs and report generation</h2>
+            <section class="subgroup">
+              <h3>Authenticated site photographs</h3>
+              <p class="hint">The report follows the valuation-photo layout: 1–4 photographs use one per row, 5–6 use two per row, and 7–9 use three per row. Additional photographs continue on another page without cropping.</p>
+              <input id="photo-upload" type="file" accept="image/*" multiple />
+              <p class="hint media-save-note">Photographs remain available for this browser session and are not saved in the local draft after a refresh.</p>
+              <div id="photo-preview" class="preview-grid"></div>
+            </section>
+            <div id="validation-message" class="notice error-notice" hidden></div>
+          </section>
+
+          <footer>
+            <button type="button" class="secondary" id="previous">Previous</button>
+            <span id="progress">Section 1 of 4</span>
+            <button type="button" class="secondary" id="next">Next section</button>
+            <button type="button" class="preview-button" id="preview-report">Preview report</button>
+            <button type="button" class="primary" id="generate-docx">Generate DOCX</button>
+          </footer>
+        </form>
+      </section>
+    </main>
+
+    <div class="processing" id="processing" hidden role="status" aria-live="polite"><div class="processing-card"><strong id="processing-title">Preparing report</strong><div class="loading-track"><div class="loading-bar"></div></div><span id="processing-stage">Please wait…</span></div></div>
+    <div class="modal" id="preview-modal" hidden><div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="preview-title"><div class="modal-head"><div><h2 id="preview-title">Word print-layout preview</h2><p>The PDF is rendered from the same DOCX generator used for download.</p></div><button type="button" class="modal-close" id="close-preview" aria-label="Close preview">×</button></div><iframe id="preview-frame" title="Progress or completion report preview"></iframe></div></div>
+
+    <script src="/assets/js/core/app-shell.js"></script>
+    <script src="/assets/js/core/workflow-access.js"></script>
+    <script src="/assets/js/core/task-store.js"></script>
+    <script src="/assets/js/components/workflow-ui.js"></script>
+    <script src="/assets/js/pages/progress-completion.js"></script>
+    <script src="/assets/js/components/task-context.js"></script>
+    <script src="/assets/js/components/report-layout.js"></script>
+  </body>
+</html>

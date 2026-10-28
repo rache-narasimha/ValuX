@@ -8,6 +8,8 @@
   const reportType = document.getElementById("report-type");
   const valuationType = document.getElementById("valuation-type");
   const valuationWrap = document.getElementById("valuation-type-wrap");
+  const linkedEstimation = document.getElementById("linked-estimation");
+  const linkedEstimationWrap = document.getElementById("linked-estimation-wrap");
   const assignedDate = document.getElementById("assigned-date");
   const dueDate = document.getElementById("due-date");
   const errorMessage = document.getElementById("task-error");
@@ -41,6 +43,48 @@
     valuationWrap.hidden = reportType.value !== "valuation";
     valuationType.required = reportType.value === "valuation";
     if (reportType.value !== "valuation") valuationType.value = "";
+    const linkedReport = ["progress", "completion"].includes(reportType.value);
+    linkedEstimationWrap.hidden = !linkedReport;
+    linkedEstimation.required = linkedReport;
+    if (linkedReport) refreshLinkedEstimations();
+    else {
+      linkedEstimation.value = "";
+      setLinkedIdentity(false);
+    }
+  }
+
+  function setLinkedIdentity(locked) {
+    institutionType.disabled = locked;
+    institution.disabled = locked || !(window.INSTITUTIONS[institutionType.value] || []).length;
+    document.getElementById("branch").readOnly = locked;
+    document.getElementById("customer-name").readOnly = locked;
+    document.getElementById("property-brief").readOnly = locked;
+  }
+
+  function refreshLinkedEstimations(selectedId = linkedEstimation.value) {
+    const candidates = TaskStore.estimationCandidates();
+    linkedEstimation.innerHTML = '<option value="">Select a finalized estimation report</option>';
+    candidates.forEach((candidate) => {
+      const amount = Number(candidate.estimationSummary?.totalEstimatedCost || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+      linkedEstimation.add(new Option(`${candidate.id} · ${candidate.customerName} · ₹${amount}`, candidate.id));
+    });
+    linkedEstimation.value = candidates.some((candidate) => candidate.id === selectedId) ? selectedId : "";
+    document.getElementById("linked-estimation-help").textContent = candidates.length
+      ? "Selecting an estimate reuses and locks its institution, applicant and property identity."
+      : "No eligible estimation report is available. Generate or attach its completed Excel report first.";
+    applyLinkedEstimation();
+  }
+
+  function applyLinkedEstimation() {
+    const linked = TaskStore.get(linkedEstimation.value);
+    if (!linked) { setLinkedIdentity(false); return; }
+    institutionType.value = linked.institutionType;
+    refreshInstitutions();
+    institution.value = linked.institutionCode;
+    document.getElementById("branch").value = linked.branch;
+    document.getElementById("customer-name").value = linked.customerName;
+    document.getElementById("property-brief").value = linked.propertyBrief;
+    setLinkedIdentity(true);
   }
 
   function refreshDates() {
@@ -61,6 +105,7 @@
       propertyBrief: document.getElementById("property-brief").value,
       reportType: reportType.value,
       valuationType: valuationType.value,
+      linkedEstimation: linkedEstimation.value,
       assigneeSearch: picker.input.value,
       priority: document.getElementById("priority").value,
       assignedDate: assignedDate.value,
@@ -114,6 +159,7 @@
     reportType.value = saved.reportType || "";
     refreshReportType();
     valuationType.value = saved.valuationType || "";
+    if (["progress", "completion"].includes(reportType.value)) refreshLinkedEstimations(saved.linkedEstimation || "");
     picker.input.value = saved.assigneeSearch || "";
     document.getElementById("priority").value = saved.priority || "Normal";
     assignedDate.value = saved.assignedDate || iso(new Date());
@@ -149,6 +195,7 @@
   // Form initialization, event handling, and submission.
   institutionType.addEventListener("change", refreshInstitutions);
   reportType.addEventListener("change", refreshReportType);
+  linkedEstimation.addEventListener("change", () => { applyLinkedEstimation(); scheduleDraftSave(); });
   assignedDate.addEventListener("change", refreshDates);
   document.getElementById("priority").addEventListener("change", refreshDates);
   picker.input.addEventListener("change", () => {
@@ -199,6 +246,7 @@
         customerName: document.getElementById("customer-name").value,
         propertyBrief: document.getElementById("property-brief").value,
         reportKey,
+        linkedEstimationId: linkedEstimation.value,
         assignee: selectedAssignee,
         priority: document.getElementById("priority").value,
         assignedDate: assignedDate.value,

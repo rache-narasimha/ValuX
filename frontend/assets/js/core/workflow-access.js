@@ -36,7 +36,7 @@
       updatePayment: Boolean(task && !["Closed", "Cancelled"].includes(task.status)),
       closeTask: Boolean(task && task.status === "Completed"),
       reopenTask: user.role === "father" && Boolean(task && window.TaskStore?.canReopen(task)),
-      downloadFinalReport: Boolean(task && task.status === "Closed" && task.finalDocx?.url),
+      downloadFinalReport: Boolean(task && task.status === "Closed" && window.TaskStore?.finalArtifact(task)?.url),
       cancelTask: user.role === "father" && Boolean(task && !["Closed", "Cancelled"].includes(task.status)),
       openReport: Boolean(task && task.assignee && ["In Progress", "On Hold"].includes(task.status) && (user.role === "father" || ownsTask)),
       assignUnassigned: Boolean(task && task.status === "Unassigned"),

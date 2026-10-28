@@ -99,6 +99,41 @@ assert.throws(() => store.complete(active.id, "Correction completed."), /new DOC
 store.markReportGenerated(active.id, "docx", { url: "/downloads/valuation-report-2.docx" });
 assert.equal(store.complete(active.id, "Corrected report completed.").status, "Completed");
 
+const estimation = store.create(input({
+  customerName: "Estimation Customer", reportKey: "estimation", propertyBrief: "Commercial estimate",
+}));
+assert.equal(store.REPORTS.estimation.route, "/estimation");
+assert.throws(() => store.complete(estimation.id, "Estimate completed."), /Generate the report/i);
+store.markReportGenerated(estimation.id, "xlsx", {
+  url: "/downloads/estimation-report-1.xlsx", filename: "estimate.xlsx", source: "Generated Excel",
+  estimationSummary: { applicantName: "Estimation Customer", components: [{ id: "gf", label: "Ground Floor", estimatedCost: 1000000 }], totalEstimatedCost: 1000000 },
+});
+assert.equal(store.complete(estimation.id, "Estimate completed.").status, "Completed");
+store.updatePayment(estimation.id, { estimated: 3000, agreed: 3000, received: 3000 });
+const closedEstimation = store.close(estimation.id, "Estimate issued.");
+assert.equal(closedEstimation.finalXlsx.url, "/downloads/estimation-report-1.xlsx");
+assert.equal(store.finalArtifact(closedEstimation).filename, "estimate.xlsx");
+store.reopen(estimation.id, "Estimate correction required.");
+assert.throws(() => store.complete(estimation.id, "Correction completed."), /Generate the report/i);
+store.markReportGenerated(estimation.id, "xlsx", {
+  url: "/downloads/estimation-upload-2.xlsx", filename: "corrected-estimate.xlsx", source: "Uploaded Excel",
+});
+assert.equal(store.complete(estimation.id, "Corrected estimate completed.").status, "Completed");
+
+assert.equal(store.estimationCandidates()[0].id, estimation.id);
+assert.throws(() => store.create(input({ customerName: "Unlinked Progress", reportKey: "progress" })), /finalized estimation report/i);
+const progress = store.create(input({
+  customerName: "Estimation Customer", reportKey: "progress", propertyBrief: "Commercial estimate",
+  linkedEstimationId: estimation.id,
+}));
+assert.equal(store.REPORTS.progress.route, "/progress-completion");
+assert.equal(progress.linkedEstimationId, estimation.id);
+store.markReportGenerated(progress.id, "docx", {
+  url: "/downloads/progress-report.docx", filename: "progress.docx",
+  progressSummary: { linkedEstimationId: estimation.id, reportType: "progress", reportDate: "2026-10-13", components: [{ label: "Ground Floor", completionPercent: 50 }] },
+});
+assert.equal(store.progressReportsFor(estimation.id)[0].id, progress.id);
+
 assert.throws(() => store.cancel(unassigned.id, "Custom", ""), /explain the cancellation/i);
 values.set("sln.workflow.tasks.v1", "{damaged-json");
 assert.equal(store.storageStatus().ok, false);

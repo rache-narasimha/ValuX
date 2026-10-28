@@ -1,0 +1,351 @@
+/** Linked construction progress/completion report form and DOCX workflow. */
+(function () {
+  "use strict";
+
+  const params = new URLSearchParams(window.location.search);
+  const practice = params.get("practice") === "1";
+  const taskId = params.get("task") || "";
+  const task = taskId ? TaskStore.get(taskId) : null;
+  const draftScope = practice ? "practice" : `task-${taskId || "standalone"}`;
+  const DRAFT_KEY = `sln.progress-completion.form.draft.v1-${draftScope}`;
+  const TODAY = localToday();
+  const sectionLabels = { setup: "Report Setup", assessment: "Work Assessment", bank: "Bank Sanction", photos: "Photos & Generate" };
+  const state = { linkedEstimationId: task?.linkedEstimationId || "", current: 0, details: {}, components: [], bank: { releases: [] }, photos: [] };
+  let saveTimer = null;
+
+  const element = (id) => document.getElementById(id);
+  const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+  const numeric = (value) => { const result = Number(String(value ?? "").replaceAll(",", "")); return Number.isFinite(result) ? result : 0; };
+  const currency = (value) => `₹${numeric(value).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+  const clone = (value) => JSON.parse(JSON.stringify(value));
+
+  function localToday() {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  }
+
+  function selectedTask() { return state.linkedEstimationId ? TaskStore.get(state.linkedEstimationId) : null; }
+  function linkedSummary() { return selectedTask()?.estimationSummary || null; }
+  function requestedReportType() { return practice ? element("practice-report-type").value : task?.reportGroup || "progress"; }
+  function isKarnataka() { const linked = selectedTask(); return linked?.institutionCode === "KB" || linked?.institutionName?.trim().toLowerCase() === "karnataka bank"; }
+
+  function calculation(component) {
+    const estimated = numeric(component.estimatedCost);
+    const percent = numeric(component.completionPercent);
+    const calculated = estimated * percent / 100;
+    const completed = component.manualCompleted ? numeric(component.completedCost) : calculated;
+    const balance = Math.max(0, estimated - completed);
+    return { estimated, percent, calculated, completed, balance };
+  }
+
+  function totals() {
+    const result = state.components.reduce((sum, component) => {
+      const current = calculation(component);
+      sum.estimated += current.estimated;
+      sum.completed += current.completed;
+      sum.balance += current.balance;
+      return sum;
+    }, { estimated: 0, completed: 0, balance: 0 });
+    result.materials = numeric(state.details.materialsAtSite);
+    result.totalValue = result.completed + result.materials;
+    return result;
+  }
+
+  function computedReportType() {
+    return state.components.length && state.components.every((component) => {
+      const current = calculation(component);
+      return current.percent === 100 && current.balance <= 0.005;
+    }) ? "completion" : "progress";
+  }
+
+  function compatiblePreviousSummary() {
+    return TaskStore.progressReportsFor?.(state.linkedEstimationId)
+      .filter((candidate) => candidate.id !== taskId && candidate.progressSummary)
+      .at(-1)?.progressSummary || null;
+  }
+
+  function loadLinkedEstimate(estimationId, preserveValues = false) {
+    state.linkedEstimationId = estimationId || "";
+    const linked = selectedTask();
+    const summary = linked?.estimationSummary;
+    if (!summary) {
+      state.components = [];
+      render();
+      scheduleSave();
+      return;
+    }
+    const previous = compatiblePreviousSummary();
+    const priorByLabel = new Map((previous?.components || []).map((component) => [component.label, component]));
+    const currentByLabel = new Map((preserveValues ? state.components : []).map((component) => [component.label, component]));
+    state.components = (summary.components || []).map((baseline, index) => {
+      const existing = currentByLabel.get(baseline.label) || priorByLabel.get(baseline.label) || {};
+      return {
+        id: baseline.id || `component-${index + 1}`,
+        label: baseline.label,
+        estimatedCost: numeric(baseline.estimatedCost),
+        completionPercent: existing.completionPercent ?? "",
+        completedCost: existing.completedCost ?? "",
+        manualCompleted: Boolean(existing.manualCompleted),
+      };
+    });
+    if (!state.details.reportDate) state.details.reportDate = TODAY;
+    if (!state.details.visitDate) state.details.visitDate = TODAY;
+    if (!state.details.place) state.details.place = "Adoni";
+    render();
+    scheduleSave();
+  }
+
+  function populatePracticeCandidates() {
+    const select = element("practice-estimation");
+    const candidates = TaskStore.estimationCandidates?.() || [];
+    select.innerHTML = '<option value="">Select an estimation report</option>' + candidates.map((candidate) => `<option value="${escape(candidate.id)}">${escape(candidate.id)} · ${escape(candidate.customerName)} · ${escape(currency(candidate.estimationSummary?.totalEstimatedCost || 0))}</option>`).join("");
+    select.value = state.linkedEstimationId;
+  }
+
+  function renderLinkedEstimate() {
+    const linked = selectedTask();
+    const summary = linked?.estimationSummary;
+    element("linked-estimate-name").textContent = linked ? `${linked.id} · ${linked.customerName}` : "Not selected";
+    element("linked-estimate-meta").textContent = linked && summary ? `${linked.institutionName}, ${linked.branch} · ${summary.propertyTypeLabel || summary.propertyType || "Property"} · ${currency(summary.totalEstimatedCost)}` : "Select a finalized estimation report containing a retained cost summary.";
+    const invalid = !linked || !summary || !(summary.components || []).length;
+    element("link-error").hidden = !invalid;
+    element("link-error").textContent = invalid ? "A generated or attached estimation report with component costs must be linked before this form can be completed." : "";
+    element("reference-number").closest(".field").hidden = !isKarnataka();
+  }
+
+  function renderComponents() {
+    element("component-rows").innerHTML = state.components.length ? state.components.map((component, index) => {
+      const current = calculation(component);
+      const completedValue = component.manualCompleted ? component.completedCost : current.calculated;
+      return `<tr><td>${index + 1}</td><td>${escape(component.label)}</td><td>${escape(current.estimated.toFixed(2))}</td><td><input type="number" min="0" max="100" step="any" value="${escape(component.completionPercent)}" data-progress-percent="${index}" aria-label="Completion percentage for ${escape(component.label)}"></td><td><input type="number" min="0" max="${escape(current.estimated)}" step="any" value="${escape(completedValue)}" data-progress-completed="${index}" aria-label="Completed cost for ${escape(component.label)}"></td><td>${escape(current.balance.toFixed(2))}</td><td><button type="button" class="reset-calculation" data-reset-completed="${index}" ${component.manualCompleted ? "" : "hidden"}>Use calculated</button></td></tr>`;
+    }).join("") : '<tr><td colspan="7">No linked estimation components are available.</td></tr>';
+    const currentTotals = totals();
+    element("estimated-total").textContent = currency(currentTotals.estimated);
+    element("completed-total").textContent = currency(currentTotals.completed);
+    element("balance-total").textContent = currency(currentTotals.balance);
+    element("total-value").value = currency(currentTotals.totalValue);
+    const reportType = computedReportType();
+    element("derived-report-type").textContent = `${reportType[0].toUpperCase()}${reportType.slice(1)} report`;
+    element("derived-report-type").classList.toggle("is-complete", reportType === "completion");
+  }
+
+  function renderReleases() {
+    const releases = state.bank.releases || [];
+    element("release-rows").innerHTML = releases.length ? releases.map((release, index) => `<div class="release-row"><div class="field"><label for="release-date-${index}">Release date</label><input id="release-date-${index}" type="date" value="${escape(release.date || "")}" data-release-date="${index}"></div><div class="field"><label for="release-amount-${index}">Amount (Rs.)</label><input id="release-amount-${index}" type="number" min="0" step="any" value="${escape(release.amount ?? "")}" data-release-amount="${index}"></div><button type="button" class="secondary" data-remove-release="${index}">Remove</button></div>`).join("") : '<p class="hint">No previous loan releases entered.</p>';
+    renderBankCalculations();
+  }
+
+  function renderBankCalculations() {
+    const current = totals();
+    const marginPercent = numeric(state.bank.marginPercent);
+    const margin = current.totalValue * marginPercent / 100;
+    const released = (state.bank.releases || []).reduce((sum, release) => sum + numeric(release.amount), 0);
+    const eligible = marginPercent || String(state.bank.marginPercent || "").trim() ? Math.max(0, current.totalValue - margin) : null;
+    const instalment = eligible === null ? null : Math.max(0, eligible - released);
+    const cards = [["Cost incurred", current.totalValue], ["Margin", marginPercent || String(state.bank.marginPercent || "").trim() ? margin : null], ["Loan eligible", eligible], ["Already released", released], ["Instalment eligible now", instalment]];
+    element("bank-calculations").innerHTML = cards.map(([label, value]) => `<article><span>${escape(label)}</span><strong>${value === null ? "—" : escape(currency(value))}</strong></article>`).join("");
+  }
+
+  function sections() {
+    const keys = ["setup", "assessment"];
+    if (isKarnataka()) keys.push("bank");
+    keys.push("photos");
+    return keys;
+  }
+
+  function showSection(index, scroll = false) {
+    const keys = sections();
+    state.current = Math.max(0, Math.min(index, keys.length - 1));
+    document.querySelectorAll("[data-section]").forEach((panel) => panel.classList.toggle("active", panel.dataset.section === keys[state.current]));
+    element("nav").innerHTML = keys.map((key, itemIndex) => `<button type="button" data-section-index="${itemIndex}" class="${itemIndex === state.current ? "active" : ""}">${escape(sectionLabels[key])}</button>`).join("");
+    element("nav").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => showSection(Number(button.dataset.sectionIndex), true)));
+    element("progress").textContent = `Section ${state.current + 1} of ${keys.length}`;
+    element("previous").disabled = state.current === 0;
+    element("next").disabled = state.current === keys.length - 1;
+    if (scroll) window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function syncInputsFromState() {
+    const mapping = {
+      "reference-number": [state.details, "referenceNumber"], "report-date": [state.details, "reportDate"], "visit-date": [state.details, "visitDate"],
+      "official-name": [state.details, "officialName"], "official-designation": [state.details, "officialDesignation"], "report-place": [state.details, "place"],
+      "materials-at-site": [state.details, "materialsAtSite"], "deviation-remarks": [state.details, "deviationRemarks"],
+      "loan-account": [state.bank, "accountNumber"], "limit-sanctioned": [state.bank, "limitSanctioned"], "balance-as-on": [state.bank, "balanceAsOn"],
+      "balance-outstanding": [state.bank, "balanceOutstanding"], "margin-percent": [state.bank, "marginPercent"], "bank-page-date": [state.bank, "date"],
+    };
+    Object.entries(mapping).forEach(([id, [owner, key]]) => { element(id).value = owner[key] ?? ""; });
+    document.querySelectorAll('input[name="no-deviation"]').forEach((input) => { input.checked = input.value === state.details.noDeviation; });
+    element("deviation-wrap").hidden = state.details.noDeviation !== "no";
+    ["report-date", "visit-date", "balance-as-on", "bank-page-date"].forEach((id) => { element(id).max = TODAY; });
+  }
+
+  function render() {
+    renderLinkedEstimate();
+    renderComponents();
+    renderReleases();
+    syncInputsFromState();
+    element("bank-panel").hidden = !isKarnataka();
+    showSection(state.current);
+  }
+
+  function draftState() {
+    const snapshot = clone(state);
+    snapshot.photos = [];
+    return snapshot;
+  }
+
+  function scheduleSave() {
+    element("status").textContent = "Saving draft…";
+    window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draftState()));
+      element("status").textContent = "Saved locally";
+    }, 250);
+  }
+
+  function restoreDraft() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null");
+      if (!saved || typeof saved !== "object") return;
+      if (!practice && saved.linkedEstimationId !== task?.linkedEstimationId) return;
+      Object.assign(state, saved, { photos: [] });
+      state.details = saved.details || {};
+      state.bank = { releases: [], ...(saved.bank || {}) };
+      element("status").textContent = "Draft restored";
+    } catch (_error) { element("status").textContent = "Draft could not be restored"; }
+  }
+
+  function validate() {
+    const issues = [];
+    const linked = linkedSummary();
+    if (!linked || !state.components.length) issues.push("Select a finalized estimation report with component costs.");
+    if (!state.details.reportDate) issues.push("Enter the report date.");
+    if (!state.details.visitDate) issues.push("Enter the site-visit date.");
+    if (state.details.reportDate > TODAY || state.details.visitDate > TODAY) issues.push("Report and visit dates cannot be later than today.");
+    if (!String(state.details.place || "").trim()) issues.push("Enter the report place.");
+    state.components.forEach((component) => {
+      const current = calculation(component);
+      if (String(component.completionPercent ?? "").trim() === "") issues.push(`Enter completion percentage for ${component.label}.`);
+      else if (current.percent < 0 || current.percent > 100) issues.push(`Completion percentage for ${component.label} must be between 0 and 100.`);
+      if (current.completed < 0 || current.completed > current.estimated) issues.push(`Completed cost for ${component.label} must be between zero and its estimated cost.`);
+    });
+    if (!state.details.noDeviation) issues.push("Confirm whether the sanctioned plan has any deviation.");
+    if (state.details.noDeviation === "no" && !String(state.details.deviationRemarks || "").trim()) issues.push("Describe the observed plan deviation.");
+    const derived = computedReportType();
+    if (requestedReportType() === "completion" && derived !== "completion") issues.push("A Completion report requires 100% completion and zero balance work for every component.");
+    if (requestedReportType() === "progress" && derived === "completion") issues.push("All components are complete. Create this assignment as a Completion report.");
+    return issues;
+  }
+
+  function payload() {
+    const linked = selectedTask();
+    const summary = linkedSummary() || {};
+    return {
+      requestedReportType: requestedReportType(),
+      institution: { code: linked?.institutionCode || "", name: linked?.institutionName || "", branch: linked?.branch || "" },
+      linkedEstimation: {
+        taskId: linked?.id || "", applicantName: summary.applicantName || linked?.customerName || "", applicantAddress: summary.applicantAddress || "",
+        projectLocation: summary.projectLocation || linked?.propertyBrief || "", workDescription: summary.workDescription || "",
+      },
+      details: { ...state.details, materialsAtSite: numeric(state.details.materialsAtSite) },
+      components: state.components.map((component) => { const current = calculation(component); return { id: component.id, label: component.label, estimatedCost: current.estimated, completionPercent: current.percent, completedCost: current.completed }; }),
+      bank: clone(state.bank),
+      photos: state.photos.map(({ name, data }) => ({ name, data })),
+    };
+  }
+
+  async function requestReport(mode) {
+    const issues = validate();
+    element("validation-message").hidden = !issues.length;
+    element("validation-message").innerHTML = issues.length ? `<strong>Complete these items first</strong><ul>${issues.map((issue) => `<li>${escape(issue)}</li>`).join("")}</ul>` : "";
+    if (issues.length) { showSection(sections().indexOf("photos"), true); return; }
+    element("processing").hidden = false;
+    element("processing-title").textContent = mode === "preview" ? "Rendering report preview" : "Generating Word report";
+    element("processing-stage").textContent = "Building the certificate, calculations and photo pages…";
+    try {
+      const response = await fetch(`/api/progress/${mode}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload()) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "The report could not be generated.");
+      if (mode === "preview") {
+        element("preview-frame").src = result.preview;
+        element("preview-modal").hidden = false;
+        element("status").textContent = "Preview ready";
+      } else {
+        const link = document.createElement("a");
+        link.href = result.download;
+        link.download = result.filename || "Progress_Completion_Report.docx";
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: "docx", download: result.download, filename: result.filename, progressSummary: result.summary } }));
+        element("status").textContent = "DOCX generated";
+      }
+    } catch (error) {
+      window.alert(error.message || "The report could not be generated.");
+      element("status").textContent = "Report generation failed";
+    } finally { element("processing").hidden = true; }
+  }
+
+  function fileToData(file) {
+    return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve({ name: file.name, data: reader.result, key: `${file.name}-${file.size}-${file.lastModified}` }); reader.onerror = reject; reader.readAsDataURL(file); });
+  }
+
+  function renderPhotos() {
+    element("photo-preview").innerHTML = state.photos.map((photo, index) => `<figure><img src="${escape(photo.data)}" alt="Site photograph ${index + 1}"><button type="button" data-remove-photo="${index}" aria-label="Remove photograph ${index + 1}">×</button></figure>`).join("");
+    document.querySelectorAll("[data-remove-photo]").forEach((button) => button.addEventListener("click", () => { state.photos.splice(Number(button.dataset.removePhoto), 1); renderPhotos(); }));
+  }
+
+  function wire() {
+    const bindings = {
+      "reference-number": [state.details, "referenceNumber"], "report-date": [state.details, "reportDate"], "visit-date": [state.details, "visitDate"],
+      "official-name": [state.details, "officialName"], "official-designation": [state.details, "officialDesignation"], "report-place": [state.details, "place"],
+      "materials-at-site": [state.details, "materialsAtSite"], "deviation-remarks": [state.details, "deviationRemarks"],
+      "loan-account": [state.bank, "accountNumber"], "limit-sanctioned": [state.bank, "limitSanctioned"], "balance-as-on": [state.bank, "balanceAsOn"],
+      "balance-outstanding": [state.bank, "balanceOutstanding"], "margin-percent": [state.bank, "marginPercent"], "bank-page-date": [state.bank, "date"],
+    };
+    Object.entries(bindings).forEach(([id, [owner, key]]) => element(id).addEventListener("input", (event) => { owner[key] = event.target.value; if (["materials-at-site", "margin-percent"].includes(id)) { renderComponents(); renderBankCalculations(); } scheduleSave(); }));
+    document.querySelectorAll('input[name="no-deviation"]').forEach((input) => input.addEventListener("change", () => { state.details.noDeviation = input.value; element("deviation-wrap").hidden = input.value !== "no"; scheduleSave(); }));
+    element("component-rows").addEventListener("change", (event) => {
+      const percentIndex = event.target.dataset.progressPercent;
+      const completedIndex = event.target.dataset.progressCompleted;
+      if (percentIndex !== undefined) { const component = state.components[Number(percentIndex)]; component.completionPercent = event.target.value; if (!component.manualCompleted) component.completedCost = calculation(component).calculated; }
+      if (completedIndex !== undefined) { const component = state.components[Number(completedIndex)]; component.completedCost = event.target.value; component.manualCompleted = true; }
+      renderComponents(); renderBankCalculations(); scheduleSave();
+    });
+    element("component-rows").addEventListener("click", (event) => { const index = event.target.dataset.resetCompleted; if (index === undefined) return; const component = state.components[Number(index)]; component.manualCompleted = false; component.completedCost = calculation(component).calculated; renderComponents(); renderBankCalculations(); scheduleSave(); });
+    element("add-release").addEventListener("click", () => { state.bank.releases.push({ date: "", amount: "" }); renderReleases(); scheduleSave(); });
+    element("release-rows").addEventListener("input", (event) => { const dateIndex = event.target.dataset.releaseDate; const amountIndex = event.target.dataset.releaseAmount; if (dateIndex !== undefined) state.bank.releases[Number(dateIndex)].date = event.target.value; if (amountIndex !== undefined) state.bank.releases[Number(amountIndex)].amount = event.target.value; renderBankCalculations(); scheduleSave(); });
+    element("release-rows").addEventListener("click", (event) => { const index = event.target.dataset.removeRelease; if (index === undefined) return; state.bank.releases.splice(Number(index), 1); renderReleases(); scheduleSave(); });
+    element("photo-upload").addEventListener("change", async (event) => { const added = await Promise.all([...event.target.files].map(fileToData)); const existing = new Set(state.photos.map((photo) => photo.key)); state.photos.push(...added.filter((photo) => !existing.has(photo.key))); event.target.value = ""; renderPhotos(); });
+    element("previous").addEventListener("click", () => showSection(state.current - 1, true));
+    element("next").addEventListener("click", () => showSection(state.current + 1, true));
+    element("preview-report").addEventListener("click", () => requestReport("preview"));
+    element("generate-docx").addEventListener("click", () => requestReport("generate"));
+    element("close-preview").addEventListener("click", () => { element("preview-modal").hidden = true; });
+    element("preview-modal").addEventListener("click", (event) => { if (event.target === element("preview-modal")) element("preview-modal").hidden = true; });
+    element("discard-draft").addEventListener("click", () => { if (!window.confirm("Discard this progress/completion draft?")) return; localStorage.removeItem(DRAFT_KEY); state.details = {}; state.bank = { releases: [] }; state.photos = []; loadLinkedEstimate(state.linkedEstimationId); element("status").textContent = "Draft discarded"; renderPhotos(); });
+  }
+
+  function initialize() {
+    if (!practice && (!task || !["progress", "completion"].includes(task.reportGroup))) {
+      element("link-error").hidden = false;
+      element("link-error").textContent = "Open this form from a Progress or Completion assignment.";
+      element("generate-docx").disabled = true;
+      element("preview-report").disabled = true;
+    }
+    restoreDraft();
+    element("practice-estimation-wrap").hidden = !practice;
+    element("practice-type-wrap").hidden = !practice;
+    if (practice) {
+      populatePracticeCandidates();
+      element("practice-estimation").addEventListener("change", (event) => loadLinkedEstimate(event.target.value));
+      element("practice-report-type").addEventListener("change", () => { renderComponents(); scheduleSave(); });
+    }
+    if (state.linkedEstimationId && !state.components.length) loadLinkedEstimate(state.linkedEstimationId, true);
+    else render();
+    wire();
+    renderPhotos();
+  }
+
+  initialize();
+})();

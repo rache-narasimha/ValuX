@@ -8,10 +8,15 @@ scripts. Run them directly as shown; they are not collected by a test runner.
 ```sh
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_auth_security
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_database_boundaries
+docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_password_history
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_auth_flow
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_general_generation
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_agricultural_generation
+docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_estimation_generation
+docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_progress_generation
 node valuation_app/tests/test_task_store.js
+node valuation_app/tests/test_workflow_access.js
+node valuation_app/tests/test_frontend_contracts.js
 find valuation_app/frontend/assets/js -type f -name '*.js' -print0 \
   | xargs -0 -n1 node --check
 ```
@@ -19,6 +24,10 @@ find valuation_app/frontend/assets/js -type f -name '*.js' -print0 \
 The authentication flow test is intentionally run inside Docker because it
 uses the internal PostgreSQL and Mailpit services. It creates unique accounts
 and removes them when complete.
+
+When browser execution is available, run `valuation_app/tests/browser_role_smoke.sh`
+after shared-shell, dashboard, permission, or role-specific UI changes. It
+checks both CEO and employee views at desktop and mobile sizes.
 
 ## Rebuild Docker
 
@@ -70,6 +79,10 @@ These directories can be cleared without affecting source code or templates.
 - Change Word placement and formatting in the relevant `resources/*/master_template.docx`.
 - Change calculations or generation rules in `backend/app/valuation/calculations.py` or
   report orchestration in `backend/app/valuation/reports.py`.
+- Change estimation workbook generation in `backend/app/estimation/generator.py` and keep
+  `resources/estimation/estimation_manifest.json` synchronized with the approved masters.
+- Change linked Progress/Completion DOCX generation in `backend/app/progress/generator.py`
+  and verify both Karnataka Bank and non-Karnataka Bank variants.
 - Change shared browser state or utilities under `frontend/assets/js/core/`.
 - Change reusable UI behavior under `frontend/assets/js/components/`.
 - Change page-specific behavior under `frontend/assets/js/pages/`.

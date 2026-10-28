@@ -89,8 +89,11 @@
     if (current.status === "On Hold") return "Resume work before marking this task Completed.";
     if (current.status !== "In Progress") return `A ${current.status} task cannot be marked Completed.`;
     if (!current.reportGeneratedAt) return "Generate the report successfully before marking this task Completed.";
-    if (current.reopenedAt && (!current.latestDocx || new Date(current.latestDocx.generatedAt) < new Date(current.reopenedAt))) {
-      return "Generate a new DOCX after reopening before marking this task Completed.";
+    if (current.reportGroup === "estimation" && !TaskStore.hasFreshRequiredArtifact(current)) {
+      return "Generate or attach the completed Excel report before marking this task Completed.";
+    }
+    if (current.reopenedAt && !TaskStore.hasFreshRequiredArtifact(current)) {
+      return `Generate a new ${TaskStore.requiredArtifactLabel(current)} after reopening before marking this task Completed.`;
     }
     if (!WorkflowAccess.can("completeTask", current)) return "Only the assigned employee or CEO can complete this task.";
     return "";
@@ -192,6 +195,9 @@
     TaskStore.markReportGenerated(taskId, event.detail?.format || "report", {
       url: event.detail?.download || "",
       filename: event.detail?.filename || "",
+      source: event.detail?.source || "",
+      estimationSummary: event.detail?.estimationSummary || null,
+      progressSummary: event.detail?.progressSummary || null,
     });
     render();
   });

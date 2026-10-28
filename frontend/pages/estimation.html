@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Detailed Estimation Report</title>
+    <link rel="icon" href="/assets/images/valux-monogram.png" type="image/png" />
+    <link rel="stylesheet" href="/assets/css/styles.css" />
+    <link rel="stylesheet" href="/assets/css/workflow.css" />
+    <link rel="stylesheet" href="/assets/css/estimation.css" />
+    <script src="/assets/js/core/appearance.js"></script>
+    <style>[hidden] { display: none !important; }</style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <div class="report-header-tools"><a class="report-home-logo" href="/" aria-label="Return to work dashboard">SLN</a><button class="appearance-toggle" type="button" data-appearance-toggle></button></div>
+        <h1>Detailed estimation report</h1>
+        <p>Configure the property and enter component-wise measurements.</p>
+      </div>
+      <div id="status" aria-live="polite">Draft</div>
+    </header>
+    <main>
+      <aside><nav id="nav" aria-label="Estimation form sections"></nav></aside>
+      <section class="workspace">
+        <form id="estimation-form">
+          <div class="estimation-utility-bar">
+            <span>Drafts are saved locally for this practice form or assignment.</span>
+            <button type="button" class="secondary" id="discard-draft">Discard draft</button>
+          </div>
+          <div id="sections"></div>
+          <footer>
+            <button type="button" class="secondary" id="previous">Previous</button>
+            <span id="progress"></span>
+            <button type="button" class="secondary" id="next">Next section</button>
+            <button type="button" class="preview-button" id="review-report">Preview report</button>
+            <button type="button" class="secondary" id="download-offline">Download offline workbook</button>
+            <button type="button" class="primary" id="generate-xlsx" disabled>Generate Excel</button>
+          </footer>
+        </form>
+      </section>
+    </main>
+
+    <div class="modal" id="review-modal" hidden>
+      <div class="modal-card estimation-review-modal" role="dialog" aria-modal="true" aria-labelledby="review-title">
+        <div class="modal-head">
+          <div><h2 id="review-title">Estimation report preview</h2><p>Review the configured workbook and entered values before generating the final Excel report.</p></div>
+          <button type="button" class="modal-close" id="close-review" aria-label="Close review">×</button>
+        </div>
+        <div id="review-content"></div>
+      </div>
+    </div>
+
+    <script src="/assets/js/core/app-shell.js"></script>
+    <script src="/assets/js/core/workflow-access.js"></script>
+    <script src="/assets/js/core/task-store.js"></script>
+    <script src="/assets/js/components/workflow-ui.js"></script>
+    <script src="/assets/js/pages/estimation-schema.js"></script>
+    <script src="/assets/js/pages/estimation.js"></script>
+    <script src="/assets/js/components/task-context.js"></script>
+    <script src="/assets/js/components/report-layout.js"></script>
+  </body>
+</html>

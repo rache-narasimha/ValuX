@@ -5,7 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SOFFICE_PATH=/usr/bin/soffice
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libreoffice-writer fonts-dejavu-core fonts-liberation fonts-crosextra-carlito \
+    && apt-get install -y --no-install-recommends libreoffice-writer libreoffice-calc fonts-dejavu-core fonts-liberation fonts-crosextra-carlito \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

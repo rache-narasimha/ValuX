@@ -1,8 +1,15 @@
 # ValuX / SLN Property Reports
 
 ValuX provides the authenticated entry point for the SLN workspace used to
-manage property-report assignments, prepare valuation forms, and generate
-matching DOCX and PDF reports.
+manage property-report assignments, prepare valuation and estimation forms,
+and generate matching DOCX, PDF, and XLSX reports.
+
+## Project instructions
+
+Before changing this repository, read [`AGENTS.md`](AGENTS.md) and
+[`docs/PRODUCT_RULES.md`](docs/PRODUCT_RULES.md). They define the mandatory
+scope controls and approved authentication, role, workflow, payment,
+dashboard, and report-form boundaries for every Codex task in this project.
 
 ## Start the application
 
