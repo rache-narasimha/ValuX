@@ -120,7 +120,7 @@
     document.getElementById("report-history-list").innerHTML = activities.map((event) => `<li><span class="activity-dot activity-${WorkflowUI.escape(event.type)}"></span><div><p>${WorkflowUI.escape(event.text)}</p><small>${WorkflowUI.escape(event.author)} · ${WorkflowUI.date(event.createdAt)}</small></div></li>`).join("");
   }
 
-  function completeTask() {
+  async function completeTask() {
     noteError.hidden = true;
     const completionReason = completionBlockReason(currentTask());
     if (completionReason) {
@@ -132,7 +132,7 @@
       return;
     }
     try {
-      TaskStore.complete(taskId, workNote.value);
+      await TaskStore.complete(taskId, workNote.value);
       window.location.replace("/");
     } catch (error) {
       requestWorkNote(error.message);
@@ -152,11 +152,11 @@
     document.body.classList.add("modal-open");
   });
   holdModal.querySelectorAll("[data-close-report-hold]").forEach((button) => button.addEventListener("click", closeHoldModal));
-  document.getElementById("report-hold-form").addEventListener("submit", (event) => {
+  document.getElementById("report-hold-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const errorOutput = document.getElementById("report-hold-error");
     try {
-      TaskStore.putOnHold(taskId, holdReason.value, document.getElementById("report-hold-note").value);
+      await TaskStore.putOnHold(taskId, holdReason.value, document.getElementById("report-hold-note").value);
       closeHoldModal();
       render();
     } catch (error) {
@@ -164,10 +164,10 @@
       errorOutput.hidden = false;
     }
   });
-  document.getElementById("report-resume").addEventListener("click", () => {
+  document.getElementById("report-resume").addEventListener("click", async () => {
     noteError.hidden = true;
     try {
-      TaskStore.resume(taskId);
+      await TaskStore.resume(taskId);
       render();
     } catch (error) { requestWorkNote(error.message); }
   });
@@ -175,11 +175,11 @@
     bottom.scrollIntoView({ behavior: "smooth", block: "start" });
     window.setTimeout(() => workNote.focus(), 350);
   });
-  document.getElementById("report-note-form").addEventListener("submit", (event) => {
+  document.getElementById("report-note-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     noteError.hidden = true;
     try {
-      TaskStore.addNote(taskId, workNote.value);
+      await TaskStore.addNote(taskId, workNote.value);
       workNote.value = "";
     } catch (error) { requestWorkNote(error.message); }
   });
@@ -191,17 +191,29 @@
     event.currentTarget.textContent = history.hidden ? "View history" : "Hide history";
     event.currentTarget.setAttribute("aria-expanded", String(!history.hidden));
   });
-  window.addEventListener("sln:report-generated", (event) => {
-    TaskStore.markReportGenerated(taskId, event.detail?.format || "report", {
-      url: event.detail?.download || "",
-      filename: event.detail?.filename || "",
-      source: event.detail?.source || "",
-      storageId: event.detail?.storageId || "",
-      institutionOffline: event.detail?.institutionOffline === true,
-      estimationSummary: event.detail?.estimationSummary || null,
-      progressSummary: event.detail?.progressSummary || null,
-    });
-    render();
+  window.addEventListener("sln:report-generated", async (event) => {
+    try {
+      if (event.detail?.registered === true) {
+        if (event.detail.task) TaskStore.acceptServerTask(event.detail.task);
+        else await TaskStore.refresh(taskId);
+      } else if (event.detail?.registered === false) {
+        render();
+        return;
+      } else {
+        await TaskStore.markReportGenerated(taskId, event.detail?.format || "report", {
+          url: event.detail?.download || "",
+          filename: event.detail?.filename || "",
+          source: event.detail?.source || "",
+          storageId: event.detail?.storageId || "",
+          institutionOffline: event.detail?.institutionOffline === true,
+          estimationSummary: event.detail?.estimationSummary || null,
+          progressSummary: event.detail?.progressSummary || null,
+        });
+      }
+      render();
+    } catch (error) {
+      requestWorkNote(error.message || "The generated report could not be recorded against this task.");
+    }
   });
   render();
 })();

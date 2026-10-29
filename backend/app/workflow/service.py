@@ -1,0 +1,838 @@
+"""Authoritative workflow rules backed by PostgreSQL."""
+
+from __future__ import annotations
+
+import re
+import uuid
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal, InvalidOperation
+from typing import Any
+
+from psycopg import IntegrityError
+from psycopg.types.json import Jsonb
+
+from ..auth.database import connection
+
+
+STATUSES = ("Unassigned", "In Progress", "On Hold", "Completed", "Closed", "Cancelled")
+HOLD_REASONS = ("Awaiting Documents", "Scheduled Site Visit", "Awaiting Review", "Returned for Correction", "Custom")
+CANCELLATION_REASONS = ("Created by Mistake", "Wrong Details", "Custom")
+REOPEN_WINDOW_DAYS = 7
+PRIORITY_DUE_DAYS = {
+    "Urgent": (0, 1),
+    "High": (1, 2),
+    "Normal": (2, 4),
+}
+REPORTS = {
+    "valuation-general": ("valuation", "VAL", "General Property Valuation"),
+    "valuation-agricultural": ("valuation", "VAL", "Agricultural Land Valuation"),
+    "estimation": ("estimation", "EST", "Detailed Building Estimate"),
+    "progress": ("progress", "PRG", "Construction Progress Report"),
+    "completion": ("completion", "CMP", "Completion Report"),
+}
+
+
+class WorkflowError(Exception):
+    """Controlled business failure suitable for a JSON API response."""
+
+    def __init__(self, message: str, status: int = 400, code: str = "invalid_request"):
+        super().__init__(message)
+        self.status = status
+        self.code = code
+
+
+def _text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _required(value: Any, message: str) -> str:
+    result = _text(value)
+    if not result:
+        raise WorkflowError(message)
+    return result
+
+
+def _date(value: Any, message: str) -> date:
+    try:
+        return date.fromisoformat(_required(value, message))
+    except ValueError as error:
+        raise WorkflowError(message) from error
+
+
+def _money(value: Any) -> Decimal | None:
+    if value is None or _text(value) == "":
+        return None
+    try:
+        amount = Decimal(_text(value).replace(",", ""))
+    except (InvalidOperation, ValueError) as error:
+        raise WorkflowError("Payment amounts must be valid positive numbers or left blank.") from error
+    if not amount.is_finite() or amount < 0:
+        raise WorkflowError("Payment amounts must be valid positive numbers or left blank.")
+    return amount.quantize(Decimal("0.01"))
+
+
+def _bounded_integer(value: Any, default: int, minimum: int, maximum: int, message: str) -> int:
+    try:
+        parsed = int(value if value not in (None, "") else default)
+    except (TypeError, ValueError) as error:
+        raise WorkflowError(message) from error
+    return min(maximum, max(minimum, parsed))
+
+
+def _iso(value: Any) -> str | None:
+    return value.isoformat() if value is not None else None
+
+
+def _number(value: Decimal | None) -> float | None:
+    return float(value) if value is not None else None
+
+
+def _actor(session: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": session["user_id"],
+        "name": session["display_name"],
+        "role": session["role"],
+        "login": session["login_id"],
+    }
+
+
+def _identity(value: Any) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^A-Z0-9]+", " ", _text(value).upper())).strip()
+
+
+def _customer_token(value: Any) -> str:
+    ignored = {"MR", "MRS", "SMT", "SHRI", "SRI", "KUMAR", "SO", "DO", "WO"}
+    words = [word for word in re.sub(r"[^A-Z0-9 ]", " ", _text(value).upper()).split() if len(word) >= 3 and word not in ignored]
+    return (words[0] if words else "CUSTOMER")[:12]
+
+
+def _duplicate_key(report_key: str, institution_code: str, assigned_date: date, branch: str, customer: str, property_brief: str) -> str:
+    return "|".join((report_key, institution_code, assigned_date.isoformat(), _identity(branch), _identity(customer), _identity(property_brief)))
+
+
+def _payment_values(row: dict[str, Any]) -> dict[str, Any]:
+    estimated = row.get("estimated_fee")
+    agreed = row.get("agreed_fee")
+    received = row.get("received_amount") or Decimal("0")
+    basis = agreed if agreed is not None else estimated
+    outstanding = max(Decimal("0"), basis - received) if basis is not None else None
+    due = row.get("payment_due_date")
+    overdue = bool(due and due < date.today() and outstanding is not None and outstanding > 0)
+    if basis is None:
+        status = "Not Set"
+    elif outstanding == 0:
+        status = "Received"
+    elif overdue:
+        status = "Overdue"
+    elif received <= 0:
+        status = "Pending"
+    else:
+        status = "Partially Received"
+    standard_maximum = row.get("completed_at").date() + timedelta(days=7) if row.get("completed_at") else None
+    return {
+        "estimated": _number(estimated),
+        "agreed": _number(agreed),
+        "received": _number(received) or 0,
+        "dueDate": _iso(due),
+        "status": status,
+        "basis": _number(basis),
+        "basisSource": "Agreed fee" if agreed is not None else "Estimated fee" if estimated is not None else "",
+        "outstanding": _number(outstanding),
+        "overdue": overdue,
+        "outsideStandard": bool(due and standard_maximum and due > standard_maximum),
+        "updatedAt": _iso(row.get("payment_updated_at")),
+        "version": row.get("payment_version") or 1,
+    }
+
+
+def _task_payload(row: dict[str, Any], activities: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    group, _code, label = REPORTS[row["report_key"]]
+    payment = _payment_values(row)
+    task = {
+        "internalId": str(row["id"]),
+        "id": row["task_code"],
+        "version": row["version"],
+        "reportKey": row["report_key"],
+        "reportGroup": group,
+        "reportLabel": label,
+        "reportName": f'{row["customer_name"]} – {label}',
+        "institutionId": str(row["institution_id"]),
+        "institutionType": row["institution_type_snapshot"],
+        "institutionCode": row["institution_code_snapshot"],
+        "institutionName": row["institution_name_snapshot"],
+        "branch": row["branch"],
+        "customerName": row["customer_name"],
+        "propertyBrief": row["property_brief"],
+        "assigneeId": str(row["assignee_user_id"]) if row.get("assignee_user_id") else "",
+        "assignee": row.get("assignee_name_snapshot") or "",
+        "priority": row["priority"],
+        "status": row["status"],
+        "holdReason": row.get("hold_reason") or "",
+        "cancellationReason": row.get("cancellation_reason") or "",
+        "assignedDate": _iso(row["assigned_date"]),
+        "dueDate": _iso(row["due_date"]),
+        "linkedEstimationId": row.get("linked_estimation_task_code") or "",
+        "linkedEstimationInternalId": str(row["linked_estimation_task_id"]) if row.get("linked_estimation_task_id") else "",
+        "reportGeneratedAt": _iso(row.get("report_generated_at")),
+        "completedAt": _iso(row.get("completed_at")),
+        "closedAt": _iso(row.get("closed_at")),
+        "reopenedAt": _iso(row.get("reopened_at")),
+        "completionLockedAt": _iso(row.get("completion_blocked_at")),
+        "createdAt": _iso(row["created_at"]),
+        "updatedAt": _iso(row["updated_at"]),
+        "payment": payment,
+        "latestDocx": None,
+        "finalDocx": None,
+        "latestXlsx": None,
+        "finalXlsx": None,
+        "latestInstitutionArtifact": None,
+        "finalInstitutionArtifact": None,
+        "estimationSummary": _snapshot_payload(row),
+        "linkedEstimationSnapshotId": str(row["snapshot_id"]) if row.get("snapshot_id") else "",
+        "progressSummary": (row.get("latest_revision_payload") or {}).get("summary"),
+        "activity": activities or [],
+    }
+    latest = _artifact_payload(row, "latest")
+    final = _artifact_payload(row, "final")
+    if latest:
+        if row.get("latest_artifact_type") in {"valuation_docx", "progress_docx", "completion_docx"}:
+            task["latestDocx"] = latest
+        elif row.get("latest_artifact_type") in {"estimation_xlsx", "kvb_xlsx"}:
+            task["latestXlsx"] = latest
+        else:
+            task["latestInstitutionArtifact"] = latest
+    if final:
+        if row.get("final_artifact_type") in {"valuation_docx", "progress_docx", "completion_docx"}:
+            task["finalDocx"] = final
+        elif row.get("final_artifact_type") in {"estimation_xlsx", "kvb_xlsx"}:
+            task["finalXlsx"] = final
+        else:
+            task["finalInstitutionArtifact"] = final
+    return task
+
+
+def _artifact_payload(row: dict[str, Any], prefix: str) -> dict[str, Any] | None:
+    artifact_id = row.get(f"{prefix}_artifact_id")
+    if not artifact_id:
+        return None
+    source = row.get(f"{prefix}_artifact_source") or "generated"
+    artifact_type = row.get(f"{prefix}_artifact_type") or ""
+    if source == "uploaded":
+        label = "Uploaded Excel" if artifact_type in {"estimation_xlsx", "kvb_xlsx"} else "Attached valuation report"
+    else:
+        label = "Generated Excel" if artifact_type == "estimation_xlsx" else "Generated report"
+    return {
+        "id": str(artifact_id),
+        "url": f'/api/tasks/{row["task_code"]}/artifacts/{artifact_id}/download',
+        "filename": row.get(f"{prefix}_file_name") or "Report file",
+        "generatedAt": _iso(row.get(f"{prefix}_artifact_created_at")),
+        "source": label,
+        "storageId": str(artifact_id),
+        "size": row.get(f"{prefix}_file_size"),
+    }
+
+
+def _snapshot_payload(row: dict[str, Any]) -> dict[str, Any] | None:
+    if not row.get("snapshot_id"):
+        return None
+    components = row.get("snapshot_items") or []
+    return {
+        "snapshotId": str(row["snapshot_id"]),
+        "version": 1,
+        "applicantName": row.get("snapshot_applicant_name") or "",
+        "applicantAddress": row.get("snapshot_applicant_address") or "",
+        "projectLocation": row.get("snapshot_project_location") or "",
+        "workDescription": row.get("snapshot_work_description") or "",
+        "propertyType": row.get("snapshot_property_type") or "",
+        "propertyTypeLabel": row.get("snapshot_property_type") or "",
+        "construction": row.get("snapshot_construction_type") or "",
+        "subtype": row.get("snapshot_property_subtype") or "",
+        "components": [
+            {
+                "id": item.get("sourceId") or item["itemKey"],
+                "label": item["label"],
+                "estimatedCost": float(item["estimatedCost"]),
+                "source": item["source"],
+            }
+            for item in components
+        ],
+        "totalEstimatedCost": float(row.get("snapshot_total_estimated_cost") or 0),
+    }
+
+
+TASK_SELECT = """
+    SELECT t.*, linked.task_code AS linked_estimation_task_code,
+           p.estimated_fee, p.agreed_fee, p.received_amount,
+           p.due_date AS payment_due_date, p.updated_at AS payment_updated_at,
+           p.version AS payment_version,
+           la.id AS latest_artifact_id, la.artifact_type AS latest_artifact_type,
+           la.artifact_source AS latest_artifact_source,
+           la.created_at AS latest_artifact_created_at,
+           lf.original_filename AS latest_file_name, lf.size_bytes AS latest_file_size,
+           lr.payload AS latest_revision_payload,
+           fa.id AS final_artifact_id, fa.artifact_type AS final_artifact_type,
+           fa.artifact_source AS final_artifact_source,
+           fa.created_at AS final_artifact_created_at,
+           ff.original_filename AS final_file_name, ff.size_bytes AS final_file_size,
+           selected_snapshot.id AS snapshot_id,
+           selected_snapshot.applicant_name AS snapshot_applicant_name,
+           selected_snapshot.applicant_address AS snapshot_applicant_address,
+           selected_snapshot.project_location AS snapshot_project_location,
+           selected_snapshot.work_description AS snapshot_work_description,
+           selected_snapshot.property_type AS snapshot_property_type,
+           selected_snapshot.construction_type AS snapshot_construction_type,
+           selected_snapshot.property_subtype AS snapshot_property_subtype,
+           selected_snapshot.total_estimated_cost AS snapshot_total_estimated_cost,
+           snapshot_rows.items AS snapshot_items
+    FROM app.tasks t
+    LEFT JOIN app.tasks linked ON linked.id = t.linked_estimation_task_id
+    LEFT JOIN app.task_payments p ON p.task_id = t.id
+    LEFT JOIN app.task_artifacts la ON la.id = t.latest_artifact_id
+    LEFT JOIN app.stored_files lf ON lf.id = la.stored_file_id AND lf.removed_at IS NULL
+    LEFT JOIN app.report_revisions lr ON lr.id = la.report_revision_id
+    LEFT JOIN app.task_artifacts fa ON fa.id = t.final_artifact_id
+    LEFT JOIN app.stored_files ff ON ff.id = fa.stored_file_id AND ff.removed_at IS NULL
+    LEFT JOIN LATERAL (
+        SELECT s.*
+        FROM app.estimation_snapshots s
+        WHERE s.id = t.linked_estimation_snapshot_id
+           OR (t.report_group = 'estimation' AND s.estimation_task_id = t.id)
+        ORDER BY (s.id = t.linked_estimation_snapshot_id) DESC, s.snapshot_number DESC
+        LIMIT 1
+    ) selected_snapshot ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT COALESCE(
+            jsonb_agg(jsonb_build_object(
+                'itemKey', i.item_key,
+                'sourceId', i.details ->> 'sourceId',
+                'label', i.label,
+                'source', i.source_type,
+                'estimatedCost', i.estimated_cost
+            ) ORDER BY i.display_order),
+            '[]'::jsonb
+        ) AS items
+        FROM app.estimation_snapshot_items i
+        WHERE i.snapshot_id = selected_snapshot.id
+    ) snapshot_rows ON TRUE
+"""
+
+
+def _activity_payload(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(row["id"]),
+        "type": row["event_type"],
+        "author": row["actor_name_snapshot"],
+        "text": row["message"],
+        "details": row["details"],
+        "createdAt": _iso(row["created_at"]),
+    }
+
+
+def _activities(database, task_id: uuid.UUID) -> list[dict[str, Any]]:
+    rows = database.execute(
+        "SELECT * FROM app.task_activities WHERE task_id = %s ORDER BY created_at ASC, id ASC",
+        (task_id,),
+    ).fetchall()
+    return [_activity_payload(row) for row in rows]
+
+
+def _activity(database, task_id: uuid.UUID, actor: dict[str, Any], event_type: str, message: str, details: dict[str, Any] | None = None) -> None:
+    database.execute(
+        """
+        INSERT INTO app.task_activities
+            (id, task_id, event_type, actor_user_id, actor_name_snapshot, message, details)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """,
+        (uuid.uuid4(), task_id, event_type, actor["id"], actor["name"], message, Jsonb(details or {})),
+    )
+
+
+def _task_row(database, task_code: str, lock: bool = False) -> dict[str, Any]:
+    suffix = " FOR UPDATE OF t" if lock else ""
+    row = database.execute(f"{TASK_SELECT} WHERE t.task_code = %s{suffix}", (task_code,)).fetchone()
+    if not row:
+        raise WorkflowError("Task not found.", 404, "not_found")
+    return row
+
+
+def _check_version(row: dict[str, Any], supplied: Any) -> None:
+    try:
+        version = int(supplied)
+    except (TypeError, ValueError) as error:
+        raise WorkflowError("Refresh the task before making this change.", 409, "version_required") from error
+    if version != row["version"]:
+        raise WorkflowError("This task changed in another session. Refresh it before trying again.", 409, "version_conflict")
+
+
+def _can_change(actor: dict[str, Any], row: dict[str, Any]) -> bool:
+    return actor["role"] == "father" or row.get("assignee_user_id") == actor["id"]
+
+
+def _update_task(database, task_id: uuid.UUID, assignments: str, values: tuple[Any, ...]) -> None:
+    database.execute(
+        f"UPDATE app.tasks SET {assignments}, version = version + 1, updated_at = NOW() WHERE id = %s",
+        (*values, task_id),
+    )
+
+
+def employees() -> list[dict[str, Any]]:
+    with connection() as database:
+        rows = database.execute(
+            "SELECT id, user_id, display_name, role FROM auth.users WHERE status = 'active' ORDER BY CASE role WHEN 'father' THEN 0 ELSE 1 END, display_name"
+        ).fetchall()
+    return [{"id": row["user_id"], "databaseId": str(row["id"]), "name": row["display_name"], "role": row["role"]} for row in rows]
+
+
+def get_task(task_code: str) -> dict[str, Any]:
+    with connection() as database:
+        row = _task_row(database, task_code)
+        return _task_payload(row, _activities(database, row["id"]))
+
+
+def list_tasks(options: dict[str, Any]) -> dict[str, Any]:
+    limit = _bounded_integer(options.get("limit"), 20, 1, 100, "Use a valid task page size.")
+    offset = _bounded_integer(options.get("offset"), 0, 0, 10_000_000, "Use a valid task page offset.")
+    conditions: list[str] = []
+    params: list[Any] = []
+    mappings = {
+        "group": ("t.report_group = %s", options.get("group")),
+        "status": ("t.status = %s", options.get("status")),
+        "assignee": ("t.assignee_name_snapshot = %s", options.get("assignee")),
+        "holdReason": ("t.hold_reason = %s", options.get("holdReason")),
+        "institution": ("t.institution_code_snapshot = %s", options.get("institution")),
+    }
+    for key, (clause, value) in mappings.items():
+        if value and not (key == "group" and value == "all"):
+            conditions.append(clause)
+            params.append(value)
+    payment_case = """CASE
+        WHEN COALESCE(p.agreed_fee, p.estimated_fee) IS NULL THEN 'Not Set'
+        WHEN COALESCE(p.received_amount, 0) >= COALESCE(p.agreed_fee, p.estimated_fee) THEN 'Received'
+        WHEN p.due_date < CURRENT_DATE AND COALESCE(p.received_amount, 0) < COALESCE(p.agreed_fee, p.estimated_fee) THEN 'Overdue'
+        WHEN COALESCE(p.received_amount, 0) = 0 THEN 'Pending'
+        ELSE 'Partially Received' END"""
+    report_label_case = """CASE t.report_key
+        WHEN 'valuation-general' THEN 'General Property Valuation'
+        WHEN 'valuation-agricultural' THEN 'Agricultural Land Valuation'
+        WHEN 'estimation' THEN 'Detailed Building Estimate'
+        WHEN 'progress' THEN 'Construction Progress Report'
+        WHEN 'completion' THEN 'Completion Report'
+        ELSE t.report_key END"""
+    search = _text(options.get("search"))
+    if search:
+        conditions.append(f"CONCAT_WS(' ', t.task_code, t.report_key, t.report_group, ({report_label_case}), t.customer_name, t.property_brief, t.assignee_name_snapshot, t.institution_name_snapshot, t.institution_code_snapshot, t.branch, t.status, t.hold_reason, ({payment_case})) ILIKE %s")
+        params.append(f"%{search}%")
+    period = _text(options.get("period"))
+    if period:
+        reference = _date(options.get("periodReference") or date.today().isoformat(), "Select a valid period date.")
+        if period == "daily":
+            start, end = reference, reference + timedelta(days=1)
+        elif period == "weekly":
+            start, end = reference - timedelta(days=reference.weekday()), reference - timedelta(days=reference.weekday()) + timedelta(days=7)
+        elif period == "yearly":
+            start, end = date(reference.year, 1, 1), date(reference.year + 1, 1, 1)
+        elif period == "monthly":
+            start = date(reference.year, reference.month, 1)
+            end = date(reference.year + (reference.month == 12), 1 if reference.month == 12 else reference.month + 1, 1)
+        else:
+            raise WorkflowError("Select a valid task-list period.")
+        conditions.append("t.assigned_date >= %s AND t.assigned_date < %s")
+        params.extend((start, end))
+    payment_filter = _text(options.get("payment"))
+    if payment_filter:
+        conditions.append(f"({payment_case}) = %s")
+        params.append(payment_filter)
+    where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
+    order = "CASE WHEN t.status = 'On Hold' AND t.hold_reason = 'Awaiting Review' THEN 0 ELSE 1 END, " if options.get("status") == "On Hold" else ""
+    with connection() as database:
+        total = database.execute(f"SELECT COUNT(*) AS count FROM app.tasks t LEFT JOIN app.task_payments p ON p.task_id = t.id{where}", tuple(params)).fetchone()["count"]
+        rows = database.execute(
+            f"{TASK_SELECT}{where} ORDER BY {order}t.updated_at DESC, t.task_code DESC LIMIT %s OFFSET %s",
+            (*params, limit, offset),
+        ).fetchall()
+    return {"total": total, "items": [_task_payload(row) for row in rows], "hasMore": offset + limit < total}
+
+
+def summary(group: str = "all") -> dict[str, int]:
+    params: tuple[Any, ...] = ()
+    where = ""
+    if group and group != "all":
+        where = " WHERE report_group = %s"
+        params = (group,)
+    with connection() as database:
+        rows = database.execute(f"SELECT status, COUNT(*) AS count FROM app.tasks{where} GROUP BY status", params).fetchall()
+        review = database.execute(f"SELECT COUNT(*) AS count FROM app.tasks{where}{' AND' if where else ' WHERE'} status = 'On Hold' AND hold_reason = 'Awaiting Review'", params).fetchone()["count"]
+    counts = {row["status"]: row["count"] for row in rows}
+    return {
+        "total": sum(counts.values()),
+        "unassigned": counts.get("Unassigned", 0),
+        "inProgress": counts.get("In Progress", 0),
+        "onHold": counts.get("On Hold", 0),
+        "awaitingReview": review,
+        "completed": counts.get("Completed", 0),
+        "closed": counts.get("Closed", 0),
+        "cancelled": counts.get("Cancelled", 0),
+    }
+
+
+def create_task(payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+    actor = _actor(session)
+    report_key = _required(payload.get("reportKey"), "Select a supported report type.")
+    if report_key not in REPORTS:
+        raise WorkflowError("Select a supported report type.")
+    report_group, report_code, _label = REPORTS[report_key]
+    institution_code = _required(payload.get("institutionCode"), "Select a valid bank or NBFC.").upper()
+    branch = _required(payload.get("branch"), "Enter the assigning branch.")
+    customer = _required(payload.get("customerName"), "Enter the applicant or customer name.")
+    property_brief = _required(payload.get("propertyBrief"), "Enter the property location or short description.")
+    priority = _required(payload.get("priority"), "Select a valid priority.")
+    if priority not in PRIORITY_DUE_DAYS:
+        raise WorkflowError("Select a valid priority.")
+    assigned_date = _date(payload.get("assignedDate"), "Select a valid assigned date.")
+    due_date = _date(payload.get("dueDate"), "Select a valid due date.")
+    if assigned_date > date.today():
+        raise WorkflowError("Assigned date cannot be later than today.")
+    maximum = assigned_date + timedelta(days=PRIORITY_DUE_DAYS[priority][1])
+    if due_date < assigned_date or due_date > maximum:
+        raise WorkflowError(f"{priority} priority work must be due no later than {maximum.isoformat()}.")
+    assignee_value = _text(payload.get("assignee"))
+    note = _text(payload.get("initialNote"))
+    if actor["role"] == "employee" and not assignee_value:
+        raise WorkflowError("Employees must assign a new task before creating it.", 403, "forbidden")
+    if assignee_value and not note:
+        raise WorkflowError("Add an acknowledgement or routing work note for the assignment.")
+
+    with connection() as database:
+        institution = database.execute("SELECT * FROM app.institutions WHERE code = %s AND active = TRUE FOR SHARE", (institution_code,)).fetchone()
+        if not institution:
+            raise WorkflowError("The selected institution is inactive or no longer available.")
+        assignee = None
+        if assignee_value:
+            assignee = database.execute(
+                "SELECT id, user_id, display_name FROM auth.users WHERE status = 'active' AND (display_name = %s OR user_id = %s)",
+                (assignee_value, assignee_value.lower()),
+            ).fetchone()
+            if not assignee:
+                raise WorkflowError("Select a valid employee.")
+        linked = None
+        linked_snapshot = None
+        linked_code = _text(payload.get("linkedEstimationId"))
+        if report_group in {"progress", "completion"}:
+            if not linked_code:
+                raise WorkflowError("Select a finalized estimation report.")
+            linked = database.execute("SELECT * FROM app.tasks WHERE task_code = %s FOR UPDATE", (linked_code,)).fetchone()
+            if not linked or linked["report_group"] != "estimation" or linked["status"] not in {"Completed", "Closed"} or not linked["report_generated_at"]:
+                raise WorkflowError("Select a finalized estimation report.")
+            if linked["institution_id"] != institution["id"]:
+                raise WorkflowError("The progress/completion institution must match the linked estimation report.")
+            if linked["completion_blocked_at"]:
+                raise WorkflowError("This estimation already has a Completion task that reached Completed and cannot be reused.", 409, "estimation_locked")
+            linked_snapshot = database.execute(
+                "SELECT * FROM app.estimation_snapshots WHERE estimation_task_id = %s ORDER BY snapshot_number DESC LIMIT 1",
+                (linked["id"],),
+            ).fetchone()
+            if not linked_snapshot:
+                raise WorkflowError("Select a finalized estimation report with retained component costs.")
+        duplicate_key = _duplicate_key(report_key, institution_code, assigned_date, branch, customer, property_brief) if report_group in {"valuation", "estimation"} else None
+        base = "-".join((institution_code, _customer_token(customer), report_code, assigned_date.strftime("%d%m%y")))
+        database.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (base,))
+        suffix_count = database.execute(
+            "SELECT COUNT(*) AS count FROM app.tasks WHERE task_code = %s OR LEFT(task_code, LENGTH(%s) + 1) = %s",
+            (base, base, f"{base}-"),
+        ).fetchone()["count"]
+        task_code = base if suffix_count == 0 else f"{base}-{suffix_count + 1:02d}"
+        task_id = uuid.uuid4()
+        status = "In Progress" if assignee else "Unassigned"
+        try:
+            database.execute(
+                """
+                INSERT INTO app.tasks (
+                    id, task_code, report_key, report_group, institution_id,
+                    institution_code_snapshot, institution_name_snapshot, institution_type_snapshot,
+                    branch, customer_name, property_brief, assignee_user_id, assignee_name_snapshot,
+                    created_by_user_id, priority, status, assigned_date, due_date,
+                    linked_estimation_task_id, linked_estimation_snapshot_id,
+                    duplicate_key
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    task_id, task_code, report_key, report_group, institution["id"], institution["code"], institution["name"], institution["institution_type"],
+                    branch, customer, property_brief, assignee["id"] if assignee else None, assignee["display_name"] if assignee else None,
+                    actor["id"], priority, status, assigned_date, due_date,
+                    linked["id"] if linked else None, linked_snapshot["id"] if linked_snapshot else None,
+                    duplicate_key,
+                ),
+            )
+        except IntegrityError as error:
+            if "tasks_active_duplicate_key_unique" in str(error):
+                raise WorkflowError("An active task already represents this assignment. Open the existing task instead of creating a duplicate.", 409, "duplicate") from error
+            if "tasks_active_progress_date_unique" in str(error):
+                raise WorkflowError("A Progress task already exists for this estimation and assigned date.", 409, "duplicate") from error
+            if "tasks_active_completion_unique" in str(error):
+                raise WorkflowError("A Completion task already exists for this estimation.", 409, "duplicate") from error
+            raise
+        database.execute("INSERT INTO app.task_payments (task_id) VALUES (%s)", (task_id,))
+        _activity(database, task_id, actor, "created", f'Assignment created and routed to {assignee["display_name"]}.' if assignee else "Assignment created without an assignee.")
+        if note:
+            _activity(database, task_id, actor, "note", note)
+        row = _task_row(database, task_code)
+        return _task_payload(row, _activities(database, task_id))
+
+
+def _mutate(task_code: str, payload: dict[str, Any], session: dict[str, Any], action) -> dict[str, Any]:
+    actor = _actor(session)
+    with connection() as database:
+        row = _task_row(database, task_code, lock=True)
+        _check_version(row, payload.get("version"))
+        action(database, row, actor, payload)
+        updated = _task_row(database, task_code)
+        return _task_payload(updated, _activities(database, updated["id"]))
+
+
+def add_note(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+    def action(database, row, actor, values):
+        note = _required(values.get("note"), "Enter a work note.")
+        if row["status"] == "Cancelled":
+            raise WorkflowError("Work notes cannot be added to this task.", 409, "invalid_transition")
+        _activity(database, row["id"], actor, "note", note)
+        _update_task(database, row["id"], "status = status", ())
+    return _mutate(task_code, payload, session, action)
+
+
+def assign(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+    def action(database, row, actor, values):
+        target_value = _required(values.get("assignee"), "Select an employee.")
+        note = _required(values.get("note"), "Add a work note for the assignment or transfer.")
+        if row["status"] not in {"Unassigned", "In Progress", "On Hold"}:
+            raise WorkflowError("This task cannot be assigned in its current state.", 409, "invalid_transition")
+        target = database.execute("SELECT id, user_id, display_name FROM auth.users WHERE status = 'active' AND (display_name = %s OR user_id = %s)", (target_value, target_value.lower())).fetchone()
+        if not target:
+            raise WorkflowError("Select a valid employee.")
+        if actor["role"] == "employee" and row.get("assignee_user_id") != actor["id"] and target["id"] != actor["id"]:
+            raise WorkflowError("An employee must assign another employee's task to themselves before editing it.", 403, "forbidden")
+        if row.get("assignee_user_id") == target["id"]:
+            raise WorkflowError("Select a different employee for the transfer.")
+        previous = row.get("assignee_name_snapshot")
+        _update_task(database, row["id"], "assignee_user_id = %s, assignee_name_snapshot = %s, status = 'In Progress', hold_reason = NULL", (target["id"], target["display_name"]))
+        _activity(database, row["id"], actor, "assignment", f"Task transferred from {previous} to {target['display_name']}." if previous else f"Task assigned to {target['display_name']} and started.")
+        _activity(database, row["id"], actor, "note", note)
+    return _mutate(task_code, payload, session, action)
+
+
+def put_on_hold(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+    def action(database, row, actor, values):
+        reason = _required(values.get("reason"), "Select a valid on-hold reason.")
+        note = _required(values.get("note"), "Add a work note for this status change.")
+        if reason not in HOLD_REASONS:
+            raise WorkflowError("Select a valid on-hold reason.")
+        if not _can_change(actor, row):
+            raise WorkflowError("You do not have permission to put this task on hold.", 403, "forbidden")
+        if not row.get("assignee_user_id") or row["status"] not in {"In Progress", "On Hold"}:
+            raise WorkflowError("Only active assigned work can be placed on hold.", 409, "invalid_transition")
+        previous = row.get("hold_reason")
+        _update_task(database, row["id"], "status = 'On Hold', hold_reason = %s", (reason,))
+        _activity(database, row["id"], actor, "status", f"On-hold reason changed from {previous} to {reason}." if previous else f"Task placed on hold: {reason}.")
+        _activity(database, row["id"], actor, "note", note)
+    return _mutate(task_code, payload, session, action)
+
+
+def resume(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+    def action(database, row, actor, values):
+        if not _can_change(actor, row):
+            raise WorkflowError("You do not have permission to resume this task.", 403, "forbidden")
+        if row["status"] != "On Hold":
+            raise WorkflowError("Only an on-hold task can be resumed.", 409, "invalid_transition")
+        reason = row.get("hold_reason")
+        _update_task(database, row["id"], "status = 'In Progress', hold_reason = NULL", ())
+        _activity(database, row["id"], actor, "status", f"Task resumed from On Hold{f' ({reason})' if reason else ''}.")
+        note = _text(values.get("note"))
+        if note:
+            _activity(database, row["id"], actor, "note", note)
+    return _mutate(task_code, payload, session, action)
+
+
+def mark_report_generated(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+    def action(database, row, actor, values):
+        if not _can_change(actor, row) or row["status"] not in {"In Progress", "On Hold"}:
+            raise WorkflowError("This report is not editable by the current user.", 403, "forbidden")
+        if not row.get("latest_artifact_id") or not row.get("report_generated_at"):
+            raise WorkflowError("The generated or attached report file was not retained against this task.", 409, "artifact_missing")
+        _update_task(database, row["id"], "status = status", ())
+    return _mutate(task_code, payload, session, action)
+
+
+def mark_report_removed(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+    def action(database, row, actor, _values):
+        if not _can_change(actor, row) or row["status"] not in {"In Progress", "On Hold"}:
+            raise WorkflowError("This report attachment can be changed only while the task is active.", 403, "forbidden")
+        raise WorkflowError("Remove the retained report through the task artifact endpoint.", 409, "artifact_endpoint_required")
+    return _mutate(task_code, payload, session, action)
+
+
+def complete(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+    def action(database, row, actor, values):
+        note = _required(values.get("note"), "Add a completion work note.")
+        if not _can_change(actor, row):
+            raise WorkflowError("You do not have permission to complete this task.", 403, "forbidden")
+        if row["status"] != "In Progress" or not row.get("report_generated_at") or not row.get("latest_artifact_id"):
+            raise WorkflowError("Generate or attach the report successfully before completing the task.", 409, "invalid_transition")
+        if row.get("reopened_at") and row["report_generated_at"] < row["reopened_at"]:
+            raise WorkflowError("Generate or attach a new report after reopening before completing the task again.", 409, "stale_report")
+        now = datetime.now(UTC)
+        _update_task(database, row["id"], "status = 'Completed', completed_at = %s, closed_at = NULL", (now,))
+        database.execute("UPDATE app.task_payments SET due_date = COALESCE(due_date, %s), version = version + 1, updated_at = NOW() WHERE task_id = %s", (date.today() + timedelta(days=7), row["id"]))
+        if row["report_group"] == "completion":
+            linked = database.execute("SELECT * FROM app.tasks WHERE id = %s FOR UPDATE", (row["linked_estimation_task_id"],)).fetchone()
+            if linked["completion_blocked_at"] and linked["completion_blocked_by_task_id"] != row["id"]:
+                raise WorkflowError("The linked estimation is already permanently blocked by another completed Completion task.", 409, "estimation_locked")
+            database.execute("UPDATE app.tasks SET completion_blocked_at = COALESCE(completion_blocked_at, %s), completion_blocked_by_task_id = COALESCE(completion_blocked_by_task_id, %s), version = version + 1, updated_at = NOW() WHERE id = %s", (now, row["id"], linked["id"]))
+        _activity(database, row["id"], actor, "status", "Task marked Completed after report generation.")
+        _activity(database, row["id"], actor, "note", note)
+    return _mutate(task_code, payload, session, action)
+
+
+def update_payment(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+    def action(database, row, actor, values):
+        if row["status"] in {"Closed", "Cancelled"}:
+            raise WorkflowError(f"Payment cannot be updated for a {row['status'].lower()} task.", 409, "invalid_transition")
+        estimated = _money(values.get("estimated"))
+        agreed = _money(values.get("agreed"))
+        received = _money(values.get("received")) or Decimal("0")
+        basis = agreed if agreed is not None else estimated
+        if basis is not None and received > basis:
+            raise WorkflowError("Amount received cannot exceed the agreed or estimated fee.")
+        due_date = _date(values.get("dueDate"), "Select a valid payment due date.") if _text(values.get("dueDate")) else row.get("payment_due_date")
+        database.execute("UPDATE app.task_payments SET estimated_fee = %s, agreed_fee = %s, received_amount = %s, due_date = %s, updated_by_user_id = %s, version = version + 1, updated_at = NOW() WHERE task_id = %s", (estimated, agreed, received, due_date, actor["id"], row["id"]))
+        _update_task(database, row["id"], "status = status", ())
+        refreshed = _task_row(database, row["task_code"])
+        payment = _payment_values(refreshed)
+        outstanding = "N/A" if payment["outstanding"] is None else f"₹{payment['outstanding']:,.2f}"
+        _activity(database, row["id"], actor, "payment", f"Payment updated: {payment['status']}; outstanding {outstanding}.")
+        note = _text(values.get("note"))
+        if note:
+            _activity(database, row["id"], actor, "note", note)
+    return _mutate(task_code, payload, session, action)
+
+
+def close(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+    def action(database, row, actor, values):
+        payment = _payment_values(row)
+        if row["status"] != "Completed" or payment["status"] != "Received" or payment["outstanding"] != 0:
+            raise WorkflowError("Complete the report and settle the full agreed or estimated fee before closing the request.", 409, "invalid_transition")
+        if not row.get("latest_artifact_id"):
+            raise WorkflowError("The retained final report is missing.", 409, "artifact_missing")
+        _update_task(database, row["id"], "status = 'Closed', closed_at = NOW(), final_artifact_id = latest_artifact_id", ())
+        _activity(database, row["id"], actor, "status", "Request closed after payment settlement.")
+        note = _text(values.get("note"))
+        if note:
+            _activity(database, row["id"], actor, "note", note)
+    return _mutate(task_code, payload, session, action)
+
+
+def cancel(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+    def action(database, row, actor, values):
+        if actor["role"] != "father":
+            raise WorkflowError("Only the CEO can cancel this task.", 403, "forbidden")
+        reason = _required(values.get("reason"), "Select a valid cancellation reason.")
+        note = _text(values.get("note"))
+        if reason not in CANCELLATION_REASONS:
+            raise WorkflowError("Select a valid cancellation reason.")
+        if reason == "Custom" and not note:
+            raise WorkflowError("For Custom, explain the cancellation in the work note.")
+        if row["status"] in {"Closed", "Cancelled"}:
+            raise WorkflowError("This task can no longer be cancelled.", 409, "invalid_transition")
+        _update_task(database, row["id"], "status = 'Cancelled', hold_reason = NULL, cancellation_reason = %s", (reason,))
+        _activity(database, row["id"], actor, "cancelled", f"Task cancelled. Reason: {reason}.")
+        if note:
+            _activity(database, row["id"], actor, "note", note)
+    return _mutate(task_code, payload, session, action)
+
+
+def reopen(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+    def action(database, row, actor, values):
+        if actor["role"] != "father":
+            raise WorkflowError("Only the CEO can reopen a completed or closed task.", 403, "forbidden")
+        note = _required(values.get("note"), "Add a work note explaining why the completed or closed task is being reopened.")
+        if row["status"] not in {"Completed", "Closed"}:
+            raise WorkflowError("Only a completed or closed task can be reopened.", 409, "invalid_transition")
+        reference = row.get("closed_at") or row.get("completed_at")
+        if not reference or date.today() > reference.date() + timedelta(days=REOPEN_WINDOW_DAYS):
+            raise WorkflowError(f"Completed and closed tasks can be reopened only within {REOPEN_WINDOW_DAYS} calendar days of completion or closure.", 409, "reopen_expired")
+        previous = row["status"]
+        if row.get("latest_artifact_id"):
+            database.execute("UPDATE app.task_artifacts SET superseded_at = COALESCE(superseded_at, NOW()) WHERE id = %s", (row["latest_artifact_id"],))
+        _update_task(database, row["id"], "status = 'In Progress', completed_at = NULL, closed_at = NULL, reopened_at = NOW(), report_generated_at = NULL, latest_artifact_id = NULL", ())
+        _activity(database, row["id"], actor, "status", f"{previous} request reopened and returned to In Progress.")
+        _activity(database, row["id"], actor, "note", note)
+    return _mutate(task_code, payload, session, action)
+
+
+def eligible_estimations(
+    report_key: str,
+    assigned_date_value: str,
+    search: str = "",
+    offset: int = 0,
+    limit: int = 20,
+    institution: str = "",
+    status: str = "",
+) -> dict[str, Any]:
+    if report_key not in {"progress", "completion"}:
+        raise WorkflowError("Select Progress or Completion report type.")
+    assigned_date = _date(assigned_date_value, "Select a valid assigned date.")
+    limit = _bounded_integer(limit, 20, 1, 50, "Use a valid estimation page size.")
+    offset = _bounded_integer(offset, 0, 0, 10_000_000, "Use a valid estimation page offset.")
+    conditions = [
+        "t.report_group = 'estimation'", "t.status IN ('Completed', 'Closed')",
+        "t.report_generated_at IS NOT NULL", "t.latest_artifact_id IS NOT NULL",
+        "t.completion_blocked_at IS NULL",
+        "EXISTS (SELECT 1 FROM app.estimation_snapshots s WHERE s.estimation_task_id = t.id)",
+    ]
+    params: list[Any] = []
+    if report_key == "completion":
+        conditions.append("NOT EXISTS (SELECT 1 FROM app.tasks c WHERE c.linked_estimation_task_id = t.id AND c.report_group = 'completion' AND c.status <> 'Cancelled')")
+    else:
+        conditions.append("NOT EXISTS (SELECT 1 FROM app.tasks p WHERE p.linked_estimation_task_id = t.id AND p.report_group = 'progress' AND p.assigned_date = %s AND p.status <> 'Cancelled')")
+        params.append(assigned_date)
+    if _text(search):
+        conditions.append("CONCAT_WS(' ', t.task_code, t.customer_name, t.property_brief, t.institution_code_snapshot, t.institution_name_snapshot, t.branch) ILIKE %s")
+        params.append(f"%{_text(search)}%")
+    if _text(institution):
+        conditions.append("t.institution_code_snapshot = %s")
+        params.append(_text(institution).upper())
+    if _text(status):
+        if _text(status) not in {"Completed", "Closed"}:
+            raise WorkflowError("Select a valid estimation status filter.")
+        conditions.append("t.status = %s")
+        params.append(_text(status))
+    where = " AND ".join(conditions)
+    with connection() as database:
+        total = database.execute(f"SELECT COUNT(*) AS count FROM app.tasks t WHERE {where}", tuple(params)).fetchone()["count"]
+        rows = database.execute(
+            f"""
+            {TASK_SELECT}
+            WHERE {where}
+            ORDER BY t.report_generated_at DESC, t.updated_at DESC
+            LIMIT %s OFFSET %s
+            """,
+            (*params, limit, offset),
+        ).fetchall()
+    return {"total": total, "items": [_task_payload(row) for row in rows], "hasMore": offset + limit < total}
+
+
+def progress_reports_for(estimation_task_code: str) -> list[dict[str, Any]]:
+    """Return retained linked report summaries without loading unrelated tasks."""
+    with connection() as database:
+        estimation = _task_row(database, estimation_task_code)
+        if estimation["report_group"] != "estimation":
+            raise WorkflowError("The linked task is not an estimation report.")
+        rows = database.execute(
+            f"""
+            {TASK_SELECT}
+            WHERE t.linked_estimation_task_id = %s
+              AND t.report_group IN ('progress', 'completion')
+              AND t.latest_artifact_id IS NOT NULL
+            ORDER BY t.report_generated_at ASC, t.updated_at ASC, t.id ASC
+            """,
+            (estimation["id"],),
+        ).fetchall()
+    return [_task_payload(row) for row in rows]

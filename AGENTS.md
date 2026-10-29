@@ -61,8 +61,18 @@ application.
 
 - Permission changes: run `node tests/test_workflow_access.js` and the role UI
   smoke test when browser execution is available.
-- Task lifecycle or payment changes: run `node tests/test_task_store.js` and
+- Task lifecycle or payment changes: run
+  `docker compose exec -T valuation-report python -m tests.test_workflow_service`,
+  `node tests/test_task_store.js`, `node tests/test_task_store_remote.js`, and
   `node tests/test_workflow_access.js`.
+- Institution persistence changes: run
+  `docker compose exec -T valuation-report python -m tests.test_reference_service`.
+- Task-linked report draft, file, artifact or estimation-snapshot changes: run
+  `docker compose exec -T valuation-report python -m tests.test_report_data_service`
+  plus the affected report generator test.
+- Browser business-data cutover or persistence-boundary changes: run
+  `sh tests/development_persistence_smoke.sh` and
+  `sh tests/database_recovery_smoke.sh`.
 - Frontend structure or shared shell changes: run
   `node tests/test_frontend_contracts.js` and syntax-check all frontend
   JavaScript.
@@ -80,9 +90,10 @@ application.
   code.
 - Preserve the dependency-light architecture unless a separate architectural
   change is explicitly approved.
-- Keep authorization decisions centralized in `WorkflowAccess` and lifecycle
-  invariants centralized in `TaskStore`; page controllers must not invent
-  different rules.
+- Keep durable authorization and lifecycle invariants centralized in
+  `backend/app/workflow/service.py`. `WorkflowAccess` and `TaskStore` are
+  frontend policy/transport adapters only; page controllers must not invent
+  different rules or treat browser checks as authority.
 - Keep secrets in ignored environment files. Never print, commit, or expose
   passwords, SMTP credentials, tokens, recovery codes, or encryption keys.
 - Preserve user data and existing changes. Do not use destructive Git or

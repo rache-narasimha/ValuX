@@ -47,6 +47,14 @@
         }
         return selected.name;
       },
+      id() {
+        if (options.includeUnassigned && ["", "unassigned", "leave unassigned"].includes(input.value.trim().toLowerCase())) return "";
+        const selected = resolve(input.value);
+        if (!selected || !allowed.some((employee) => employee.id === selected.id)) {
+          throw new Error("Select a valid employee from the search results.");
+        }
+        return selected.id;
+      },
       setValue(value) {
         const selected = employees().find((employee) => employee.name === value || employee.id === value);
         input.value = display(selected);

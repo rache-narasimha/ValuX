@@ -1,8 +1,7 @@
-/** Browser repository for configurable bank/NBFC records and the legacy institution view. */
+/** Authenticated institution API adapter and compatibility view. */
 (function () {
   "use strict";
 
-  const STORAGE_KEY = "sln.institutions.v2";
   const DEFAULTS = [
     { type: "Bank", code: "APGB", name: "Andhra Pradesh Grameena Bank", color: "#007a3d", active: true },
     { type: "Bank", code: "BOB", name: "Bank of Baroda", color: "#f58220", active: true },
@@ -21,6 +20,8 @@
     { type: "NBFC", code: "TYGER", name: "Tyger Capital", color: "#e57a18", active: true },
     { type: "NBFC", code: "UGRO", name: "UGRO Capital Limited", color: "#652d90", active: true },
   ];
+  const remoteMode = true;
+  let remoteItems = (window.__VALUX_BUSINESS_CONTEXT__?.institutions || []).map(normalize);
 
   function normalize(item) {
     return {
@@ -33,15 +34,7 @@
   }
 
   function load() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-      if (!Array.isArray(saved)) return DEFAULTS.map(normalize);
-      const normalized = saved.map(normalize);
-      const existingCodes = new Set(normalized.map((item) => item.code));
-      return [...normalized, ...DEFAULTS.map(normalize).filter((item) => !existingCodes.has(item.code))];
-    } catch (_error) {
-      return DEFAULTS.map(normalize);
-    }
+    return remoteItems.map(normalize);
   }
 
   function active() { return load().filter((item) => item.active); }
@@ -54,37 +47,38 @@
   }
   function refreshCompatibilityView() { window.INSTITUTIONS = grouped(false); }
   function save(items) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items.map(normalize)));
+    remoteItems = items.map(normalize);
     refreshCompatibilityView();
     window.dispatchEvent(new CustomEvent("sln:institutions-changed"));
   }
   function upsert(value, originalCode = "") {
-    const item = normalize(value);
-    if (!item.code || !item.name) throw new Error("Institution code and name are required.");
-    const items = load();
-    if (items.some((candidate) => candidate.code === item.code && candidate.code !== originalCode)) {
-      throw new Error("That institution code is already in use.");
-    }
-    const index = items.findIndex((candidate) => candidate.code === originalCode || candidate.code === item.code);
-    if (index >= 0) items[index] = item;
-    else items.push(item);
-    save(items);
-    return item;
+    return BusinessApi.post("/api/institutions", { ...value, originalCode }).then((payload) => {
+      const item = normalize(payload.institution);
+      const items = load();
+      const index = items.findIndex((candidate) => candidate.code === originalCode || candidate.code === item.code);
+      if (index >= 0) items[index] = item;
+      else items.push(item);
+      save(items);
+      return item;
+    });
   }
   function setActive(code, enabled) {
-    const items = load();
-    const item = items.find((candidate) => candidate.code === code);
-    if (!item) throw new Error("Institution not found.");
-    item.active = Boolean(enabled);
-    save(items);
-    return item;
+    return BusinessApi.post(`/api/institutions/${encodeURIComponent(code)}/activation`, { active: Boolean(enabled) }).then((payload) => {
+      const item = normalize(payload.institution);
+      const items = load();
+      const index = items.findIndex((candidate) => candidate.code === item.code);
+      if (index >= 0) items[index] = item;
+      save(items);
+      return item;
+    });
   }
   function reset() {
-    localStorage.removeItem(STORAGE_KEY);
-    refreshCompatibilityView();
-    window.dispatchEvent(new CustomEvent("sln:institutions-changed"));
+    return BusinessApi.post("/api/institutions/reset", {}).then((payload) => {
+      save(payload.institutions);
+      return load();
+    });
   }
 
-  window.InstitutionStore = { DEFAULTS, all: load, active, grouped, upsert, setActive, reset };
+  window.InstitutionStore = { DEFAULTS, all: load, active, grouped, upsert, setActive, reset, remoteMode };
   refreshCompatibilityView();
 })();

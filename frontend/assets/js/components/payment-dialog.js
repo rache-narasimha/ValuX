@@ -83,18 +83,18 @@
     element.querySelectorAll("[data-close-shared-payment]").forEach((button) => button.addEventListener("click", close));
     element.addEventListener("click", (event) => { if (event.target === element) close(); });
     ["shared-payment-estimated", "shared-payment-agreed", "shared-payment-received", "shared-payment-due"].forEach((id) => document.getElementById(id).addEventListener("input", refreshSummary));
-    document.getElementById("shared-payment-form").addEventListener("submit", (event) => {
+    document.getElementById("shared-payment-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       try {
-        TaskStore.updatePayment(activeTaskId, values());
+        await TaskStore.updatePayment(activeTaskId, values());
         close();
         notify();
       } catch (error) { showError(error); }
     });
-    document.getElementById("shared-close-request").addEventListener("click", () => {
+    document.getElementById("shared-close-request").addEventListener("click", async () => {
       try {
-        TaskStore.updatePayment(activeTaskId, values());
-        TaskStore.close(activeTaskId, "Payment settled and request closed.");
+        await TaskStore.updatePayment(activeTaskId, values());
+        await TaskStore.close(activeTaskId, "Payment settled and request closed.");
         window.location.replace("/");
       } catch (error) { showError(error); }
     });

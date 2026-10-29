@@ -75,7 +75,8 @@ def _configure_runtime_role(database) -> None:
     )
     database.execute(
         sql.SQL(
-            "GRANT SELECT, INSERT, UPDATE, DELETE ON app.report_drafts TO {}"
+            "GRANT SELECT, INSERT, UPDATE, DELETE ON "
+            "app.report_drafts, app.report_draft_files TO {}"
         ).format(role)
     )
     database.execute(

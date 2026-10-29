@@ -9,6 +9,10 @@ valuation_app/
 │   ├── server.py              # Minimal executable entry point
 │   └── app/
 │       ├── auth/              # Identity, sessions, MFA, policy, email and migrations
+│       ├── persistence/       # Durable app-schema migrations and runtime grants
+│       ├── reference/         # Bank/NBFC directory
+│       ├── reports/           # Task drafts, artifacts, snapshots and local files
+│       ├── workflow/          # Authoritative task lifecycle and payments
 │       ├── valuation/         # Form schemas, calculation, DOCX and media generation
 │       └── web/               # HTTP request handling and static delivery
 ├── frontend/
@@ -67,7 +71,9 @@ valuation_app/
 `backend/app/` is divided into feature packages. `valuation/` owns
 configuration, schemas, calculations, formatting, WordprocessingML
 manipulation, media layout and report orchestration. `web/` owns HTTP routing
-and static delivery.
+and static delivery. `workflow/` owns assignment lifecycle and payment rules,
+`reference/` owns the institution directory, `reports/` owns task-linked draft
+and artifact persistence, and `persistence/` owns versioned `app`-schema DDL.
 
 The backend does not contain editable report-form markup. It reads form
 definitions and Word templates from `resources/`. Authentication is isolated
@@ -84,14 +90,16 @@ database owner.
 - `pages/index.html` and `assets/js/pages/home.js` provide the work dashboard.
 - `pages/new-task.html`, `tasks.html`, and `task.html` implement assignment
   creation, the searchable work queue, and the task workspace.
-- `assets/js/core/task-store.js` is the temporary task repository boundary. It uses
-  browser storage during workflow discovery and is designed to be replaced by
-  the future PostgreSQL API without changing the page controllers. It also
-  owns workflow transitions, payment locking, the seven-day reopen rule and
-  final-DOCX metadata; page controllers do not recreate those rules.
-- `assets/js/core/institutions.js` is a separate temporary repository boundary for
-  bank/NBFC configuration, active state and chart colours. Deactivation keeps
-  historical task labels intact.
+- `assets/js/core/business-api.js` is the authenticated JSON/CSRF transport.
+- `assets/js/core/report-data.js` sends task-linked drafts to the backend while
+  retaining browser-local persistence for practice forms.
+- `assets/js/core/task-store.js` adapts page controllers to the PostgreSQL-backed
+  workflow API and keeps only a page-session cache. Durable workflow rules,
+  payments, duplicate checks and concurrency checks live in
+  `backend/app/workflow/service.py`.
+- `assets/js/core/institutions.js` adapts the durable bank/NBFC directory API.
+  Historical task labels remain immutable snapshots when an institution is
+  renamed or deactivated.
 - `assets/js/core/workflow-access.js` adapts the authenticated server identity and
   centralizes task permissions so role rules are not hard-coded into pages.
 - `assets/js/components/workflow-ui.js` renders shared work-task rows and display values.
@@ -130,6 +138,8 @@ order in each page is therefore part of the runtime contract:
 2. `app-shell.js` builds the shared header and navigation shell.
 3. Repository and access modules (`institutions.js`, `workflow-access.js`, and
    `task-store.js`) publish the data and permission APIs used by page code.
+   Task-linked report pages additionally load `report-data.js` before their page
+   controller.
 4. Shared presentation modules such as `workflow-ui.js`,
    `institution-metrics.js`, `payment-dialog.js`, and `employee-picker.js`
    load before the page controller that consumes them.
@@ -171,9 +181,11 @@ Full server-side session in PostgreSQL
 Existing SLN workspace and report APIs
 ```
 
-Browser workflow records stay local during this phase. The authentication
-database establishes who the user is and which role view applies; it does not
-yet synchronize assignments between browsers.
+PostgreSQL stores authenticated workflow records, institutions, payments,
+task-linked report drafts, report revisions, artifact metadata and immutable
+estimation snapshots. Generated/uploaded bytes and draft media remain in the
+development local filesystem under task-scoped storage keys. Authenticated
+routes resolve those keys without exposing filesystem paths.
 
 ### Tests
 
@@ -183,6 +195,8 @@ Tests load the production backend and production templates directly. Test-genera
 
 ```text
 Browser form
+    ↓ task draft JSON + task-scoped media references
+PostgreSQL/local draft storage (task mode) or browser storage (practice mode)
     ↓ JSON
 POST /api/preview or /api/agricultural/preview
     ↓
@@ -195,6 +209,8 @@ Save a versioned DOCX
 Convert that exact DOCX to the displayed preview PDF
     ↓
 Reuse the same DOCX/PDF when Generate is clicked
+    ↓
+Register revision + required artifact; create estimation snapshot when applicable
 ```
 
 ## Workflow invariants
@@ -202,12 +218,15 @@ Reuse the same DOCX/PDF when Generate is clicked
 - Assigning or transferring a task moves it to **In Progress** and requires a
   work note.
 - **Closed** tasks retain their payment values as read-only data.
-- The CEO may reopen a closed task for seven calendar days. A
+- The CEO may reopen a Completed or Closed task for seven calendar days. A
   reopened task requires a newly generated DOCX before it can be completed
   again.
-- Every generated DOCX receives a unique download path. Closing snapshots the
-  latest successful DOCX as the task's final report; PDF and older DOCX
-  versions are not offered from the closed-task view.
+- Every task-linked generated/uploaded report receives an authenticated artifact
+  URL. Closing pins the latest required artifact as the task's immutable final
+  report. Reopening preserves that final artifact but clears the latest pointer,
+  requiring a fresh generated/uploaded replacement before recompletion.
+- Every completed estimation XLSX creates an immutable component-cost snapshot;
+  Progress/Completion tasks retain the snapshot selected at task creation.
 - Assignment creation, report completion and request closure use history
   replacement so browser Back does not revisit a submitted state.
 

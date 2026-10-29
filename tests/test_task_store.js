@@ -5,213 +5,71 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const values = new Map();
+const source = fs.readFileSync(path.join(__dirname, "..", "frontend", "assets", "js", "core", "task-store.js"), "utf8");
+assert.doesNotMatch(source, /localStorage|sessionStorage/, "TaskStore must not persist business data in browser storage");
+
+const requests = [];
+const task = {
+  id: "CANARA-CUTOVER-VAL-291026", version: 3,
+  reportKey: "valuation-general", reportGroup: "valuation", reportLabel: "General Property Valuation",
+  institutionCode: "CANARA", institutionName: "Canara Bank", institutionType: "Bank",
+  branch: "Adoni", customerName: "Cutover Test", propertyBrief: "Remote workflow adapter",
+  assignee: "K. Sivaprasad", priority: "Normal", status: "Completed",
+  assignedDate: "2026-10-29", dueDate: "2026-10-31", completedAt: "2026-10-29T10:00:00Z",
+  payment: { estimated: 5000, agreed: 4500, received: 1000, dueDate: "2026-10-31" },
+  activity: [], createdAt: "2026-10-29T09:00:00Z", updatedAt: "2026-10-29T10:00:00Z",
+};
 const context = {
-  console, Date, JSON, Math,
+  console, Date, JSON, Math, structuredClone,
   CustomEvent: class CustomEvent {},
-  localStorage: {
-    getItem(key) { return values.has(key) ? values.get(key) : null; },
-    setItem(key, value) { values.set(key, value); },
+  window: {
+    structuredClone,
+    __VALUX_AUTH_CONTEXT__: { user: { role: "father", name: "K. Sivaprasad" } },
+    __VALUX_BUSINESS_CONTEXT__: { task: structuredClone(task), employees: [] },
+    dispatchEvent() {},
+    BusinessApi: {
+      async get(requestPath, values) {
+        requests.push({ method: "GET", path: requestPath, values });
+        if (requestPath === "/api/tasks") return { total: 1, items: [structuredClone(task)], hasMore: false };
+        if (requestPath === "/api/estimations/eligible") return { total: 0, items: [], hasMore: false };
+        if (requestPath.endsWith("/progress-reports")) return { items: [] };
+        return { task: structuredClone(task) };
+      },
+      async post(requestPath, body) {
+        requests.push({ method: "POST", path: requestPath, body });
+        return { task: structuredClone(task) };
+      },
+      async delete(requestPath, body) {
+        requests.push({ method: "DELETE", path: requestPath, body });
+        return { task: structuredClone(task) };
+      },
+    },
   },
-  window: { crypto: {}, dispatchEvent() {} },
 };
 context.window.window = context.window;
-context.window.localStorage = context.localStorage;
 context.window.CustomEvent = context.CustomEvent;
-context.window.WorkflowAccess = {
-  currentRole: () => "father",
-  currentUser: () => ({ name: "K. Sivaprasad" }),
-  visible: () => true,
-  can: () => true,
-};
-context.WorkflowAccess = context.window.WorkflowAccess;
-
-const source = fs.readFileSync(
-  path.join(__dirname, "..", "frontend", "assets", "js", "core", "task-store.js"),
-  "utf8",
-);
+context.BusinessApi = context.window.BusinessApi;
 vm.runInNewContext(source, context);
 const store = context.window.TaskStore;
 
-function input(overrides = {}) {
-  return {
-    institutionType: "Bank", institutionCode: "BOB", institutionName: "Bank of Baroda",
-    branch: "Adoni", customerName: "WiFi Browser Test", propertyBrief: "Compatibility test",
-    reportKey: "valuation-general", assignee: "K. Sivaprasad", priority: "Normal",
-    assignedDate: "2026-10-13", dueDate: "2026-10-15", initialNote: "Acknowledged.", ...overrides,
-  };
-}
-
-const active = store.create(input());
-assert.equal(active.id, "BOB-WIFI-VAL-131026");
-assert.equal(active.status, "In Progress");
-assert.equal(active.activity.length, 2);
-assert.ok(active.activity.every((event) => event.id));
-assert.throws(() => store.create(input()), /already represents this assignment/i);
-const cancelledDuplicate = store.create(input({ customerName: "Cancelled Duplicate", propertyBrief: "Duplicate release test" }));
-store.cancel(cancelledDuplicate.id, "Created by Mistake", "Entered twice.");
-assert.equal(store.create(input({ customerName: "Cancelled Duplicate", propertyBrief: "Duplicate release test" })).status, "In Progress");
-const activePayment = store.updatePayment(active.id, { estimated: 5000, agreed: 4500, received: 1000, note: "Advance received." });
-assert.equal(activePayment.status, "In Progress");
-assert.equal(activePayment.payment.status, "Partially Received");
-assert.equal(store.paymentSummary(activePayment).basis, 4500);
-assert.equal(store.paymentSummary(activePayment).outstanding, 3500);
-
-const unassigned = store.create(input({ customerName: "Unassigned Customer", assignee: "", initialNote: "" }));
-assert.equal(unassigned.status, "Unassigned");
-assert.equal(unassigned.assignee, "");
-assert.equal(store.query({ institution: "BOB", period: "monthly" }).total, 4);
-assert.equal(store.query({ institution: "PNB", period: "monthly" }).total, 0);
-assert.equal(store.matchesPeriod(active, "daily"), false);
-assert.equal(store.matchesPeriod(active, "monthly"), true);
-const estimatedOnly = store.updatePayment(unassigned.id, { estimated: 3000, agreed: "", received: 500, dueDate: "2026-10-20" });
-assert.equal(store.paymentSummary(estimatedOnly).basis, 3000);
-assert.equal(store.paymentSummary(estimatedOnly).outstanding, 2500);
-
-const claimed = store.assign(unassigned.id, "Lavakumar", "Acknowledged by employee.");
-assert.equal(claimed.status, "In Progress");
-assert.equal(claimed.assignee, "Lavakumar");
-
-const held = store.putOnHold(active.id, "Awaiting Review", "Please review the generated values.");
-assert.equal(held.status, "On Hold");
-assert.equal(held.holdReason, "Awaiting Review");
-assert.equal(store.summary().awaitingReview, 1);
-
-const activityBeforeResume = held.activity.length;
-const resumed = store.resume(active.id);
-assert.equal(resumed.status, "In Progress");
-assert.equal(resumed.holdReason, "");
-assert.equal(resumed.activity.length, activityBeforeResume + 1);
-
-store.markReportGenerated(active.id, "docx", { url: "/downloads/valuation-report-1.docx", filename: "valuation-report-1.docx" });
-const completed = store.complete(active.id, "Report issued.");
-assert.equal(completed.status, "Completed");
-assert.equal(store.canReopen(completed), true);
-assert.equal(store.canReopen(completed, new Date(new Date(completed.completedAt).getTime() + 8 * 24 * 60 * 60 * 1000)), false);
-const reopenedCompleted = store.reopen(active.id, "A correction is required before closure.");
-assert.equal(reopenedCompleted.status, "In Progress");
-assert.equal(reopenedCompleted.completedAt, null);
-store.markReportGenerated(active.id, "docx", { url: "/downloads/valuation-report-1-corrected.docx", filename: "valuation-report-1-corrected.docx" });
-assert.equal(store.complete(active.id, "Corrected report issued.").status, "Completed");
-const paid = store.updatePayment(active.id, { estimated: 5000, agreed: 4500, received: 4500, note: "Received." });
-assert.equal(paid.payment.status, "Received");
-assert.ok(paid.payment.updatedAt);
-const closed = store.close(active.id, "Request closed.");
-assert.equal(closed.status, "Closed");
-assert.equal(closed.finalDocx.url, "/downloads/valuation-report-1-corrected.docx");
-assert.throws(() => store.updatePayment(active.id, { agreed: 4500, received: 4500 }), /closed task/i);
-assert.equal(store.canReopen(closed), true);
-assert.equal(store.canReopen(closed, new Date(new Date(closed.closedAt).getTime() + 8 * 24 * 60 * 60 * 1000)), false);
-const reopened = store.reopen(active.id, "A correction is required.");
-assert.equal(reopened.status, "In Progress");
-assert.equal(reopened.reportGeneratedAt, null);
-store.markReportGenerated(active.id, "pdf");
-assert.throws(() => store.complete(active.id, "Correction completed."), /new DOCX/i);
-store.markReportGenerated(active.id, "docx", { url: "/downloads/valuation-report-2.docx" });
-assert.equal(store.complete(active.id, "Corrected report completed.").status, "Completed");
-
-const kvb = store.create(input({
-  customerName: "KVB Offline Customer", institutionCode: "KVB", institutionName: "Karur Vysya Bank",
-  propertyBrief: "KVB offline valuation", assignedDate: "2026-10-14", dueDate: "2026-10-16",
-}));
-store.markReportGenerated(kvb.id, "xlsx", {
-  url: "/downloads/kvb-valuation-upload-1.xlsx", filename: "completed-kvb.xlsx",
-  source: "Uploaded KVB Excel", institutionOffline: true, storageId: "kvb-valuation-upload-1.xlsx",
+(async () => {
+  assert.equal(store.remoteMode, true);
+  assert.equal(store.storageStatus().ok, true);
+  assert.equal(store.get(task.id).id, task.id);
+  assert.deepEqual(JSON.parse(JSON.stringify(store.dueDateRange("Normal", "2026-10-29"))), { suggested: "2026-10-31", maximum: "2026-11-02" });
+  assert.equal(store.paymentSummary(task).basis, 4500);
+  assert.equal(store.paymentSummary(task).outstanding, 3500);
+  assert.equal(store.canReopen(task, new Date("2026-11-05T12:00:00Z")), true);
+  assert.equal(store.canReopen(task, new Date("2026-11-06T12:00:00Z")), false);
+  const page = await store.fetchTasks({ offset: 0, limit: 20 });
+  assert.equal(page.total, 1);
+  await store.progressReportsFor("CANARA-EST-291026");
+  await store.removeInstitutionArtifact(task.id);
+  assert.ok(requests.some((entry) => entry.path === "/api/tasks"));
+  assert.ok(requests.some((entry) => entry.path === "/api/estimations/CANARA-EST-291026/progress-reports"));
+  assert.ok(requests.some((entry) => entry.method === "DELETE" && entry.path.endsWith("/artifacts/latest")));
+  console.log("PASS: TaskStore is a remote-only workflow adapter with page-session caching");
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
 });
-assert.equal(store.requiredArtifactLabel(store.get(kvb.id)), "completed KVB Excel report");
-assert.equal(store.removeInstitutionArtifact(kvb.id).reportGeneratedAt, null);
-assert.equal(store.latestArtifact(store.get(kvb.id)), null);
-store.markReportGenerated(kvb.id, "xlsx", {
-  url: "/downloads/kvb-valuation-upload-2.xlsx", filename: "completed-kvb-replacement.xlsx",
-  source: "Uploaded KVB Excel", institutionOffline: true, storageId: "kvb-valuation-upload-2.xlsx",
-});
-assert.equal(store.complete(kvb.id, "KVB workbook attached.").status, "Completed");
-store.updatePayment(kvb.id, { estimated: 3000, agreed: 3000, received: 3000 });
-assert.equal(store.close(kvb.id, "KVB valuation closed.").finalXlsx.filename, "completed-kvb-replacement.xlsx");
-
-const karnataka = store.create(input({
-  customerName: "Karnataka Offline Customer", institutionCode: "KB", institutionName: "Karnataka Bank",
-  propertyBrief: "Valocity valuation", assignedDate: "2026-10-15", dueDate: "2026-10-17",
-}));
-store.markReportGenerated(karnataka.id, "pdf", {
-  url: "/downloads/karnataka-valuation-upload-1.pdf", filename: "valocity-report.pdf",
-  source: "Attached Valocity report", institutionOffline: true,
-});
-assert.equal(store.requiredArtifactLabel(store.get(karnataka.id)), "completed Valocity DOCX or PDF report");
-assert.equal(store.complete(karnataka.id, "Valocity report attached.").status, "Completed");
-store.updatePayment(karnataka.id, { estimated: 3000, agreed: 3000, received: 3000 });
-assert.equal(store.close(karnataka.id, "Karnataka valuation closed.").finalInstitutionArtifact.filename, "valocity-report.pdf");
-
-const estimation = store.create(input({
-  customerName: "Estimation Customer", reportKey: "estimation", propertyBrief: "Commercial estimate",
-}));
-assert.equal(store.REPORTS.estimation.route, "/estimation");
-assert.throws(() => store.complete(estimation.id, "Estimate completed."), /Generate the report/i);
-store.markReportGenerated(estimation.id, "xlsx", {
-  url: "/downloads/estimation-report-1.xlsx", filename: "estimate.xlsx", source: "Generated Excel",
-  estimationSummary: { applicantName: "Estimation Customer", components: [{ id: "gf", label: "Ground Floor", estimatedCost: 1000000 }], totalEstimatedCost: 1000000 },
-});
-assert.equal(store.complete(estimation.id, "Estimate completed.").status, "Completed");
-store.updatePayment(estimation.id, { estimated: 3000, agreed: 3000, received: 3000 });
-const closedEstimation = store.close(estimation.id, "Estimate issued.");
-assert.equal(closedEstimation.finalXlsx.url, "/downloads/estimation-report-1.xlsx");
-assert.equal(store.finalArtifact(closedEstimation).filename, "estimate.xlsx");
-store.reopen(estimation.id, "Estimate correction required.");
-assert.throws(() => store.complete(estimation.id, "Correction completed."), /Generate the report/i);
-store.markReportGenerated(estimation.id, "xlsx", {
-  url: "/downloads/estimation-upload-2.xlsx", filename: "corrected-estimate.xlsx", source: "Uploaded Excel",
-});
-assert.equal(store.complete(estimation.id, "Corrected estimate completed.").status, "Completed");
-
-assert.equal(store.estimationCandidates()[0].id, estimation.id);
-assert.throws(() => store.create(input({ customerName: "Unlinked Progress", reportKey: "progress" })), /finalized estimation report/i);
-const progress = store.create(input({
-  customerName: "Estimation Customer", reportKey: "progress", propertyBrief: "Commercial estimate",
-  linkedEstimationId: estimation.id,
-}));
-assert.equal(store.REPORTS.progress.route, "/progress-completion");
-assert.equal(progress.linkedEstimationId, estimation.id);
-assert.throws(() => store.create(input({
-  customerName: "Estimation Customer", reportKey: "progress", propertyBrief: "Commercial estimate",
-  linkedEstimationId: estimation.id,
-})), /Progress task .* already exists/i);
-const laterProgress = store.create(input({
-  customerName: "Estimation Customer", reportKey: "progress", propertyBrief: "Commercial estimate",
-  linkedEstimationId: estimation.id, assignedDate: "2026-10-14", dueDate: "2026-10-16",
-}));
-assert.equal(laterProgress.reportGroup, "progress");
-store.markReportGenerated(progress.id, "docx", {
-  url: "/downloads/progress-report.docx", filename: "progress.docx",
-  progressSummary: { linkedEstimationId: estimation.id, reportType: "progress", reportDate: "2026-10-13", components: [{ label: "Ground Floor", completionPercent: 50 }] },
-});
-assert.equal(store.progressReportsFor(estimation.id)[0].id, progress.id);
-
-const completionTask = store.create(input({
-  customerName: "Estimation Customer", reportKey: "completion", propertyBrief: "Commercial estimate",
-  linkedEstimationId: estimation.id, assignedDate: "2026-10-15", dueDate: "2026-10-17",
-}));
-assert.throws(() => store.create(input({
-  customerName: "Estimation Customer", reportKey: "completion", propertyBrief: "Commercial estimate",
-  linkedEstimationId: estimation.id, assignedDate: "2026-10-16", dueDate: "2026-10-18",
-})), /Completion task .* already exists/i);
-store.markReportGenerated(completionTask.id, "docx", {
-  url: "/downloads/completion-report.docx", filename: "completion.docx",
-  progressSummary: { linkedEstimationId: estimation.id, reportType: "completion", reportDate: "2026-10-15", components: [{ label: "Ground Floor", completionPercent: 100 }] },
-});
-store.complete(completionTask.id, "Completion report issued.");
-store.updatePayment(completionTask.id, { estimated: 3000, agreed: 3000, received: 3000 });
-assert.equal(store.close(completionTask.id, "Completion closed.").status, "Closed");
-assert.equal(store.estimationCandidates().some((candidate) => candidate.id === estimation.id), false);
-assert.equal(store.reopen(completionTask.id, "Completion correction required.").status, "In Progress");
-assert.equal(store.estimationCandidates().some((candidate) => candidate.id === estimation.id), false);
-assert.equal(store.cancel(completionTask.id, "Wrong Details", "Cancelled after reopening for a correction.").status, "Cancelled");
-assert.throws(() => store.create(input({
-  customerName: "Estimation Customer", reportKey: "progress", propertyBrief: "Commercial estimate",
-  linkedEstimationId: estimation.id, assignedDate: "2026-10-17", dueDate: "2026-10-19",
-})), /No further progress or completion task/i);
-
-assert.throws(() => store.cancel(unassigned.id, "Custom", ""), /explain the cancellation/i);
-values.set("sln.workflow.tasks.v1", "{damaged-json");
-assert.equal(store.storageStatus().ok, false);
-assert.throws(() => store.create(input({ customerName: "Protected Data" })), /has not been overwritten/i);
-console.log("PASS: finalized task lifecycle works without secure-context browser APIs");

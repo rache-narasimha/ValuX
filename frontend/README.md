@@ -6,9 +6,11 @@ contract.
 
 ## JavaScript
 
-- `assets/js/core/`: cross-page state and infrastructure. This is where shared
-  repositories, permissions, appearance, the application shell, and base form
-  utilities belong.
+- `assets/js/core/`: cross-page state and infrastructure. This is where API
+  adapters, presentation permissions, appearance, the application shell, and
+  base form utilities belong. `report-data.js` keeps practice drafts local but
+  persists task-linked drafts through authenticated backend routes. Durable
+  workflow and report-data authority remains in the backend.
 - `assets/js/components/`: reusable UI behavior consumed by more than one page,
   such as payment dialogs, employee selection, metrics, and report context.
 - `assets/js/pages/`: one controller per HTML page. Page controllers coordinate

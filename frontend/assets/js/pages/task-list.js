@@ -18,6 +18,8 @@
   let visible = PAGE_SIZE;
   let periodReference = new Date();
   let directoryMode = false;
+  let analyticsLoadPromise = null;
+  let renderSequence = 0;
   const GROUP_LABELS = {
     all: "All work",
     valuation: "Valuation",
@@ -29,7 +31,7 @@
   const storage = TaskStore.storageStatus();
   if (!storage.ok) {
     WorkflowUI.fatal(storage.error);
-    list.innerHTML = WorkflowUI.empty("Tasks cannot be shown until the local data issue is resolved.");
+    list.innerHTML = WorkflowUI.empty("Tasks cannot be shown until the authenticated workflow service is available.");
     loadMore.hidden = true;
     return;
   }
@@ -37,6 +39,8 @@
   // Filter state, query construction, and task-row rendering.
   function populateFilters() {
     TaskStore.STATUSES.forEach((item) => fields.status.add(new Option(item, item)));
+    fields.assignee.innerHTML = '<option value="">Everyone</option>';
+    TaskStore.EMPLOYEES.forEach((employee) => fields.assignee.add(new Option(employee.name, employee.name)));
     Object.entries(window.INSTITUTIONS).forEach(([type, institutions]) => {
       const group = document.createElement("optgroup");
       group.label = type === "Bank" ? "Banks" : "NBFCs";
@@ -79,8 +83,7 @@
     return parts.length ? parts.join(" · ") : "All assignments visible to the signed-in user";
   }
 
-  function taskExportOptions() {
-    const tasks = TaskStore.query(queryOptions(Number.MAX_SAFE_INTEGER)).items;
+  function taskExportOptions(tasks = TaskStore.query(queryOptions(Number.MAX_SAFE_INTEGER)).items) {
     return {
       title: "ValuX assignments",
       subtitle: exportSubtitle(),
@@ -243,8 +246,56 @@
     history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}`);
   }
 
-  function render() {
-    const result = TaskStore.query(queryOptions());
+  function needsFullAnalytics() {
+    return directoryMode || Boolean(selectedInstitution());
+  }
+
+  async function ensureFullAnalytics() {
+    if (!analyticsLoadPromise) {
+      analyticsLoadPromise = TaskStore.loadAll().catch((error) => {
+        analyticsLoadPromise = null;
+        throw error;
+      });
+    }
+    return analyticsLoadPromise;
+  }
+
+  async function resultForCurrentView() {
+    if (needsFullAnalytics()) {
+      await ensureFullAnalytics();
+      return TaskStore.query(queryOptions());
+    }
+    const items = [];
+    let offset = 0;
+    let total = 0;
+    while (items.length < visible) {
+      const page = await TaskStore.fetchTasks({
+        ...queryOptions(Math.min(100, visible - items.length)), offset,
+      });
+      total = page.total;
+      items.push(...page.items);
+      offset += page.items.length;
+      if (!page.hasMore || !page.items.length) break;
+    }
+    return { total, items, hasMore: items.length < total };
+  }
+
+  async function render() {
+    const sequence = ++renderSequence;
+    list.setAttribute("aria-busy", "true");
+    let result;
+    try {
+      result = await resultForCurrentView();
+    } catch (error) {
+      if (sequence !== renderSequence) return;
+      WorkflowUI.fatal(error.message || "Assignments could not be loaded.");
+      list.innerHTML = WorkflowUI.empty("Assignments could not be loaded. Refresh the page and try again.");
+      loadMore.hidden = true;
+      return;
+    } finally {
+      if (sequence === renderSequence) list.removeAttribute("aria-busy");
+    }
+    if (sequence !== renderSequence) return;
     list.innerHTML = renderRows(result.items);
     document.getElementById("result-count").textContent = `${result.total} ${result.total === 1 ? "task" : "tasks"}`;
     loadMore.hidden = !result.hasMore;
@@ -261,14 +312,50 @@
     render();
   }
 
+  async function allFilteredTasks() {
+    const items = [];
+    let offset = 0;
+    let hasMore = true;
+    while (hasMore) {
+      const result = await TaskStore.fetchTasks({ ...queryOptions(100), offset });
+      items.push(...result.items);
+      offset += result.items.length;
+      hasMore = result.hasMore && result.items.length > 0;
+    }
+    return items;
+  }
+
+  async function exportTasks(button) {
+    try {
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+      button.setAttribute("title", "Loading assignments…");
+      const tasks = await allFilteredTasks();
+      await WorkbookExport.fromButton(button, taskExportOptions(tasks));
+    } catch (error) {
+      window.alert(error.message || "The assignments could not be loaded for export.");
+    } finally {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+      button.setAttribute("title", "Export to Excel");
+    }
+  }
+
   populateFilters();
   Object.entries(fields).forEach(([key, field]) => field.addEventListener(key === "search" ? "input" : "change", reset));
   document.getElementById("clear-institution").addEventListener("click", () => { window.location.href = "/tasks?view=institutions"; });
   loadMore.addEventListener("click", () => { visible += PAGE_SIZE; render(); });
-  document.getElementById("export-tasks").addEventListener("click", (event) => WorkbookExport.fromButton(event.currentTarget, taskExportOptions()));
+  document.getElementById("export-tasks").addEventListener("click", (event) => exportTasks(event.currentTarget));
   const institutionExport = document.getElementById("export-institutions");
   institutionExport.hidden = WorkflowAccess.currentRole() !== "father";
-  institutionExport.addEventListener("click", (event) => WorkbookExport.fromButton(event.currentTarget, institutionExportOptions()));
+  institutionExport.addEventListener("click", async (event) => {
+    try {
+      await ensureFullAnalytics();
+      await WorkbookExport.fromButton(event.currentTarget, institutionExportOptions());
+    } catch (error) {
+      window.alert(error.message || "The institution overview could not be loaded for export.");
+    }
+  });
   window.addEventListener("sln:tasks-changed", render);
   window.addEventListener("sln:payment-updated", render);
   render();

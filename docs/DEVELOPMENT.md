@@ -10,6 +10,9 @@ docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m 
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_database_boundaries
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_business_database_foundation
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_business_database_constraints
+docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_workflow_service
+docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_reference_service
+docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_report_data_service
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_password_history
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_auth_flow
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_general_generation
@@ -17,20 +20,33 @@ docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m 
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_estimation_generation
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_progress_generation
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_export_generation
+docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_kvb_template
 node valuation_app/tests/test_task_store.js
+node valuation_app/tests/test_task_store_remote.js
 node valuation_app/tests/test_workflow_access.js
 node valuation_app/tests/test_frontend_contracts.js
 find valuation_app/frontend/assets/js -type f -name '*.js' -print0 \
   | xargs -0 -n1 node --check
+sh valuation_app/tests/development_persistence_smoke.sh
+sh valuation_app/tests/database_recovery_smoke.sh
 ```
 
 The authentication flow test is intentionally run inside Docker because it
 uses the internal PostgreSQL and Mailpit services. It creates unique accounts
 and removes them when complete.
 
+The Phase 4 persistence smoke test creates one uniquely identified task, draft
+and local artifact, restarts PostgreSQL and the application, verifies their
+metadata and bytes, and removes the fixture. The database recovery smoke test
+restores a fresh PostgreSQL backup into an isolated temporary database, checks
+both migration ledgers and core tables, and then drops only that temporary
+database.
+
 When browser execution is available, run `valuation_app/tests/browser_role_smoke.sh`
 after shared-shell, dashboard, permission, or role-specific UI changes. It
-checks both CEO and employee views at desktop and mobile sizes.
+checks both CEO and employee views at desktop and mobile sizes. The script
+creates one uniquely named workflow record and removes that exact record before
+it exits.
 
 ## Rebuild Docker
 
@@ -73,9 +89,12 @@ See `docs/AUTHENTICATION.md` for activation, Gmail and operator recovery.
 ## Generated files
 
 - Application reports: `outputs/generated_reports/`
+- Task-linked draft media and report artifacts: `outputs/generated_reports/task_files/`
 - Automated-test documents: `outputs/test_artifacts/`
 
-These directories can be cleared without affecting source code or templates.
+Test artifacts can be cleared freely. Task-linked files must not be removed
+independently of their PostgreSQL metadata; use the report workflow or a future
+reconciliation/maintenance command.
 
 ## Editing guidance
 

@@ -9,6 +9,7 @@ EXPECTED_APP_TABLES = {
     "estimation_snapshots",
     "institutions",
     "report_drafts",
+    "report_draft_files",
     "report_revisions",
     "schema_migrations",
     "stored_files",
@@ -67,7 +68,8 @@ with connection() as database:
                   'estimation_snapshots_revision_same_task_fkey',
                   'tasks_snapshot_same_estimation_fkey',
                   'tasks_latest_artifact_same_task_fkey',
-                  'tasks_final_artifact_same_task_fkey'
+                  'tasks_final_artifact_same_task_fkey',
+                  'report_draft_files_file_unique'
               )
             """
         )
@@ -78,6 +80,7 @@ with connection() as database:
         "tasks_snapshot_same_estimation_fkey",
         "tasks_latest_artifact_same_task_fkey",
         "tasks_final_artifact_same_task_fkey",
+        "report_draft_files_file_unique",
     }
 
     privileges = database.execute(
@@ -98,6 +101,9 @@ with connection() as database:
                 current_user, 'app.report_drafts', 'DELETE'
             ) AS draft_delete,
             has_table_privilege(
+                current_user, 'app.report_draft_files', 'DELETE'
+            ) AS draft_file_delete,
+            has_table_privilege(
                 current_user, 'app.report_revisions', 'UPDATE'
             ) AS revision_update,
             has_table_privilege(
@@ -114,6 +120,7 @@ with connection() as database:
         "activity_insert": True,
         "activity_update": False,
         "draft_delete": True,
+        "draft_file_delete": True,
         "revision_update": False,
         "migration_read": False,
     }

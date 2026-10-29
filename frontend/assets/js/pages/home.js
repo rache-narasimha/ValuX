@@ -22,7 +22,6 @@
     WorkflowUI.fatal(storage.error);
     return;
   }
-  TaskStore.ensureSamples();
 
   // Shared dashboard data access and rendering helpers.
   function setText(id, value) {
@@ -261,5 +260,5 @@
   document.getElementById("recent-status-filter").addEventListener("change", render);
   window.addEventListener("sln:tasks-changed", render);
   window.addEventListener("sln:payment-updated", render);
-  render();
+  TaskStore.loadAll().then(render).catch((error) => WorkflowUI.fatal(error.message || "Assignments could not be loaded."));
 })();

@@ -1,5 +1,5 @@
 /** Estimation report form controller and task-scoped draft workflow. */
-(function () {
+(async function () {
   "use strict";
 
   const { PROPERTY_TYPES, FLOOR_OPTIONS, BUILDING_CONFIGURATIONS, ESTIMATION_WORKSHEETS } = window.EstimationSchema;
@@ -927,10 +927,11 @@
     buttons.forEach((button) => { button.disabled = true; });
     $("status").textContent = mode === "offline" ? "Preparing offline workbook…" : "Generating Excel…";
     try {
+      await persistDraftNow();
       const response = await fetch("/api/estimation/workbook", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state: workbookState(mode), mode }),
+        headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(ReportData.requestPayload({ state: workbookState(mode), mode, summary: estimationLinkSummary() })),
       });
       if (!response.ok) {
         const message = await response.json().catch(() => ({}));
@@ -938,6 +939,7 @@
       }
       const fileName = (response.headers.get("content-disposition")?.match(/filename="?([^";]+)"?/i)?.[1]) || "Estimation_Report.xlsx";
       const reportUrl = response.headers.get("x-report-url") || "";
+      const registered = response.headers.get("x-task-registered") === "true";
       const blob = await response.blob();
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
@@ -950,7 +952,7 @@
       if (mode === "offline") state.details.offlineWorkbook = { fileName, generatedAt, configurationSignature: configurationSignature() };
       else {
         state.details.finalReport = { source: "Generated Excel", fileName, generatedAt, url: reportUrl };
-        window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: "xlsx", download: reportUrl, filename: fileName, source: "Generated Excel", estimationSummary: estimationLinkSummary() } }));
+        window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: "xlsx", download: reportUrl, filename: fileName, source: "Generated Excel", estimationSummary: estimationLinkSummary(), registered } }));
       }
       scheduleSave();
       $("status").textContent = mode === "offline" ? "Offline workbook downloaded" : "Completed Excel downloaded";
@@ -981,11 +983,12 @@
     }
     $("status").textContent = "Saving completed Excel…";
     try {
-      const response = await fetch("/api/estimation/upload", { method: "POST", headers: { "Content-Type": file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "X-File-Name": encodeURIComponent(file.name) }, body: file });
+      await persistDraftNow();
+      const response = await fetch("/api/estimation/upload", { method: "POST", headers: await ReportData.requestHeaders({ "Content-Type": file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "X-File-Name": encodeURIComponent(file.name) }), body: file });
       const record = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(record.error || "Could not save the completed Excel file.");
       state.details.finalReport = { source: "Uploaded Excel", fileName: record.fileName, size: record.size, storageId: record.savedName, url: record.download, uploadedAt: new Date().toISOString() };
-      window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: "xlsx", download: record.download, filename: record.fileName, source: "Uploaded Excel", estimationSummary: estimationLinkSummary(record.estimationSummary) } }));
+      window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: "xlsx", download: record.download, filename: record.fileName, source: "Uploaded Excel", estimationSummary: estimationLinkSummary(record.estimationSummary), registered: record.registered === true, task: record.task || null } }));
     } catch (error) {
       window.alert(workbookErrorMessage(error));
       $("status").textContent = "Completed Excel upload failed";
@@ -1011,7 +1014,8 @@
     if (issues.length) return;
     $("status").textContent = "Rendering workbook preview…";
     try {
-      const response = await fetch("/api/estimation/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ state: workbookState(previewMode), mode: previewMode }) });
+      await persistDraftNow();
+      const response = await fetch("/api/estimation/preview", { method: "POST", headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(ReportData.requestPayload({ state: workbookState(previewMode), mode: previewMode })) });
       const preview = await response.json();
       if (!response.ok) throw new Error(preview.error || "Workbook preview failed.");
       $("workbook-preview").innerHTML = `<iframe class="workbook-preview-frame" src="${escapeHtml(preview.preview)}" title="Rendered estimation workbook preview"></iframe>`;
@@ -1024,23 +1028,29 @@
 
   function scheduleSave() {
     $("status").classList.add("is-saving");
-    $("status").setAttribute("aria-label", "Saving draft locally");
+    $("status").setAttribute("aria-label", ReportData.localOnly ? "Saving draft locally" : "Saving draft");
     window.clearTimeout(saveTimer);
-    saveTimer = window.setTimeout(persistDraftNow, 700);
+    saveTimer = window.setTimeout(() => persistDraftNow().catch((error) => {
+      $("status").textContent = error.message || "Draft save failed";
+      $("status").classList.remove("is-saving");
+    }), 700);
   }
 
-  function persistDraftNow() {
+  async function persistDraftNow() {
     window.clearTimeout(saveTimer);
     saveTimer = null;
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(state));
-    $("status").textContent = "Saved locally";
+    const saved = await ReportData.save(DRAFT_KEY, "estimation", state, "3");
+    Object.assign(state, saved);
+    state.components = (Array.isArray(saved.components) ? saved.components : []).map(normaliseComponent);
+    state.editingComponentId = null;
+    $("status").textContent = ReportData.localOnly ? "Saved locally" : "Saved";
     $("status").classList.remove("is-saving");
     $("status").removeAttribute("aria-label");
   }
 
-  function restoreDraft() {
+  async function restoreDraft() {
     try {
-      const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null");
+      const draft = await ReportData.load(DRAFT_KEY);
       if (!draft || typeof draft !== "object") return;
       Object.assign(state, draft);
       state.components = (Array.isArray(draft.components) ? draft.components : []).map(normaliseComponent);
@@ -1050,10 +1060,10 @@
     } catch (_error) { $("status").textContent = "Draft could not be restored"; }
   }
 
-  function discardDraft() {
+  async function discardDraft() {
     if (!window.confirm("Discard this estimation draft and start with a blank configuration?")) return;
     window.clearTimeout(saveTimer);
-    localStorage.removeItem(DRAFT_KEY);
+    await ReportData.discard(DRAFT_KEY);
     Object.assign(state, { propertyType: "", construction: "", subtype: "", current: 0, details: {}, components: [], editingComponentId: null });
     $("status").textContent = "Draft discarded";
     renderAll({ sectionKey: "setup" });
@@ -1330,9 +1340,9 @@
   $("review-report").addEventListener("click", showReview);
   $("generate-xlsx").addEventListener("click", () => downloadWorkbook("completed"));
   $("download-offline").addEventListener("click", () => downloadWorkbook("offline"));
-  $("discard-draft").addEventListener("click", discardDraft);
+  $("discard-draft").addEventListener("click", () => discardDraft().catch((error) => { $("status").textContent = error.message || "Draft could not be discarded"; }));
   $("close-review").addEventListener("click", () => { $("review-modal").hidden = true; });
   $("review-modal").addEventListener("click", (event) => { if (event.target === $("review-modal")) $("review-modal").hidden = true; });
-  restoreDraft();
+  await restoreDraft();
   renderAll({ sectionKey: "setup" });
 })();

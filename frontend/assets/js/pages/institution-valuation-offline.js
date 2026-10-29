@@ -105,7 +105,7 @@
       try {
         const response = await fetch(workflow.uploadUrl, {
           method: "POST",
-          headers: { "Content-Type": file.type || "application/octet-stream", "X-File-Name": encodeURIComponent(file.name) },
+          headers: await ReportData.requestHeaders({ "Content-Type": file.type || "application/octet-stream", "X-File-Name": encodeURIComponent(file.name) }),
           body: file,
         });
         const record = await response.json().catch(() => ({}));
@@ -118,6 +118,8 @@
             source: workflow.source,
             institutionOffline: true,
             storageId: record.savedName || "",
+            registered: record.registered === true,
+            task: record.task || null,
           },
         }));
         status.textContent = `Attached ${record.fileName}${record.size ? ` (${formatSize(record.size)})` : ""}.`;
@@ -134,11 +136,11 @@
       remove.disabled = true;
       status.textContent = "Removing the completed report attachment…";
       try {
-        const savedName = artifact.storageId || artifact.url.split("/").pop() || "";
-        const response = await fetch(workflow.removeUrl, { method: "DELETE", headers: { "X-Stored-Name": encodeURIComponent(savedName) } });
+        const response = await fetch(workflow.removeUrl, { method: "DELETE", headers: await ReportData.requestHeaders() });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || "The completed report attachment could not be removed.");
-        window.TaskStore.removeInstitutionArtifact(workflow.task.id);
+        if (result.task) window.TaskStore.acceptServerTask(result.task);
+        else await window.TaskStore.refresh(workflow.task.id);
         status.textContent = "Completed report attachment removed.";
         window.setTimeout(() => window.location.reload(), 300);
       } catch (error) {

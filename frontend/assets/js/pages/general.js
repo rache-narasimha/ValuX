@@ -544,28 +544,36 @@ function calculateAll() {
   });
 }
 let saveTimer;
+async function persistDraftNow() {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  const saved = await ReportData.save(STORAGE_KEY, "valuation-general", {
+    values: collectValues(),
+    floorCount: state.floorCount,
+    documentCount: state.documentCount,
+    photos: state.photos,
+    map: state.map,
+  }, "3");
+  state.photos = Array.isArray(saved.photos) ? saved.photos : [];
+  state.map = saved.map || null;
+  renderPreviews();
+  byId("status").textContent = ReportData.localOnly ? "Saved locally" : "Saved";
+  byId("status").classList.remove("is-saving");
+  byId("status").removeAttribute("aria-label");
+}
 function saveDraft() {
   clearTimeout(saveTimer);
   byId("status").classList.add("is-saving");
-  byId("status").setAttribute("aria-label", "Saving draft locally");
-  saveTimer = setTimeout(() => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        values: collectValues(),
-        floorCount: state.floorCount,
-        documentCount: state.documentCount,
-      }),
-    );
-    byId("status").textContent = "Saved locally";
+  byId("status").setAttribute("aria-label", ReportData.localOnly ? "Saving draft locally" : "Saving draft");
+  saveTimer = setTimeout(() => persistDraftNow().catch((error) => {
+    byId("status").textContent = error.message || "Draft save failed";
     byId("status").classList.remove("is-saving");
-    byId("status").removeAttribute("aria-label");
-  }, 700);
+  }), 700);
 }
-function restoreDraft() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-  } catch {
+async function restoreDraft() {
+  try { return await ReportData.load(STORAGE_KEY); }
+  catch (error) {
+    byId("status").textContent = error.message || "Draft could not be restored";
     return null;
   }
 }
@@ -618,10 +626,12 @@ async function init() {
       state.schema.groups.map((g) => [g.id, g.label]),
     ),
     host = byId("groups"),
-    draft = restoreDraft(),
+    draft = await restoreDraft(),
     initialValues = { ...(draft?.values || {}), ...linkedTaskValues() };
   state.floorCount = Math.max(1, draft?.floorCount || 1);
   state.documentCount = Math.max(1, draft?.documentCount || 1);
+  state.photos = Array.isArray(draft?.photos) ? draft.photos : [];
+  state.map = draft?.map || null;
   sectionPlan.forEach((section, index) => {
     const panel = document.createElement("div");
     panel.className = "panel";
@@ -724,10 +734,11 @@ byId("preview-report").onclick = async () => {
     "Generating the exact Word file, then rendering that file as a PDF preview…",
   );
   try {
+    await persistDraftNow();
     const response = await fetch("/api/preview", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(reportPayload()),
+      headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(ReportData.requestPayload(reportPayload())),
     }).then(async (r) => {
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Preview failed");
@@ -768,10 +779,11 @@ byId("valuation-form").addEventListener("submit", async (e) => {
       : "Creating the editable Word report…",
   );
   try {
+    await persistDraftNow();
     const response = await fetch("/api/generate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(reportPayload(state.format)),
+      headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(ReportData.requestPayload(reportPayload(state.format))),
     }).then(async (r) => {
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Generation failed");
@@ -782,7 +794,9 @@ byId("valuation-form").addEventListener("submit", async (e) => {
       detail: {
         format: state.format,
         download: response.download,
-        filename: response.download.split("/").pop(),
+        filename: response.filename || response.download.split("/").pop(),
+        registered: response.registered === true,
+        task: response.task || null,
       },
     }));
     location.href = response.download;

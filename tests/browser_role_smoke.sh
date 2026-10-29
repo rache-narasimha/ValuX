@@ -9,6 +9,9 @@ bootstrap_port=4199
 bootstrap_pid=""
 ceo_token=""
 employee_token=""
+qa_task_marker="ValuX Browser QA $(date +%s)-$$"
+database_user="$(docker compose exec -T postgres printenv POSTGRES_USER | tr -d '\r')"
+database_name="$(docker compose exec -T postgres printenv POSTGRES_DB | tr -d '\r')"
 
 create_session() {
   local login_id="$1"
@@ -35,8 +38,13 @@ cleanup() {
   stop_bootstrap
   revoke_session "$ceo_token"
   revoke_session "$employee_token"
+  docker compose exec -T postgres psql -X -U "$database_user" -d "$database_name" \
+    -v marker="$qa_task_marker" < tests/cleanup_browser_workflow.sql >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+
+docker compose exec -T -e VALUX_QA_TASK_MARKER="$qa_task_marker" valuation-report \
+  python -m tests.browser_workflow_seed seed >/dev/null
 
 set_browser_session() {
   local token="$1"
@@ -82,6 +90,7 @@ dump_page "/tasks/new" "$qa_dir/ceo-new-task.html"
 dump_page "/estimation?practice=1" "$qa_dir/ceo-estimation-practice.html"
 dump_page "/progress-completion?practice=1" "$qa_dir/ceo-progress-practice.html"
 capture_page "/" "$qa_dir/ceo-dashboard.png"
+capture_page "/tasks/new" "$qa_dir/ceo-new-task.png"
 capture_page "/estimation?practice=1" "$qa_dir/ceo-estimation-practice.png"
 capture_page "/progress-completion?practice=1" "$qa_dir/ceo-progress-practice.png"
 capture_mobile_page "/" "$qa_dir/ceo-dashboard-mobile.png"

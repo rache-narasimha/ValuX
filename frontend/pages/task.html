@@ -15,7 +15,7 @@
       <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button><div data-role-switcher></div><a class="quiet-link" href="/tasks">← All tasks</a></div>
     </header>
     <main class="page-frame" id="task-workspace">
-      <div id="task-not-found" class="empty-state" hidden><strong>Task not found</strong><p>The requested assignment is not available in this browser.</p><a class="button-link primary" href="/tasks">Return to tasks</a></div>
+      <div id="task-not-found" class="empty-state" hidden><strong>Task not found</strong><p>The requested assignment is unavailable or you no longer have access to it.</p><a class="button-link primary" href="/tasks">Return to tasks</a></div>
       <div id="task-content" hidden>
         <section class="task-hero">
           <div><p class="task-id" id="task-id"></p><h1 id="task-name"></h1><p id="task-subtitle"></p><div class="badge-row" id="task-badges"></div></div>
@@ -93,6 +93,7 @@
         </form>
       </section>
     </div>
+    <script src="/assets/js/core/business-api.js"></script>
     <script src="/assets/js/core/app-shell.js"></script>
     <script src="/assets/js/core/workflow-access.js"></script>
     <script src="/assets/js/core/task-store.js"></script>

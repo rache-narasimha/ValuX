@@ -1,5 +1,5 @@
 /** Linked construction progress/completion report form and DOCX workflow. */
-(function () {
+(async function () {
   "use strict";
 
   const params = new URLSearchParams(window.location.search);
@@ -12,6 +12,7 @@
   const sectionLabels = { setup: "Report Setup", assessment: "Work Assessment", bank: "Bank Sanction", photos: "Photos & Generate" };
   const state = { linkedEstimationId: task?.linkedEstimationId || "", current: 0, details: {}, components: [], bank: { releases: [] }, photos: [] };
   let saveTimer = null;
+  let previousReports = [];
 
   const element = (id) => document.getElementById(id);
   const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -63,7 +64,7 @@
   }
 
   function compatiblePreviousSummary() {
-    return TaskStore.progressReportsFor?.(state.linkedEstimationId)
+    return previousReports
       .filter((candidate) => candidate.id !== taskId && candidate.progressSummary)
       .at(-1)?.progressSummary || null;
   }
@@ -99,11 +100,24 @@
     scheduleSave();
   }
 
-  function populatePracticeCandidates() {
+  async function populatePracticeCandidates() {
     const select = element("practice-estimation");
-    const candidates = TaskStore.estimationCandidates?.() || [];
+    const candidates = [];
+    let offset = 0;
+    let hasMore = true;
+    while (hasMore) {
+      const result = await TaskStore.eligibleEstimations(requestedReportType(), TODAY, { offset, limit: 50 });
+      candidates.push(...result.items);
+      offset += result.items.length;
+      hasMore = result.hasMore && result.items.length > 0;
+    }
     select.innerHTML = '<option value="">Select an estimation report</option>' + candidates.map((candidate) => `<option value="${escape(candidate.id)}">${escape(candidate.id)} · ${escape(candidate.customerName)} · ${escape(currency(candidate.estimationSummary?.totalEstimatedCost || 0))}</option>`).join("");
     select.value = state.linkedEstimationId;
+  }
+
+  async function prepareLinkedEstimate(estimationId, preserveValues = false) {
+    previousReports = estimationId ? await TaskStore.progressReportsFor(estimationId) : [];
+    loadLinkedEstimate(estimationId, preserveValues);
   }
 
   function renderLinkedEstimate() {
@@ -193,31 +207,42 @@
   }
 
   function draftState() {
-    const snapshot = clone(state);
-    snapshot.photos = [];
-    return snapshot;
+    return clone(state);
   }
 
   function scheduleSave() {
     element("status").classList.add("is-saving");
-    element("status").setAttribute("aria-label", "Saving draft locally");
+    element("status").setAttribute("aria-label", ReportData.localOnly ? "Saving draft locally" : "Saving draft");
     window.clearTimeout(saveTimer);
-    saveTimer = window.setTimeout(() => {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(draftState()));
-      element("status").textContent = "Saved locally";
+    saveTimer = window.setTimeout(() => persistDraftNow().catch((error) => {
+      element("status").textContent = error.message || "Draft save failed";
       element("status").classList.remove("is-saving");
-      element("status").removeAttribute("aria-label");
-    }, 700);
+    }), 700);
   }
 
-  function restoreDraft() {
+  async function persistDraftNow() {
+    window.clearTimeout(saveTimer);
+    saveTimer = null;
+    const saved = await ReportData.save(DRAFT_KEY, task?.reportKey || requestedReportType(), draftState(), "1");
+    Object.assign(state, saved);
+    state.details = saved.details || {};
+    state.bank = { releases: [], ...(saved.bank || {}) };
+    state.photos = Array.isArray(saved.photos) ? saved.photos : [];
+    renderPhotos();
+    element("status").textContent = ReportData.localOnly ? "Saved locally" : "Saved";
+    element("status").classList.remove("is-saving");
+    element("status").removeAttribute("aria-label");
+  }
+
+  async function restoreDraft() {
     try {
-      const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null");
+      const saved = await ReportData.load(DRAFT_KEY);
       if (!saved || typeof saved !== "object") return;
       if (!practice && saved.linkedEstimationId !== task?.linkedEstimationId) return;
-      Object.assign(state, saved, { photos: [] });
+      Object.assign(state, saved);
       state.details = saved.details || {};
       state.bank = { releases: [], ...(saved.bank || {}) };
+      state.photos = Array.isArray(saved.photos) ? saved.photos : [];
       element("status").textContent = "Draft restored";
     } catch (_error) { element("status").textContent = "Draft could not be restored"; }
   }
@@ -270,7 +295,8 @@
     element("processing-title").textContent = mode === "preview" ? "Rendering report preview" : "Generating Word report";
     element("processing-stage").textContent = "Building the certificate, calculations and photo pages…";
     try {
-      const response = await fetch(`/api/progress/${mode}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload()) });
+      await persistDraftNow();
+      const response = await fetch(`/api/progress/${mode}`, { method: "POST", headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(ReportData.requestPayload(payload())) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "The report could not be generated.");
       if (mode === "preview") {
@@ -284,7 +310,7 @@
         document.body.append(link);
         link.click();
         link.remove();
-        window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: "docx", download: result.download, filename: result.filename, progressSummary: result.summary } }));
+        window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: "docx", download: result.download, filename: result.filename, progressSummary: result.summary, registered: result.registered === true, task: result.task || null } }));
         element("status").textContent = "DOCX generated";
       }
     } catch (error) {
@@ -330,29 +356,36 @@
     element("generate-docx").addEventListener("click", () => requestReport("generate"));
     element("close-preview").addEventListener("click", () => { element("preview-modal").hidden = true; });
     element("preview-modal").addEventListener("click", (event) => { if (event.target === element("preview-modal")) element("preview-modal").hidden = true; });
-    element("discard-draft").addEventListener("click", () => { if (!window.confirm("Discard this progress/completion draft?")) return; localStorage.removeItem(DRAFT_KEY); state.details = {}; state.bank = { releases: [] }; state.photos = []; loadLinkedEstimate(state.linkedEstimationId); element("status").textContent = "Draft discarded"; renderPhotos(); });
+    element("discard-draft").addEventListener("click", async () => { if (!window.confirm("Discard this progress/completion draft?")) return; try { await ReportData.discard(DRAFT_KEY); state.details = {}; state.bank = { releases: [] }; state.photos = []; loadLinkedEstimate(state.linkedEstimationId); element("status").textContent = "Draft discarded"; renderPhotos(); } catch (error) { element("status").textContent = error.message || "Draft could not be discarded"; } });
   }
 
-  function initialize() {
+  async function initialize() {
     if (!practice && (!task || !["progress", "completion"].includes(task.reportGroup))) {
       element("link-error").hidden = false;
       element("link-error").textContent = "Open this form from a Progress or Completion assignment.";
       element("generate-docx").disabled = true;
       element("preview-report").disabled = true;
     }
-    restoreDraft();
+    await restoreDraft();
     element("practice-estimation-wrap").hidden = !practice;
     element("practice-type-wrap").hidden = !practice;
     if (practice) {
-      populatePracticeCandidates();
-      element("practice-estimation").addEventListener("change", (event) => loadLinkedEstimate(event.target.value));
-      element("practice-report-type").addEventListener("change", () => { renderComponents(); scheduleSave(); });
+      await populatePracticeCandidates();
+      element("practice-estimation").addEventListener("change", async (event) => {
+        try { await prepareLinkedEstimate(event.target.value); }
+        catch (error) { element("link-error").hidden = false; element("link-error").textContent = error.message || "Linked report history could not be loaded."; }
+      });
+      element("practice-report-type").addEventListener("change", async () => { await populatePracticeCandidates(); renderComponents(); scheduleSave(); });
     }
-    if (state.linkedEstimationId && !state.components.length) loadLinkedEstimate(state.linkedEstimationId, true);
+    if (state.linkedEstimationId) {
+      previousReports = await TaskStore.progressReportsFor(state.linkedEstimationId);
+      if (!state.components.length) loadLinkedEstimate(state.linkedEstimationId, true);
+      else render();
+    }
     else render();
     wire();
     renderPhotos();
   }
 
-  initialize();
+  await initialize();
 })();

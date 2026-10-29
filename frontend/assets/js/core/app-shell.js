@@ -3,7 +3,7 @@
   "use strict";
 
   const COLLAPSE_KEY = "sln.application.sidebar-collapsed.v1";
-  const TASK_KEY = "sln.workflow.tasks.v1";
+  let durableSummary = window.__VALUX_BUSINESS_CONTEXT__?.summary || null;
 
   const icons = {
     dashboard: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10M9 20v-6h6v6"/></svg>',
@@ -21,16 +21,32 @@
 
   function tasks() {
     if (window.TaskStore) return TaskStore.all();
-    try {
-      const value = JSON.parse(localStorage.getItem(TASK_KEY) || "[]");
-      return Array.isArray(value) ? value : [];
-    } catch (_error) {
-      return [];
-    }
+    return [window.__VALUX_BUSINESS_CONTEXT__?.task].filter(Boolean);
   }
 
   function count(status) {
+    if (durableSummary) {
+      const keys = {
+        "Unassigned": "unassigned", "In Progress": "inProgress", "On Hold": "onHold",
+        "Completed": "completed", "Closed": "closed", "Cancelled": "cancelled",
+      };
+      return Number(durableSummary[status ? keys[status] : "total"] || 0);
+    }
     return tasks().filter((task) => (!window.WorkflowAccess || WorkflowAccess.visible(task)) && (!status || task.status === status)).length;
+  }
+
+  async function refreshSummary() {
+    if (!window.BusinessApi || !window.__VALUX_AUTH_CONTEXT__?.user) {
+      installSidebar();
+      return;
+    }
+    try {
+      const payload = await BusinessApi.get("/api/tasks/summary");
+      durableSummary = payload.summary;
+    } catch (_error) {
+      // Keep the last server-provided summary; page-level errors handle failed mutations.
+    }
+    installSidebar();
   }
 
   function activeFor(path, search, target) {
@@ -175,6 +191,7 @@
   }
 
   window.AppShell = { install, icons };
+  window.addEventListener("sln:tasks-changed", refreshSummary);
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", install);
   else install();
 })();

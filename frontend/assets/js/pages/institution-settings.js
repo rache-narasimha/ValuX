@@ -32,7 +32,7 @@
     error.hidden = true;
   }
 
-  list.addEventListener("click", (event) => {
+  list.addEventListener("click", async (event) => {
     const edit = event.target.closest("[data-edit-institution]");
     const toggle = event.target.closest("[data-toggle-institution]");
     if (edit) {
@@ -47,16 +47,21 @@
       form.scrollIntoView({ behavior: "smooth", block: "center" });
     }
     if (toggle) {
-      const item = InstitutionStore.all().find((candidate) => candidate.code === toggle.dataset.toggleInstitution);
-      InstitutionStore.setActive(item.code, !item.active);
-      render();
+      try {
+        const item = InstitutionStore.all().find((candidate) => candidate.code === toggle.dataset.toggleInstitution);
+        await InstitutionStore.setActive(item.code, !item.active);
+        render();
+      } catch (exception) {
+        error.textContent = exception.message;
+        error.hidden = false;
+      }
     }
   });
 
-  form.addEventListener("submit", (event) => {
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
-      InstitutionStore.upsert({
+      await InstitutionStore.upsert({
         type: document.getElementById("institution-kind").value,
         code: document.getElementById("institution-code").value,
         name: document.getElementById("institution-name").value,
@@ -71,11 +76,16 @@
     }
   });
   document.getElementById("cancel-institution-edit").addEventListener("click", clearForm);
-  document.getElementById("reset-institutions").addEventListener("click", () => {
+  document.getElementById("reset-institutions").addEventListener("click", async () => {
     if (!confirm("Restore the original working institution list and colours?")) return;
-    InstitutionStore.reset();
-    clearForm();
-    render();
+    try {
+      await InstitutionStore.reset();
+      clearForm();
+      render();
+    } catch (exception) {
+      error.textContent = exception.message;
+      error.hidden = false;
+    }
   });
 
   clearForm();

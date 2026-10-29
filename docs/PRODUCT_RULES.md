@@ -12,10 +12,12 @@ deferred, a separate explicit user request is required before implementation.
   application.
 - The persisted backend role values are `father` and `employee`. The current
   user-facing labels are `CEO` and `Employee`.
-- PostgreSQL currently serves authentication and authorization identity data.
-  The approved durable business-data implementation is being delivered in
-  phases; browser repositories remain the active workflow until the later
-  frontend cutover phase is completed.
+- PostgreSQL serves authentication/authorization identity plus durable
+  institutions, tasks, activity history, payments, duplicate protection and
+  Completion locks. The backend workflow service is authoritative for roles,
+  transitions and concurrency. Task-linked report drafts, report revisions,
+  local-file metadata and estimation snapshots are durable in PostgreSQL.
+  Browser storage remains appropriate only for appearance and practice drafts.
 - Existing routes, URL parameters, browser-storage formats, calculations,
   report mappings, preview behavior, and DOCX output must remain compatible
   unless the user explicitly changes them.
@@ -153,8 +155,9 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   DOCX for ordinary valuation work. Karur Vysya Bank retains the completed
   uploaded XLSX; Karnataka Bank retains the completed Valocity DOCX or PDF.
   For estimation work it is the latest completed XLSX, produced by the online
-  form or attached after offline completion. Historical generated versions are
-  not required for this workflow.
+  form or attached after offline completion. Artifact and report-revision
+  metadata remain registered; superseded development file bytes may be removed
+  when they are no longer the immutable final artifact.
 
 ## 6. Dashboards and navigation
 
@@ -193,6 +196,10 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Draft status indicators remain visually quiet: the existing status text is
   retained while a small saving activity cue appears, then resolves to the
   saved state without moving the form layout.
+- Task-linked report drafts are stored by the backend and shared across
+  authenticated sessions. Their draft photographs and route maps use
+  task-scoped local files served only through authenticated routes. Practice
+  forms remain browser-local and do not create durable task data.
 - General-property and agricultural-property forms are separate products.
   Never apply a field, label, document option, template, calculation, or layout
   change to both unless the user explicitly requests both.
@@ -220,6 +227,10 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   task. The linked estimation supplies the applicant, property and immutable
   component estimated costs; users record only progress-specific details and
   completion values.
+- Each completed estimation XLSX creates an immutable component-cost snapshot.
+  A new Progress or Completion task is pinned to the selected estimation's
+  latest snapshot at creation and does not silently change when that estimation
+  is later reopened or regenerated.
 - A linked report is classified as Completion only when every component is at
   100 percent and every balance-work amount is nil/zero. Otherwise it is a
   Progress report. The generated DOCX includes a Cost of Balance Work column.
@@ -254,7 +265,7 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 
 The following plans are not authorized merely because they are documented:
 
-- Migration of browser sample tasks into the future database.
+- Migration of historical browser sample tasks into the durable database.
 - Production deployment, backup, replication, or disaster recovery.
 - A full administrator web interface and admin-account lifecycle.
 - New frameworks, frontend build systems, or replacement of the current

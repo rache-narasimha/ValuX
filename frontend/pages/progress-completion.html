@@ -84,7 +84,7 @@
               <h3>Authenticated site photographs</h3>
               <p class="hint">The report follows the valuation-photo layout: 1–4 photographs use one per row, 5–6 use two per row, and 7–9 use three per row. Additional photographs continue on another page without cropping.</p>
               <input id="photo-upload" type="file" accept="image/*" multiple />
-              <p class="hint media-save-note">Photographs remain available for this browser session and are not saved in the local draft after a refresh.</p>
+              <p class="hint media-save-note">Task-linked photographs are retained with the draft. Practice photographs remain local to this browser.</p>
               <div id="photo-preview" class="preview-grid"></div>
             </section>
             <div id="validation-message" class="notice error-notice" hidden></div>
@@ -104,6 +104,8 @@
     <div class="processing" id="processing" hidden role="status" aria-live="polite"><div class="processing-card"><strong id="processing-title">Preparing report</strong><div class="loading-track"><div class="loading-bar"></div></div><span id="processing-stage">Please wait…</span></div></div>
     <div class="modal" id="preview-modal" hidden><div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="preview-title"><div class="modal-head"><div><h2 id="preview-title">Word print-layout preview</h2><p>The PDF is rendered from the same DOCX generator used for download.</p></div><button type="button" class="modal-close" id="close-preview" aria-label="Close preview">×</button></div><iframe id="preview-frame" title="Progress or completion report preview"></iframe></div></div>
 
+    <script src="/assets/js/core/business-api.js"></script>
+    <script src="/assets/js/core/report-data.js"></script>
     <script src="/assets/js/core/app-shell.js"></script>
     <script src="/assets/js/core/workflow-access.js"></script>
     <script src="/assets/js/core/task-store.js"></script>

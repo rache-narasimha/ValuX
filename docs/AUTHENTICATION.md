@@ -2,12 +2,13 @@
 
 ## Boundary of this phase
 
-PostgreSQL stores identity and access data only: users, sessions, MFA
-credentials, recovery-code hashes, account tokens, failed-login records and
-authentication audit events. Assignments, reports, institutions, payments and
-drafts remain in browser storage. Consequently, a father and employee can use
-their own authenticated views from different devices, but they do not yet
-share workflow records.
+PostgreSQL stores identity and access data in the dedicated `auth` schema and
+durable business data in the separate `app` schema. Authenticated users share
+workflow records, institutions, payments, task-linked drafts, report revisions,
+file metadata and estimation snapshots across sessions. Actual generated and
+uploaded files use the development local filesystem; browser storage is limited
+to appearance/navigation preferences, practice drafts, and temporary recovery
+codes during activation.
 
 All identity objects live in the dedicated `auth` schema. The `public` schema
 contains no ValuX tables and does not allow general object creation. A

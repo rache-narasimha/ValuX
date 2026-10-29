@@ -261,7 +261,7 @@ function addCalculatedValues(panel) {
 // Uploaded-media previews and report request state.
 function mediaSection(panel) {
   panel.innerHTML +=
-    '<section class="subgroup"><h3>Property photographs</h3><p class="hint">New selections are added to the photographs already shown. The report uses one photo per row for 1–4 photos, two per row for 5–6, and three per row for 7–9. More than nine continues on the next page. Every image is rotated from its camera metadata, scaled proportionally and never cropped.</p><input id="photo-upload" type="file" accept="image/*" multiple><p class="hint media-save-note">Photographs are kept for this browser session but are not stored in the local draft after a page refresh.</p><div id="photo-preview" class="preview-grid"></div></section><section class="subgroup"><h3>Route map</h3><p class="hint">Upload one map screenshot. It is placed on its own page after the photographs.</p><input id="map-upload" type="file" accept="image/*"><div id="map-preview" class="map-preview"></div></section>';
+    '<section class="subgroup"><h3>Property photographs</h3><p class="hint">New selections are added to the photographs already shown. The report uses one photo per row for 1–4 photos, two per row for 5–6, and three per row for 7–9. More than nine continues on the next page. Every image is rotated from its camera metadata, scaled proportionally and never cropped.</p><input id="photo-upload" type="file" accept="image/*" multiple><p class="hint media-save-note">Task-linked photographs are retained with the draft. Practice photographs remain local to this browser.</p><div id="photo-preview" class="preview-grid"></div></section><section class="subgroup"><h3>Route map</h3><p class="hint">Upload one map screenshot. It is placed on its own page after the photographs.</p><input id="map-upload" type="file" accept="image/*"><div id="map-preview" class="map-preview"></div></section>';
   panel.querySelector("#photo-upload").onchange = async (event) => {
     const added = await Promise.all([...event.target.files].map(fileData));
     const known = new Set(state.photos.map((photo) => photo.key));
@@ -360,27 +360,35 @@ function show(index) {
 }
 
 let saveTimer;
+async function persistDraftNow() {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  const saved = await ReportData.save(STORAGE_KEY, "valuation-agricultural", {
+    values: collectValues(),
+    documentCount: state.documentCount,
+    photos: state.photos,
+    map: state.map,
+  }, "1");
+  state.photos = Array.isArray(saved.photos) ? saved.photos : [];
+  state.map = saved.map || null;
+  renderPreviews();
+  byId("status").textContent = ReportData.localOnly ? "Saved locally" : "Saved";
+  byId("status").classList.remove("is-saving");
+  byId("status").removeAttribute("aria-label");
+}
 function saveDraft() {
   clearTimeout(saveTimer);
   byId("status").classList.add("is-saving");
-  byId("status").setAttribute("aria-label", "Saving draft locally");
-  saveTimer = setTimeout(() => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        values: collectValues(),
-        documentCount: state.documentCount,
-      }),
-    );
-    byId("status").textContent = "Saved locally";
+  byId("status").setAttribute("aria-label", ReportData.localOnly ? "Saving draft locally" : "Saving draft");
+  saveTimer = setTimeout(() => persistDraftNow().catch((error) => {
+    byId("status").textContent = error.message || "Draft save failed";
     byId("status").classList.remove("is-saving");
-    byId("status").removeAttribute("aria-label");
-  }, 700);
+  }), 700);
 }
-function restoreDraft() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-  } catch {
+async function restoreDraft() {
+  try { return await ReportData.load(STORAGE_KEY); }
+  catch (error) {
+    byId("status").textContent = error.message || "Draft could not be restored";
     return null;
   }
 }
@@ -412,9 +420,11 @@ async function init() {
       throw new Error("Unable to load agricultural form schema");
     return response.json();
   });
-  const draft = restoreDraft();
+  const draft = await restoreDraft();
   const initialValues = { ...(draft?.values || {}), ...linkedTaskValues() };
   state.documentCount = Math.max(1, draft?.documentCount || 1);
+  state.photos = Array.isArray(draft?.photos) ? draft.photos : [];
+  state.map = draft?.map || null;
   const host = byId("sections");
   state.schema.sections.forEach((section, index) => {
     const panel = document.createElement("div");
@@ -484,10 +494,11 @@ byId("preview-report").onclick = async () => {
     "Preparing photographs and generating the PDF preview…",
   );
   try {
+    await persistDraftNow();
     const response = await fetch("/api/agricultural/preview", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(reportPayload()),
+      headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(ReportData.requestPayload(reportPayload())),
     }).then(async (result) => {
       const data = await result.json();
       if (!result.ok) throw new Error(data.error || "Preview failed");
@@ -529,10 +540,11 @@ byId("agricultural-form").addEventListener("submit", async (event) => {
       : "Creating the editable Word report…",
   );
   try {
+    await persistDraftNow();
     const response = await fetch("/api/agricultural/generate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(reportPayload(state.format)),
+      headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(ReportData.requestPayload(reportPayload(state.format))),
     }).then(async (result) => {
       const data = await result.json();
       if (!result.ok) throw new Error(data.error || "Generation failed");
@@ -543,7 +555,9 @@ byId("agricultural-form").addEventListener("submit", async (event) => {
       detail: {
         format: state.format,
         download: response.download,
-        filename: response.download.split("/").pop(),
+        filename: response.filename || response.download.split("/").pop(),
+        registered: response.registered === true,
+        task: response.task || null,
       },
     }));
     location.href = response.download;

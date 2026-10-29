@@ -20,7 +20,7 @@
   function showMissingTask(title, message) {
     const storage = TaskStore.storageStatus();
     notFound.querySelector("strong").textContent = title || (storage.ok ? "Task not found" : "Saved task data needs attention");
-    notFound.querySelector("p").textContent = message || (storage.ok ? "The requested assignment is not available in this browser." : storage.error);
+    notFound.querySelector("p").textContent = message || (storage.ok ? "The requested assignment is unavailable or you no longer have access to it." : storage.error);
     notFound.hidden = false;
   }
 
@@ -245,21 +245,21 @@
     if (event.currentTarget.getAttribute("aria-disabled") === "true") event.preventDefault();
   });
 
-  element("note-form").addEventListener("submit", (event) => {
+  element("note-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
-      TaskStore.addNote(taskId, workNote.value);
+      await TaskStore.addNote(taskId, workNote.value);
       clearActionNote();
       render();
     } catch (error) { showError(error); }
   });
 
-  element("assignment-modal-form").addEventListener("submit", (event) => {
+  element("assignment-modal-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
       const selectedAssignee = assigneePicker.value();
       if (selectedAssignee === task.assignee) throw new Error("Select a different employee for the transfer.");
-      TaskStore.assign(taskId, selectedAssignee, element("assignment-work-note").value);
+      await TaskStore.assign(taskId, assigneePicker.id(), element("assignment-work-note").value);
       closeModal(assignmentModal);
       render();
     } catch (error) { showModalError("assignment-error", error); }
@@ -272,26 +272,26 @@
     openModal(holdModal);
   });
   document.querySelectorAll("[data-close-hold]").forEach((button) => button.addEventListener("click", () => closeModal(holdModal)));
-  element("hold-form").addEventListener("submit", (event) => {
+  element("hold-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
-      TaskStore.putOnHold(taskId, element("hold-reason").value, element("hold-work-note").value);
+      await TaskStore.putOnHold(taskId, element("hold-reason").value, element("hold-work-note").value);
       closeModal(holdModal);
       render();
     } catch (error) { showModalError("hold-error", error); }
   });
 
-  element("resume-task-button").addEventListener("click", () => {
+  element("resume-task-button").addEventListener("click", async () => {
     try {
-      TaskStore.resume(taskId);
+      await TaskStore.resume(taskId);
       render();
     } catch (error) { showError(error); }
   });
 
-  element("payment-form").addEventListener("submit", (event) => {
+  element("payment-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
-      TaskStore.updatePayment(taskId, {
+      await TaskStore.updatePayment(taskId, {
         estimated: element("estimated-fee").value,
         agreed: element("agreed-fee").value,
         received: element("received-fee").value,
@@ -301,9 +301,9 @@
     } catch (error) { showError(error); }
   });
 
-  element("detail-close-request").addEventListener("click", () => {
+  element("detail-close-request").addEventListener("click", async () => {
     try {
-      TaskStore.close(taskId, workNote.value);
+      await TaskStore.close(taskId, workNote.value);
       clearActionNote();
       window.location.replace("/");
     } catch (error) { showError(error); }
@@ -315,11 +315,11 @@
     openModal(cancelModal);
   });
   document.querySelectorAll("[data-close-cancel]").forEach((button) => button.addEventListener("click", () => closeModal(cancelModal)));
-  element("cancel-form").addEventListener("submit", (event) => {
+  element("cancel-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
       if (!confirm("Cancel this task? Its history will be retained.")) return;
-      TaskStore.cancel(taskId, element("cancel-reason").value, element("cancel-work-note").value);
+      await TaskStore.cancel(taskId, element("cancel-reason").value, element("cancel-work-note").value);
       closeModal(cancelModal);
       render();
     } catch (error) { showModalError("cancel-error", error); }
@@ -332,10 +332,10 @@
     openModal(reopenModal);
   });
   document.querySelectorAll("[data-close-reopen]").forEach((button) => button.addEventListener("click", () => closeModal(reopenModal)));
-  element("reopen-form").addEventListener("submit", (event) => {
+  element("reopen-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
-      TaskStore.reopen(taskId, element("reopen-work-note").value);
+      await TaskStore.reopen(taskId, element("reopen-work-note").value);
       closeModal(reopenModal);
       render();
     } catch (error) { showModalError("reopen-error", error); }
