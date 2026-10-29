@@ -4,6 +4,9 @@ This guide is the starting point for developers who need to understand or
 maintain SLN Property Reports. It describes the current architecture; it does
 not prescribe a future framework or database design.
 
+The approved durable business-data rollout is tracked separately in
+`docs/DATABASE_IMPLEMENTATION_PLAN.md`.
+
 ## Read this first
 
 The application is intentionally a small, dependency-light Python web server
@@ -30,6 +33,7 @@ Before changing a feature:
 | Change login, sessions or account recovery | `backend/app/auth/service.py` | `routes.py`, `frontend/assets/js/pages/auth.js` |
 | Change authenticator behavior | `backend/app/auth/mfa.py` | `security.py`, auth migrations |
 | Change password reuse rules | `backend/app/auth/password_policy.py` | `config.py`, `security.py` |
+| Change durable business schema or grants | `backend/app/persistence/migrations.py` | `persistence/migrations/`, `backend/app/migrations.py` |
 | Add or change a report field | `resources/<type>/form_schema.json` | matching page controller and mapping |
 | Change report placeholder placement | `resources/<type>/template_mapping.json` | `backend/app/valuation/ooxml.py` |
 | Change calculations or depreciation | `backend/app/valuation/calculations.py` | `frontend/assets/js/pages/general.js` when the live form also displays it |
@@ -113,12 +117,18 @@ than by HTTP endpoint:
 - `estimation/generator.py`: copies approved XLSX masters, applies estimation form state and returns completed or offline workbooks.
 - `estimation/summary.py`: extracts the retained component-cost snapshot from an attached completed estimation workbook.
 - `progress/generator.py`: validates linked-estimation progress state and creates bank-aware Progress/Completion DOCX reports.
+- `exports/workbook.py`: validates approved browser-table export payloads and
+  creates typed, filter-aware A4 Excel workbooks inside the existing Python
+  application container.
 - `web/handler.py`: HTTP parsing, validation, static delivery, previews and downloads.
 - `auth/`: PostgreSQL identity boundary. `routes.py` adapts HTTP, `service.py`
   owns account/session use cases, `security.py` owns cryptographic primitives,
   `database.py` owns runtime connections, `migrations.py` owns migration and
   role orchestration, and `migrations/` contains ordered SQL changes for the
   dedicated `auth` schema.
+- `persistence/`: PostgreSQL migration boundary for the separate `app` schema.
+  It owns durable business tables and least-privilege grants but no workflow
+  decisions; those belong to the feature services introduced in later phases.
 
 When durable business data is introduced, add a feature package such as
 `workflow/`, `billing/`, or `reference/` for the owning domain. Create a small

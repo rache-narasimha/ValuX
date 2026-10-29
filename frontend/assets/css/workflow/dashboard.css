@@ -33,13 +33,13 @@
 .father-business { display: grid; gap: 16px; margin-bottom: 20px; }
 .father-business[hidden] { display: none; }
 .finance-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.finance-strip article { padding: 15px 17px; border: 1px solid var(--line); border-radius: 11px; background: #fff; }
+.finance-strip article { padding: 15px 17px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); }
 .finance-strip span,
 .finance-strip strong,
 .finance-strip small { display: block; }
 .finance-strip span { color: var(--muted); font-size: .75rem; font-weight: 800; }
 .finance-strip strong { margin: 5px 0 2px; color: var(--navy); font-size: 1.25rem; }
-.finance-strip small { color: #7b8e95; font-size: .68rem; }
+.finance-strip small { color: var(--muted); font-size: .68rem; }
 .institution-overview { padding: 18px 20px; }
 .institution-bars { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 9px; }
 .institution-bars button { display: grid; grid-template-columns: minmax(0, 1fr) 70px auto; align-items: center; gap: 10px; padding: 10px; border: 1px solid #e0e8eb; border-radius: 9px; background: #fbfdfd; color: var(--ink); text-align: left; cursor: pointer; }
@@ -64,15 +64,15 @@
 }
 .task-row {
   position: relative;
-  grid-template-columns: minmax(260px, 2.4fr) minmax(115px, 0.8fr) minmax(95px, 0.7fr) minmax(120px, 0.9fr) minmax(120px, 0.9fr) auto;
+  grid-template-columns: minmax(280px, 2fr) minmax(125px, .75fr) minmax(115px, .7fr) minmax(110px, .7fr) minmax(145px, .85fr) 40px;
   gap: 14px;
 }
+.task-row > * { min-width: 0; }
 .task-row-link { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
 .task-row-main,
 .task-row-detail,
 .task-row-meta,
-.task-row-payment,
-.row-arrow { pointer-events: none; }
+.task-row-payment { pointer-events: none; }
 .task-row-detail,
 .task-row-payment { display: grid; gap: 4px; min-width: 0; }
 .task-row-detail small,
@@ -81,6 +81,28 @@
 .task-row-detail strong { overflow: hidden; color: var(--ink); font-size: 0.76rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
 .task-row-meta { justify-items: start; }
 .task-row-payment { justify-items: start; }
+.task-row-action,
+.task-table-action {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.row-open {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--blue);
+  text-decoration: none;
+}
+.row-open:hover,
+.row-open:focus-visible { border-color: var(--blue); background: var(--blue-soft); outline: none; }
+.row-open svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.2; }
 .payment-badge {
   display: inline-flex;
   align-items: center;
@@ -111,6 +133,14 @@
   font-size: 0.72rem;
   font-weight: 800;
   cursor: pointer;
+}
+.row-payment-action {
+  position: relative;
+  z-index: 2;
+  min-height: 30px;
+  padding: 5px 8px;
+  margin-top: 2px;
+  font-size: .66rem;
 }
 .status-unassigned { background: #edf2f4; color: #526b75; }
 .status-in-progress { background: var(--blue-soft); color: #075d79; }
@@ -186,7 +216,7 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 1250px) {
   .metric-grid-five { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .filter-bar-extended { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .task-row { grid-template-columns: minmax(230px, 2fr) minmax(110px, .8fr) minmax(110px, .8fr) auto; }
+  .task-row { grid-template-columns: minmax(230px, 2fr) minmax(110px, .8fr) minmax(110px, .8fr) 40px; }
   .task-row-detail.task-wide { display: none; }
 }
 
@@ -200,8 +230,7 @@ body.modal-open { overflow: hidden; }
   .task-row { grid-template-columns: minmax(0, 1fr) auto; }
   .task-row .task-wide { display: none; }
   .task-row-meta { grid-column: 1; grid-row: 2; }
-  .task-row .row-action,
-  .task-row .row-arrow { grid-column: 2; grid-row: 1 / span 2; }
+  .task-row .task-row-action { grid-column: 2; grid-row: 1 / span 2; }
   .report-task-context-compact { grid-template-columns: 1fr; }
 }
 

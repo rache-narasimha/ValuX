@@ -28,7 +28,7 @@ services:
       context: .
       dockerfile: Dockerfile
     working_dir: /app
-    command: ["python", "-m", "backend.app.auth.migrations"]
+    command: ["python", "-m", "backend.app.migrations"]
     environment:
       MIGRATION_DATABASE_URL: "postgresql://${POSTGRES_USER:-valsphere}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-valsphere}"
       APP_DATABASE_USER: "${APP_DATABASE_USER:-valsphere_app}"

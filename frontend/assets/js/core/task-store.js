@@ -45,6 +45,8 @@
     copy.finalDocx = copy.finalDocx || null;
     copy.latestXlsx = copy.latestXlsx || null;
     copy.finalXlsx = copy.finalXlsx || null;
+    copy.latestInstitutionArtifact = copy.latestInstitutionArtifact || null;
+    copy.finalInstitutionArtifact = copy.finalInstitutionArtifact || null;
     copy.linkedEstimationId = copy.linkedEstimationId || "";
     copy.estimationSummary = copy.estimationSummary || null;
     copy.progressSummary = copy.progressSummary || null;
@@ -120,6 +122,44 @@
     const base = [input.institutionCode, customerToken(input.customerName), report.code, compactDate(input.assignedDate)].join("-");
     const duplicates = tasks.filter((task) => task.id === base || task.id.startsWith(`${base}-`));
     return duplicates.length ? `${base}-${String(duplicates.length + 1).padStart(2, "0")}` : base;
+  }
+  function identityToken(value) {
+    return String(value || "").trim().toUpperCase().replace(/[^A-Z0-9]+/g, " ").replace(/\s+/g, " ");
+  }
+  function activeTasks(tasks) {
+    return tasks.filter((task) => task.status !== "Cancelled");
+  }
+  function closedCompletion(tasks, estimationId) {
+    return tasks.find((task) => task.linkedEstimationId === estimationId
+      && task.reportGroup === "completion"
+      && (task.status === "Closed" || task.completionLockedAt
+        || task.activity?.some((event) => event.type === "status" && event.text === "Request closed after payment settlement."))) || null;
+  }
+  function duplicateForInput(tasks, input, report) {
+    const candidates = activeTasks(tasks);
+    if (["progress", "completion"].includes(report.group)) {
+      const permanentLock = closedCompletion(tasks, input.linkedEstimationId);
+      if (permanentLock) {
+        throw new Error(`Completion report ${permanentLock.id} is Closed. No further progress or completion task can be created for this estimation.`);
+      }
+      if (report.group === "completion") {
+        const existingCompletion = candidates.find((task) => task.reportGroup === "completion" && task.linkedEstimationId === input.linkedEstimationId);
+        if (existingCompletion) throw new Error(`Completion task ${existingCompletion.id} already exists for this estimation.`);
+      }
+      if (report.group === "progress") {
+        const existingProgress = candidates.find((task) => task.reportGroup === "progress" && task.linkedEstimationId === input.linkedEstimationId && task.assignedDate === input.assignedDate);
+        if (existingProgress) throw new Error(`Progress task ${existingProgress.id} already exists for this estimation and assigned date.`);
+      }
+      return;
+    }
+    const existing = candidates.find((task) => task.reportKey === input.reportKey
+      && task.institutionType === input.institutionType
+      && task.institutionCode === input.institutionCode
+      && task.assignedDate === input.assignedDate
+      && identityToken(task.branch) === identityToken(input.branch)
+      && identityToken(task.customerName) === identityToken(input.customerName)
+      && identityToken(task.propertyBrief) === identityToken(input.propertyBrief));
+    if (existing) throw new Error(`Task ${existing.id} already represents this assignment. Open the existing task instead of creating a duplicate.`);
   }
   function addActivity(task, type, text, author = authorName()) {
     task.activity.push({ id: randomId(), type, author, text, createdAt: timestamp() });
@@ -240,6 +280,7 @@
     const today = new Date();
     const todayIso = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
     if (!input.assignedDate || input.assignedDate > todayIso) throw new Error("Assigned date cannot be later than today.");
+    duplicateForInput(tasks, input, report);
     if (window.WorkflowAccess?.currentRole() === "employee" && !assignee) throw new Error("Employees must assign a new task before creating it.");
     if (assignee && !String(input.initialNote || "").trim()) throw new Error("Add an acknowledgement or routing work note for the assignment.");
     const dueRange = dueDateRange(input.priority, input.assignedDate);
@@ -361,31 +402,81 @@
           filename: String(artifact.filename || url.split("/").pop() || "Estimation report.xlsx"),
           generatedAt,
           source: String(artifact.source || "Generated Excel"),
+          storageId: String(artifact.storageId || ""),
         };
         if (task.reportGroup === "estimation" && artifact.estimationSummary?.components?.length) {
           task.estimationSummary = copyTask(artifact.estimationSummary);
         }
       }
+      if (normalizedFormat === "pdf") {
+        const url = String(artifact.url || "");
+        if (url && (!url.startsWith("/downloads/") || !url.toLowerCase().includes(".pdf"))) {
+          throw new Error("The completed PDF report reference is invalid.");
+        }
+      }
+      if (artifact.institutionOffline === true) {
+        const url = String(artifact.url || "");
+        const isKvb = task.institutionCode === "KVB";
+        const validFile = isKvb
+          ? url.toLowerCase().includes(".xlsx")
+          : /\.(docx|pdf)(?:$|[?#])/.test(url.toLowerCase());
+        if (!url.startsWith("/downloads/") || !validFile) {
+          throw new Error("The completed institution-specific report reference is invalid.");
+        }
+        task.latestInstitutionArtifact = {
+          url,
+          filename: String(artifact.filename || url.split("/").pop() || "Completed valuation report"),
+          generatedAt,
+          source: String(artifact.source || "Attached valuation report"),
+          storageId: String(artifact.storageId || ""),
+        };
+      }
       if (normalizedFormat === "docx" && ["progress", "completion"].includes(task.reportGroup) && artifact.progressSummary) {
         task.progressSummary = copyTask(artifact.progressSummary);
       }
-      const action = normalizedFormat === "xlsx" && String(artifact.source || "").toLowerCase().includes("upload")
-        ? "Completed Excel report attached successfully."
-        : `${normalizedFormat.toUpperCase()} report generated successfully.`;
+      const action = artifact.institutionOffline === true
+        ? "Completed institution-specific valuation report attached successfully."
+        : normalizedFormat === "xlsx" && String(artifact.source || "").toLowerCase().includes("upload")
+          ? "Completed Excel report attached successfully."
+          : `${normalizedFormat.toUpperCase()} report generated successfully.`;
       addActivity(task, "report", action);
     });
   }
 
   function requiredArtifactLabel(task) {
-    return task?.reportGroup === "estimation" ? "completed Excel report" : "DOCX";
+    if (task?.reportGroup === "estimation") return "completed Excel report";
+    if (task?.institutionCode === "KVB") return "completed KVB Excel report";
+    if (task?.institutionCode === "KB") return "completed Valocity DOCX or PDF report";
+    return "DOCX";
   }
 
   function latestArtifact(task) {
-    return task?.reportGroup === "estimation" ? task.latestXlsx : task.latestDocx;
+    if (task?.reportGroup === "estimation" || task?.institutionCode === "KVB") return task.latestXlsx;
+    if (task?.institutionCode === "KB") return task.latestInstitutionArtifact;
+    return task?.latestDocx;
   }
 
   function finalArtifact(task) {
-    return task?.reportGroup === "estimation" ? task.finalXlsx : task.finalDocx;
+    if (task?.reportGroup === "estimation" || task?.institutionCode === "KVB") return task?.finalXlsx;
+    if (task?.institutionCode === "KB") return task?.finalInstitutionArtifact;
+    return task?.finalDocx;
+  }
+
+  function requiresInstitutionOfflineArtifact(task) {
+    return task?.reportGroup === "valuation" && ["KVB", "KB"].includes(task.institutionCode);
+  }
+
+  function removeInstitutionArtifact(taskId) {
+    return replace(taskId, (task) => {
+      requirePermission("openReport", task, "This report attachment can be changed only while the task is active.");
+      if (!requiresInstitutionOfflineArtifact(task)) throw new Error("This task does not use an institution-specific offline report attachment.");
+      const artifact = latestArtifact(task);
+      if (!artifact?.url) throw new Error("There is no completed report attachment to remove.");
+      task.reportGeneratedAt = null;
+      if (task.institutionCode === "KVB") task.latestXlsx = null;
+      task.latestInstitutionArtifact = null;
+      addActivity(task, "report", "Completed institution-specific valuation report attachment removed.");
+    });
   }
 
   function hasFreshRequiredArtifact(task) {
@@ -400,7 +491,7 @@
     return replace(taskId, (task) => {
       requirePermission("completeTask", task, "You do not have permission to complete this task.");
       if (task.status !== "In Progress" || !task.reportGeneratedAt) throw new Error("Generate the report successfully before completing the task.");
-      if (task.reportGroup === "estimation" && !hasFreshRequiredArtifact(task)) {
+      if ((task.reportGroup === "estimation" || requiresInstitutionOfflineArtifact(task)) && !hasFreshRequiredArtifact(task)) {
         throw new Error(`Generate or attach a ${requiredArtifactLabel(task)} before completing the task.`);
       }
       if (task.reopenedAt && !hasFreshRequiredArtifact(task)) {
@@ -437,10 +528,14 @@
       requirePermission("closeTask", task, "You do not have permission to close this task.");
       const summary = paymentSummary(task);
       if (task.status !== "Completed" || summary.status !== "Received" || summary.outstanding !== 0) throw new Error("Complete the report and settle the full agreed or estimated fee before closing the request.");
-      if (task.reportGroup === "estimation" && !task.latestXlsx?.url) throw new Error("Attach or generate the completed Excel report before closing the request.");
+      if ((task.reportGroup === "estimation" || requiresInstitutionOfflineArtifact(task)) && !hasFreshRequiredArtifact(task)) {
+        throw new Error(`Attach or generate the ${requiredArtifactLabel(task)} before closing the request.`);
+      }
       task.status = "Closed";
       task.closedAt = timestamp();
-      if (task.reportGroup === "estimation") task.finalXlsx = copyTask(task.latestXlsx);
+      if (task.reportGroup === "completion" && !task.completionLockedAt) task.completionLockedAt = task.closedAt;
+      if (task.reportGroup === "estimation" || task.institutionCode === "KVB") task.finalXlsx = copyTask(task.latestXlsx);
+      else if (task.institutionCode === "KB") task.finalInstitutionArtifact = task.latestInstitutionArtifact ? copyTask(task.latestInstitutionArtifact) : null;
       else task.finalDocx = task.latestDocx ? copyTask(task.latestDocx) : null;
       addActivity(task, "status", "Request closed after payment settlement.");
       if (String(note || "").trim()) addActivity(task, "note", String(note).trim());
@@ -459,12 +554,18 @@
     });
   }
 
+  function reopenReferenceAt(task) {
+    if (!task || !["Completed", "Closed"].includes(task.status)) return "";
+    return task.closedAt || task.completedAt || "";
+  }
+
   function reopenDeadline(task) {
-    return task?.closedAt ? addDays(task.closedAt, REOPEN_WINDOW_DAYS) : "";
+    const reference = reopenReferenceAt(task);
+    return reference ? addDays(reference, REOPEN_WINDOW_DAYS) : "";
   }
 
   function canReopen(task, reference = new Date()) {
-    if (!task || task.status !== "Closed" || !task.closedAt) return false;
+    if (!reopenReferenceAt(task)) return false;
     const deadline = localDate(reopenDeadline(task));
     const current = localDate(reference);
     if (!deadline || !current) return false;
@@ -474,10 +575,11 @@
 
   function reopen(taskId, note) {
     const workNote = String(note || "").trim();
-    if (!workNote) throw new Error("Add a work note explaining why the closed task is being reopened.");
+    if (!workNote) throw new Error("Add a work note explaining why the completed or closed task is being reopened.");
     return replace(taskId, (task) => {
-      if (window.WorkflowAccess?.currentRole() !== "father") throw new Error("Only the CEO can reopen a closed task.");
-      if (!canReopen(task)) throw new Error(`Closed tasks can be reopened only within ${REOPEN_WINDOW_DAYS} calendar days of closure.`);
+      const previousStatus = task.status;
+      if (window.WorkflowAccess?.currentRole() !== "father") throw new Error("Only the CEO can reopen a completed or closed task.");
+      if (!canReopen(task)) throw new Error(`Completed and closed tasks can be reopened only within ${REOPEN_WINDOW_DAYS} calendar days of completion or closure.`);
       task.status = "In Progress";
       task.closedAt = null;
       task.completedAt = null;
@@ -485,8 +587,9 @@
       task.reportGeneratedAt = null;
       task.latestDocx = null;
       task.latestXlsx = null;
+      task.latestInstitutionArtifact = null;
       if (["progress", "completion"].includes(task.reportGroup)) task.progressSummary = null;
-      addActivity(task, "status", "Closed request reopened and returned to In Progress.");
+      addActivity(task, "status", `${previousStatus} request reopened and returned to In Progress.`);
       addActivity(task, "note", workNote);
     });
   }
@@ -534,9 +637,16 @@
     };
   }
 
-  function estimationCandidates() {
-    return load()
-      .filter((task) => task.reportGroup === "estimation" && ["Completed", "Closed"].includes(task.status) && task.latestXlsx?.url && task.estimationSummary?.components?.length)
+  function estimationCandidates(reportKey = "", assignedDate = "") {
+    const tasks = load();
+    return tasks
+      .filter((task) => {
+        if (task.reportGroup !== "estimation" || !["Completed", "Closed"].includes(task.status) || !task.latestXlsx?.url || !task.estimationSummary?.components?.length) return false;
+        if (closedCompletion(tasks, task.id)) return false;
+        if (reportKey === "completion" && activeTasks(tasks).some((candidate) => candidate.reportGroup === "completion" && candidate.linkedEstimationId === task.id)) return false;
+        if (reportKey === "progress" && assignedDate && activeTasks(tasks).some((candidate) => candidate.reportGroup === "progress" && candidate.linkedEstimationId === task.id && candidate.assignedDate === assignedDate)) return false;
+        return true;
+      })
       .sort((left, right) => new Date(right.reportGeneratedAt || right.updatedAt) - new Date(left.reportGeneratedAt || left.updatedAt));
   }
 
@@ -574,9 +684,9 @@
   window.TaskStore = {
     STATUSES, HOLD_REASONS, CANCELLATION_REASONS, EMPLOYEES, REPORTS,
     create, get, query, summary, addNote, assign, putOnHold, resume,
-    markReportGenerated, complete, updatePayment, close, reopen, cancel, ensureSamples,
+    markReportGenerated, complete, updatePayment, close, reopen, cancel, removeInstitutionArtifact, ensureSamples,
     matchesPeriod, periodBounds, dueDateRange, billingBasis, paymentSummary, all: load,
     canReopen, reopenDeadline, storageStatus, requiredArtifactLabel, latestArtifact,
-    finalArtifact, hasFreshRequiredArtifact, estimationCandidates, progressReportsFor, REOPEN_WINDOW_DAYS,
+    finalArtifact, hasFreshRequiredArtifact, requiresInstitutionOfflineArtifact, estimationCandidates, progressReportsFor, REOPEN_WINDOW_DAYS,
   };
 })();

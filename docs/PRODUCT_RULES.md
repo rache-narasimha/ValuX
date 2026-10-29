@@ -12,10 +12,10 @@ deferred, a separate explicit user request is required before implementation.
   application.
 - The persisted backend role values are `father` and `employee`. The current
   user-facing labels are `CEO` and `Employee`.
-- PostgreSQL currently stores authentication and authorization identity data
-  only. Assignments, reports, institutions, payments, drafts, and dashboard
-  samples remain in browser storage until the durable business-data phase is
-  explicitly approved.
+- PostgreSQL currently serves authentication and authorization identity data.
+  The approved durable business-data implementation is being delivered in
+  phases; browser repositories remain the active workflow until the later
+  frontend cutover phase is completed.
 - Existing routes, URL parameters, browser-storage formats, calculations,
   report mappings, preview behavior, and DOCX output must remain compatible
   unless the user explicitly changes them.
@@ -46,7 +46,7 @@ deferred, a separate explicit user request is required before implementation.
   be created as an unassigned task under the current implementation.
 - Employees do not see aggregate institution income, received, or outstanding
   business analytics.
-- Employees cannot cancel tasks, reopen Closed tasks, or maintain institution
+- Employees cannot cancel tasks, reopen Completed or Closed tasks, or maintain institution
   settings.
 
 ### Father/CEO rules
@@ -56,7 +56,7 @@ deferred, a separate explicit user request is required before implementation.
 - The father/CEO can work on any assigned report, transfer active tasks, and
   manage workflow actions.
 - The father/CEO alone can cancel a task.
-- The father/CEO alone can reopen an eligible Closed task.
+- The father/CEO alone can reopen an eligible Completed or Closed task.
 - The father/CEO sees aggregate institution workload and financial analytics
   and can maintain the configured bank/NBFC list.
 
@@ -90,15 +90,30 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Cancellation reasons are Created by Mistake, Wrong Details, and Custom.
   Custom requires a work-note explanation. Cancellation is recorded in
   activity history.
-- A Closed task may be reopened only by the father/CEO, within the configured
-  seven-calendar-day reopening window, with a mandatory work note. A newly
-  generated DOCX is required before completing a valuation again. An
-  estimation requires a newly generated or attached completed XLSX.
+- A Completed or Closed task may be reopened only by the father/CEO, within the
+  configured seven-calendar-day reopening window from its completion or closure,
+  with a mandatory work note. A newly
+  generated DOCX is required before completing an ordinary valuation again.
+  Karur Vysya Bank requires a newly attached completed KVB XLSX; Karnataka
+  Bank requires a newly attached Valocity DOCX or PDF. An estimation requires
+  a newly generated or attached completed XLSX.
 - Task lists remain searchable and filterable. Search includes task ID,
   applicant/customer, report, institution, assignee, property details, state,
   hold reason, and payment state where supported.
 - Lists load bounded pages of records and fetch/show more rather than rendering
   an unbounded task collection at once.
+- A non-Cancelled valuation or estimation assignment blocks creation of another
+  assignment with the same report type, institution, assigned date, branch,
+  applicant/customer, and property description. Cancelling the earlier task
+  releases that duplicate restriction.
+- A linked estimation can have multiple Progress assignments only when their
+  assigned dates differ. It can have only one non-Cancelled Completion
+  assignment. Cancelling either task releases its applicable duplicate
+  restriction.
+- Once a linked Completion assignment has ever reached Completed, that estimation
+  is permanently unavailable for any new Progress or Completion assignment.
+  Reopening the existing Completion assignment permits corrections to that
+  task only; it does not release the linked estimation for another task.
 
 ## 4. Work notes and activity history
 
@@ -135,9 +150,11 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   Received, and outstanding is exactly zero.
 - Payment editing is disabled after a task is Closed or Cancelled.
 - The final downloadable artifact retained on closure is the latest generated
-  DOCX for valuation work. For estimation work it is the latest completed XLSX,
-  produced by the online form or attached after offline completion. PDF output
-  and historical generated versions are not required for this workflow.
+  DOCX for ordinary valuation work. Karur Vysya Bank retains the completed
+  uploaded XLSX; Karnataka Bank retains the completed Valocity DOCX or PDF.
+  For estimation work it is the latest completed XLSX, produced by the online
+  form or attached after offline completion. Historical generated versions are
+  not required for this workflow.
 
 ## 6. Dashboards and navigation
 
@@ -159,6 +176,10 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   all institutions and for an individual selected institution.
 - Employee dashboards contain task and per-task payment information but no
   aggregate business-income analytics.
+- Assignment lists export the complete currently filtered result set to a
+  typed Excel workbook. The father/CEO institution directory also exports its
+  workload and financial overview; employees do not receive that aggregate
+  institution export.
 
 ## 7. Report-form boundary
 
@@ -169,6 +190,9 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   convenience, but they must not become report fields or generated content.
 - Task-linked report pages show one report/assignment heading; shared shell
   changes must not create duplicate headers or banners.
+- Draft status indicators remain visually quiet: the existing status text is
+  retained while a small saving activity cue appears, then resolves to the
+  saved state without moving the form layout.
 - General-property and agricultural-property forms are separate products.
   Never apply a field, label, document option, template, calculation, or layout
   change to both unless the user explicitly requests both.
@@ -186,6 +210,12 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Estimation supports online form entry or a configured offline XLSX workflow.
   A completed estimation XLSX is required before completion and is retained at
   closure. Estimation reports do not require photo or map uploads.
+- Karur Vysya Bank general valuations use its supplied Excel format only: the
+  application supplies a cleaned bank-template XLSX and the valuer attaches the
+  completed XLSX. Karnataka Bank general valuations are completed in Valocity;
+  the application supplies no online form or template and retains the Valocity
+  DOCX or PDF attached by the valuer. Other valuation institutions retain the
+  standard online DOCX workflow.
 - Every Progress or Completion report is linked to one finalized Estimation
   task. The linked estimation supplies the applicant, property and immutable
   component estimated costs; users record only progress-specific details and
@@ -224,8 +254,6 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 
 The following plans are not authorized merely because they are documented:
 
-- Durable PostgreSQL storage for assignments, reports, payments, institutions,
-  business dashboards, or generated-report metadata.
 - Migration of browser sample tasks into the future database.
 - Production deployment, backup, replication, or disaster recovery.
 - A full administrator web interface and admin-account lifecycle.

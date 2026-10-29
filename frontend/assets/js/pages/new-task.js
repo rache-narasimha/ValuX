@@ -62,7 +62,7 @@
   }
 
   function refreshLinkedEstimations(selectedId = linkedEstimation.value) {
-    const candidates = TaskStore.estimationCandidates();
+    const candidates = TaskStore.estimationCandidates(reportType.value, assignedDate.value);
     linkedEstimation.innerHTML = '<option value="">Select a finalized estimation report</option>';
     candidates.forEach((candidate) => {
       const amount = Number(candidate.estimationSummary?.totalEstimatedCost || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -70,8 +70,8 @@
     });
     linkedEstimation.value = candidates.some((candidate) => candidate.id === selectedId) ? selectedId : "";
     document.getElementById("linked-estimation-help").textContent = candidates.length
-      ? "Selecting an estimate reuses and locks its institution, applicant and property identity."
-      : "No eligible estimation report is available. Generate or attach its completed Excel report first.";
+      ? "Selecting an estimate reuses and locks its institution, applicant and property identity. Closed completion reports and duplicate report dates are excluded."
+      : "No eligible estimation report is available. Finalize an estimate, or check whether a completion report is already closed or the selected report date is already in use.";
     applyLinkedEstimation();
   }
 
@@ -118,6 +118,8 @@
   // Local draft persistence for an unfinished assignment.
   function showDraftState(message, canDiscard = true) {
     draftStatus.textContent = message;
+    draftStatus.classList.remove("is-saving");
+    draftStatus.removeAttribute("aria-label");
     discardDraft.hidden = !canDiscard;
   }
 
@@ -136,9 +138,10 @@
 
   function scheduleDraftSave() {
     hasUnsavedChanges = true;
-    showDraftState("Saving draft…");
+    draftStatus.classList.add("is-saving");
+    draftStatus.setAttribute("aria-label", "Saving draft locally");
     window.clearTimeout(draftTimer);
-    draftTimer = window.setTimeout(saveDraft, 250);
+    draftTimer = window.setTimeout(saveDraft, 700);
   }
 
   function restoreDraft() {
@@ -196,7 +199,10 @@
   institutionType.addEventListener("change", refreshInstitutions);
   reportType.addEventListener("change", refreshReportType);
   linkedEstimation.addEventListener("change", () => { applyLinkedEstimation(); scheduleDraftSave(); });
-  assignedDate.addEventListener("change", refreshDates);
+  assignedDate.addEventListener("change", () => {
+    refreshDates();
+    if (["progress", "completion"].includes(reportType.value)) refreshLinkedEstimations();
+  });
   document.getElementById("priority").addEventListener("change", refreshDates);
   picker.input.addEventListener("change", () => {
     try { initialNote.required = Boolean(picker.value()); } catch (_error) { initialNote.required = Boolean(picker.input.value.trim()); }

@@ -66,6 +66,80 @@
     ]);
   }
 
+  function exportSubtitle() {
+    const parts = [];
+    if (fields.group.value !== "all") parts.push(`Report section: ${GROUP_LABELS[fields.group.value]}`);
+    if (fields.institution.value) parts.push(`Institution: ${fields.institution.options[fields.institution.selectedIndex]?.textContent || fields.institution.value}`);
+    if (fields.period.value) parts.push(`Assigned during: ${fields.period.options[fields.period.selectedIndex].textContent}`);
+    if (fields.status.value) parts.push(`Status: ${fields.status.value}`);
+    if (fields.assignee.value) parts.push(`Assigned to: ${fields.assignee.value}`);
+    if (fields.holdReason.value) parts.push(`On hold: ${fields.holdReason.value}`);
+    if (fields.payment.value) parts.push(`Payment: ${fields.payment.value}`);
+    if (fields.search.value.trim()) parts.push(`Search: ${fields.search.value.trim()}`);
+    return parts.length ? parts.join(" · ") : "All assignments visible to the signed-in user";
+  }
+
+  function taskExportOptions() {
+    const tasks = TaskStore.query(queryOptions(Number.MAX_SAFE_INTEGER)).items;
+    return {
+      title: "ValuX assignments",
+      subtitle: exportSubtitle(),
+      sheetName: "Assignments",
+      fileName: "ValuX_Assignments.xlsx",
+      columns: [
+        { key: "taskId", label: "Task ID" }, { key: "applicant", label: "Applicant / customer" },
+        { key: "report", label: "Report type" }, { key: "property", label: "Property" },
+        { key: "institution", label: "Institution" }, { key: "branch", label: "Branch" },
+        { key: "assignee", label: "Assigned to" }, { key: "assignedDate", label: "Assigned date", type: "date" },
+        { key: "dueDate", label: "Due date", type: "date" }, { key: "status", label: "Status" },
+        { key: "holdReason", label: "On-hold reason" }, { key: "paymentStatus", label: "Payment status" },
+        { key: "fee", label: "Agreed / estimated fee (Rs.)", type: "currency" },
+        { key: "received", label: "Received (Rs.)", type: "currency" },
+        { key: "outstanding", label: "Outstanding (Rs.)", type: "currency" },
+      ],
+      rows: tasks.map((task) => {
+        const payment = TaskStore.paymentSummary(task);
+        return {
+          taskId: task.id, applicant: task.customerName, report: task.reportLabel, property: task.propertyBrief,
+          institution: task.institutionName, branch: task.branch, assignee: task.assignee || "Unassigned",
+          assignedDate: task.assignedDate, dueDate: task.dueDate, status: task.status, holdReason: task.holdReason || "",
+          paymentStatus: payment.status, fee: payment.basis, received: task.payment.received || 0, outstanding: payment.outstanding,
+        };
+      }),
+    };
+  }
+
+  function institutionExportOptions() {
+    const allTasks = TaskStore.all().filter(WorkflowAccess.visible);
+    const rows = InstitutionMetrics.configured().map((institution) => {
+      const tasks = allTasks.filter((task) => task.institutionCode === institution.code);
+      const billable = tasks.filter((task) => task.status !== "Cancelled");
+      return {
+        code: institution.code, institution: institution.name, type: institution.type, total: tasks.length,
+        unassigned: tasks.filter((task) => task.status === "Unassigned").length,
+        inProgress: tasks.filter((task) => task.status === "In Progress").length,
+        onHold: tasks.filter((task) => task.status === "On Hold").length,
+        completed: tasks.filter((task) => task.status === "Completed").length,
+        closed: tasks.filter((task) => task.status === "Closed").length,
+        earned: billable.reduce((sum, task) => sum + Number(TaskStore.paymentSummary(task).basis || 0), 0),
+        received: billable.reduce((sum, task) => sum + Number(task.payment.received || 0), 0),
+        outstanding: billable.reduce((sum, task) => sum + Number(TaskStore.paymentSummary(task).outstanding || 0), 0),
+      };
+    });
+    return {
+      title: "ValuX institution overview", subtitle: "Configured banks and NBFCs · all visible assignments",
+      sheetName: "Institutions", fileName: "ValuX_Institutions.xlsx",
+      columns: [
+        { key: "code", label: "Code" }, { key: "institution", label: "Institution" }, { key: "type", label: "Type" },
+        { key: "total", label: "Total assignments", type: "integer" }, { key: "unassigned", label: "Unassigned", type: "integer" },
+        { key: "inProgress", label: "In progress", type: "integer" }, { key: "onHold", label: "On hold", type: "integer" },
+        { key: "completed", label: "Completed", type: "integer" }, { key: "closed", label: "Closed", type: "integer" },
+        { key: "earned", label: "Income earned (Rs.)", type: "currency" }, { key: "received", label: "Payment received (Rs.)", type: "currency" },
+        { key: "outstanding", label: "Outstanding (Rs.)", type: "currency" },
+      ], rows,
+    };
+  }
+
   function renderRows(tasks) {
     if (!tasks.length) return WorkflowUI.empty("No assignments match the selected search and filters.");
     if (fields.status.value !== "On Hold" || WorkflowAccess.currentRole() !== "father") {
@@ -191,6 +265,10 @@
   Object.entries(fields).forEach(([key, field]) => field.addEventListener(key === "search" ? "input" : "change", reset));
   document.getElementById("clear-institution").addEventListener("click", () => { window.location.href = "/tasks?view=institutions"; });
   loadMore.addEventListener("click", () => { visible += PAGE_SIZE; render(); });
+  document.getElementById("export-tasks").addEventListener("click", (event) => WorkbookExport.fromButton(event.currentTarget, taskExportOptions()));
+  const institutionExport = document.getElementById("export-institutions");
+  institutionExport.hidden = WorkflowAccess.currentRole() !== "father";
+  institutionExport.addEventListener("click", (event) => WorkbookExport.fromButton(event.currentTarget, institutionExportOptions()));
   window.addEventListener("sln:tasks-changed", render);
   window.addEventListener("sln:payment-updated", render);
   render();

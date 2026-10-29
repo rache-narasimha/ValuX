@@ -2,6 +2,42 @@
    rules above so the shared navigation remains predictable at every width. */
 .task-list-card > .task-stack { gap: 0; }
 .task-table-row .task-row-meta { justify-items: start; }
+.export-icon-button {
+  display: grid;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  place-items: center;
+  padding: 0;
+}
+.export-icon-button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+.export-icon-button[aria-busy="true"] svg { opacity: .35; }
+.section-heading > button.export-icon-button {
+  box-sizing: border-box;
+  display: inline-grid;
+  flex: 0 0 38px;
+  width: 38px !important;
+  min-width: 38px !important;
+  max-width: 38px;
+  height: 38px !important;
+  min-height: 38px !important;
+  max-height: 38px;
+  margin: 0;
+  padding: 0 !important;
+  place-content: center;
+  align-self: center;
+  line-height: 1;
+}
+.section-heading > button.export-icon-button svg { display: block; margin: 0; }
 body:not(.workflow-page) .mobile-menu-button { display: none; }
 #sidebar-toggle.sidebar-collapse {
   display: flex;
@@ -75,11 +111,11 @@ body:not(.workflow-page) .mobile-menu-button { display: none; }
 
 .task-list-card { overflow: hidden; }
 .task-table-viewport { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; padding-bottom: 2px; }
-.task-table-viewport > .task-stack { min-width: 1060px; gap: 0; }
+.task-table-viewport > .task-stack { min-width: 1000px; gap: 0; }
 .task-table-head,
 .task-table-row {
-  grid-template-columns: minmax(190px, 1.15fr) minmax(170px, 1.15fr) minmax(135px, 1fr) minmax(110px, .8fr) 85px 95px 105px 75px;
-  min-width: 1060px;
+  grid-template-columns: minmax(175px, 1.15fr) minmax(165px, 1.15fr) minmax(130px, 1fr) minmax(105px, .8fr) 82px 98px 112px 92px;
+  min-width: 1000px;
 }
 .task-table-head { display: grid; }
 .task-table-row {
@@ -101,9 +137,12 @@ body:not(.workflow-page) .mobile-menu-button { display: none; }
 .task-table-row .task-row-link { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
 .task-table-status,
 .task-table-payment { display: grid; min-width: 0; justify-items: start; gap: 4px; pointer-events: none; }
+.task-row-payment .row-payment-action,
+.task-table-payment .row-payment-action { pointer-events: auto; }
+.task-table-action .row-open { width: 36px; }
 .task-table-status .task-secondary,
 .task-table-payment small { color: var(--muted); font-size: .64rem; }
-.task-list-group { min-width: 1060px; gap: 0; }
+.task-list-group { min-width: 1000px; gap: 0; }
 .task-list-group-heading { margin: 14px 0 8px; }
 .task-list-group:first-child .task-list-group-heading { margin-top: 6px; }
 html[data-theme="dark"] .task-table-row { border-color: var(--line); background: var(--surface); }
@@ -117,7 +156,7 @@ html[data-theme="dark"] .task-table-row:hover { background: var(--cream); }
   .filter-bar-extended { grid-template-columns: repeat(4, minmax(150px, 1fr)); }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 760px) {
   .task-table-viewport { overflow-x: visible; }
   .task-table-viewport > .task-stack,
   .task-list-group { min-width: 0; gap: 9px; }

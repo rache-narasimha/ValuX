@@ -27,15 +27,19 @@
 .choice-card input:focus-visible + span { outline: 3px solid rgba(214, 101, 56, .2); }
 .choice-card.is-disabled { cursor: not-allowed; opacity: .5; }
 .choice-card.is-disabled span { background: #f3f4f4; }
-.construction-choice-grid { margin-bottom: 14px; }
+.construction-section { display: grid; gap: 16px; }
+.construction-section > h3 { margin: 0; }
+.construction-choice-grid { margin: 0; }
 .residential-construction-note {
-  margin: 0; padding: 11px 14px; border-left: 3px solid #7d9db6; border-radius: 0 8px 8px 0;
+  margin: 2px 0 0; padding: 13px 15px; border-left: 3px solid #7d9db6; border-radius: 0 8px 8px 0;
   background: #f3f8fc; color: #496878; line-height: 1.45;
 }
 .configuration-summary { margin-top: 18px; padding: 14px 16px; border-left: 4px solid #d66538; background: #fff4ec; border-radius: 8px; color: #673123; }
 .configuration-summary p { margin: 0; }
-.component-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-top: 18px; }
-.component-toolbar .field { flex: 1 1 260px; }
+.component-toolbar { display: grid; grid-template-columns: minmax(220px, 1.25fr) minmax(220px, 1fr) auto; gap: 12px 14px; align-items: end; margin-top: 18px; }
+.component-toolbar .field { min-width: 0; }
+.component-toolbar .primary { min-height: 42px; white-space: nowrap; }
+.component-toolbar #custom-roof-wrap:not([hidden]) { grid-column: 1 / span 2; }
 .component-list { display: grid; gap: 12px; margin-top: 20px; }
 .component-row {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center;
@@ -160,7 +164,11 @@
 nav button.nav-locked { position: relative; padding-right: 38px; color: #d7e4e8; }
 nav button.nav-locked:hover { color: #fff; }
 .nav-lock { position: absolute; right: 15px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; background: rgba(246, 215, 198, .18); color: #f6d7c6; font-size: .72rem; font-weight: 900; }
-.report-mode-panel { margin-top: 22px; padding-top: 18px; border-top: 1px solid #ead8cf; }
+.component-mode-separator { height: 34px; }
+.report-mode-panel { margin: 0; padding: 18px 20px 20px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.report-mode-panel h3 { margin-top: 0; }
+.report-mode-panel .hint { max-width: 900px; margin-bottom: 18px; }
+.report-mode-panel .setup-choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .workbook-preview { display: grid; gap: 18px; margin-top: 20px; }
 .workbook-preview figure { margin: 0; overflow: auto; border: 1px solid #dfc6b9; border-radius: 10px; background: #fff; }
 .workbook-preview figcaption { padding: 9px 12px; border-bottom: 1px solid #ead8cf; color: #5e291b; font-weight: 800; }
@@ -197,12 +205,77 @@ nav button.nav-locked:hover { color: #fff; }
 .modal-head p { margin-top: 5px; color: #6f8087; }
 .modal-close { border: 0; background: #f7e8df; color: #673123; border-radius: 8px; width: 36px; height: 36px; font-size: 1.35rem; cursor: pointer; }
 .optional-label { color: #72858c; font-weight: 500; }
+html[data-theme="dark"] .estimation-utility-bar,
+html[data-theme="dark"] .choice-card span,
+html[data-theme="dark"] .component-row,
+html[data-theme="dark"] .building-config-editor,
+html[data-theme="dark"] .typical-floor-picker,
+html[data-theme="dark"] .typical-floor-options label,
+html[data-theme="dark"] .empty-state,
+html[data-theme="dark"] .estimate-item,
+html[data-theme="dark"] .review-stat,
+html[data-theme="dark"] .manual-upload,
+html[data-theme="dark"] .output-card,
+html[data-theme="dark"] .worksheet-summary,
+html[data-theme="dark"] .worksheet-item,
+html[data-theme="dark"] .locked-panel-card { background: #2a1d18; border-color: #604237; color: #f7ded0; }
+html[data-theme="dark"] .choice-card input:checked + span,
+html[data-theme="dark"] .configuration-summary,
+html[data-theme="dark"] .estimate-item summary,
+html[data-theme="dark"] .worksheet-item-title,
+html[data-theme="dark"] .output-status.is-pending,
+html[data-theme="dark"] .notice { background: #4a2d24; border-color: #765143; color: #ffd8c5; }
+html[data-theme="dark"] .residential-construction-note,
+html[data-theme="dark"] .output-status,
+html[data-theme="dark"] .output-status.is-complete,
+html[data-theme="dark"] .attached-file { background: #203a2d; border-color: #3f6c54; color: #bce8d0; }
+html[data-theme="dark"] .component-row p,
+html[data-theme="dark"] .choice-card small,
+html[data-theme="dark"] .typical-floor-picker p,
+html[data-theme="dark"] .typical-floor-help,
+html[data-theme="dark"] .review-stat small,
+html[data-theme="dark"] .output-card p,
+html[data-theme="dark"] .locked-panel-card p,
+html[data-theme="dark"] .optional-label,
+html[data-theme="dark"] .final-amount-control small { color: #c7aaa0; }
+html[data-theme="dark"] .component-row h4,
+html[data-theme="dark"] .building-config-editor h5,
+html[data-theme="dark"] .typical-floor-picker legend,
+html[data-theme="dark"] .estimate-item-title strong,
+html[data-theme="dark"] .review-stat strong,
+html[data-theme="dark"] .worksheet-summary,
+html[data-theme="dark"] .final-amount-control,
+html[data-theme="dark"] .worksheet-item-title,
+html[data-theme="dark"] .abstract-table th { color: #f7ded0; }
+html[data-theme="dark"] .custom-item-details,
+html[data-theme="dark"] .worksheet-custom-row td,
+html[data-theme="dark"] .abstract-custom-row { background: #241915; border-color: #604237; }
+html[data-theme="dark"] .worksheet-table th,
+html[data-theme="dark"] .abstract-table th,
+html[data-theme="dark"] .worksheet-heading-row td { background: #35261f; border-color: #604237; color: #f7ded0; }
+html[data-theme="dark"] .worksheet-table td,
+html[data-theme="dark"] .abstract-table td,
+html[data-theme="dark"] .abstract-table-wrap,
+html[data-theme="dark"] .worksheet-item,
+html[data-theme="dark"] .report-mode-panel { border-color: transparent; background: transparent; }
+html[data-theme="dark"] .worksheet-subtotal-row td,
+html[data-theme="dark"] .abstract-table tfoot th { background: #44301b; color: #f6d49a; }
+html[data-theme="dark"] .abstract-table .abstract-grand-total th { background: #5a4d18; color: #fff4b2; }
+html[data-theme="dark"] .calculation-info-popover { background: #35261f; border-color: #765143; color: #f7ded0; }
+html[data-theme="dark"] .info-button { background: #513025; color: #ffd8c5; }
+html[data-theme="dark"] .final-amount-control input,
+html[data-theme="dark"] .worksheet-table input,
+html[data-theme="dark"] .abstract-table input { background: #35261f; border-color: #765143; color: #f7ded0; }
+html[data-theme="dark"] .file-input { display: none; }
 @media (max-width: 1080px) {
   .output-grid { grid-template-columns: 1fr; }
   .output-status { min-height: 96px; }
 }
 @media (max-width: 900px) {
-  .setup-choice-grid, .component-choice-grid, .component-meta, .common-work-grid, .output-grid { grid-template-columns: 1fr; }
+  .setup-choice-grid, .component-choice-grid, .component-meta, .common-work-grid, .output-grid, .component-toolbar { grid-template-columns: 1fr; }
+  .component-toolbar #custom-roof-wrap:not([hidden]) { grid-column: auto; }
+  .component-toolbar .primary { width: 100%; }
+  .component-mode-separator { height: 26px; }
   .measurement-table { display: block; overflow-x: auto; }
   .worksheet-summary { align-items: flex-start; flex-direction: column; }
   .custom-item-details { grid-template-columns: 1fr; }

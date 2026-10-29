@@ -43,6 +43,7 @@ html[data-theme="dark"] .report-shell-title strong,
 html[data-theme="dark"] body:not(.workflow-page) .panel > h2,
 html[data-theme="dark"] body:not(.workflow-page) .processing-card strong,
 html[data-theme="dark"] body:not(.workflow-page) .modal-head h2 { color: #ffd8c5; }
+html[data-theme="dark"] body:not(.workflow-page) #status { background: #513025; color: #ffc4a6; }
 
 @media (max-width: 900px) {
   .report-shell-title { margin-left: 10px; padding-left: 10px; }

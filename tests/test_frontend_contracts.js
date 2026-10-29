@@ -60,6 +60,27 @@ assert.match(institutionsSource, /code:\s*"CANARA",\s*name:\s*"Canara Bank"/, "C
 const taskStoreSource = fs.readFileSync(path.join(root, "frontend", "assets", "js", "core", "task-store.js"), "utf8");
 assert.match(taskStoreSource, /progress:\s*\{[^}]*route:\s*"\/progress-completion"/, "Progress assignments must open the linked report form");
 assert.match(taskStoreSource, /completion:\s*\{[^}]*route:\s*"\/progress-completion"/, "Completion assignments must open the linked report form");
+assert.match(taskStoreSource, /requiresInstitutionOfflineArtifact/, "Institution-specific offline valuation artifacts must be lifecycle-gated");
+
+const generalPage = fs.readFileSync(path.join(root, "frontend", "pages", "general.html"), "utf8");
+assert.match(generalPage, /institution-valuation-offline\.js/, "General valuation must load the institution-specific offline workflow controller");
+const institutionOfflineSource = fs.readFileSync(path.join(root, "frontend", "assets", "js", "pages", "institution-valuation-offline.js"), "utf8");
+assert.match(institutionOfflineSource, /\/templates\/kvb-valuation\.xlsx/, "KVB workflow must provide the approved Excel template");
+assert.match(institutionOfflineSource, /\/api\/valuation\/karnataka\/upload/, "Karnataka Bank workflow must accept the Valocity artifact");
+assert.match(institutionOfflineSource, /removeInstitutionArtifact/, "Institution-specific uploads must be removable before task completion");
+assert.match(institutionOfflineSource, /offline-artifact-download[\s\S]*?Download completed report/, "Institution-specific uploads must reuse an icon-only download control");
+const institutionOfflineCss = fs.readFileSync(path.join(root, "frontend", "assets", "css", "institution-valuation-offline.css"), "utf8");
+assert.match(institutionOfflineCss, /\.institution-offline-valuation \.file-input\s*\{\s*display:\s*none;/, "Institution-specific uploads must hide the native file input");
+
+const tasksPage = fs.readFileSync(path.join(root, "frontend", "pages", "tasks.html"), "utf8");
+assert.match(tasksPage, /id="export-tasks"/, "Assignment lists must expose the filtered Excel export");
+assert.match(tasksPage, /id="export-institutions"/, "The institution directory must expose its Excel export");
+assert.match(tasksPage, /export-icon-button[^>]*title="Export to Excel"/, "Excel exports must use an icon with a hover label");
+assert.match(tasksPage, /src="\/assets\/js\/core\/workbook-export\.js"/, "Task exports must load the workbook download helper");
+
+const workflowUiSource = fs.readFileSync(path.join(root, "frontend", "assets", "js", "components", "workflow-ui.js"), "utf8");
+assert.match(workflowUiSource, /function openTaskControl\(task\)/, "Task rows must use one consistent open-task control");
+assert.match(workflowUiSource, /class="task-row-action"/, "Dashboard rows must reserve a consistent action column");
 
 const estimationController = fs.readFileSync(
   path.join(root, "frontend", "assets", "js", "pages", "estimation.js"),
@@ -69,6 +90,11 @@ assert.match(
   estimationController,
   /function setWorkMode\(mode\)\s*\{[\s\S]*?state\.details\.workMode = mode;[\s\S]*?renderAll\([\s\S]*?persistDraftNow\(\);/,
   "Selecting a preparation mode must persist the selection immediately",
+);
+assert.match(
+  estimationController,
+  /component-mode-separator[\s\S]*?function reportModePanel\(\)[\s\S]*?class="subgroup report-mode-panel"/,
+  "Estimation preparation mode must remain a separate component-selection section",
 );
 assert.match(
   estimationController,

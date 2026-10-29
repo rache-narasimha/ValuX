@@ -8,12 +8,15 @@ scripts. Run them directly as shown; they are not collected by a test runner.
 ```sh
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_auth_security
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_database_boundaries
+docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_business_database_foundation
+docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_business_database_constraints
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_password_history
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_auth_flow
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_general_generation
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_agricultural_generation
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_estimation_generation
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_progress_generation
+docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_export_generation
 node valuation_app/tests/test_task_store.js
 node valuation_app/tests/test_workflow_access.js
 node valuation_app/tests/test_frontend_contracts.js
@@ -55,8 +58,9 @@ docker compose -f valuation_app/compose.yaml exec -T valuation-report \
 `.env` and `development-credentials.txt` are ignored and owner-readable only.
 Do not copy their contents into source, issue reports or command output.
 The one-shot `db-migrate` Compose service applies authentication migrations
-before the web service starts. It uses the owner connection only for DDL and
-grants. The long-running web service uses the restricted `valsphere_app` role.
+first and durable business-data migrations second before the web service
+starts. It uses the owner connection only for DDL and grants. The long-running
+web service uses the restricted `valsphere_app` role.
 
 To run migrations explicitly:
 

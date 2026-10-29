@@ -89,8 +89,8 @@
     if (current.status === "On Hold") return "Resume work before marking this task Completed.";
     if (current.status !== "In Progress") return `A ${current.status} task cannot be marked Completed.`;
     if (!current.reportGeneratedAt) return "Generate the report successfully before marking this task Completed.";
-    if (current.reportGroup === "estimation" && !TaskStore.hasFreshRequiredArtifact(current)) {
-      return "Generate or attach the completed Excel report before marking this task Completed.";
+    if ((current.reportGroup === "estimation" || TaskStore.requiresInstitutionOfflineArtifact(current)) && !TaskStore.hasFreshRequiredArtifact(current)) {
+      return `Generate or attach the ${TaskStore.requiredArtifactLabel(current)} before marking this task Completed.`;
     }
     if (current.reopenedAt && !TaskStore.hasFreshRequiredArtifact(current)) {
       return `Generate a new ${TaskStore.requiredArtifactLabel(current)} after reopening before marking this task Completed.`;
@@ -196,6 +196,8 @@
       url: event.detail?.download || "",
       filename: event.detail?.filename || "",
       source: event.detail?.source || "",
+      storageId: event.detail?.storageId || "",
+      institutionOffline: event.detail?.institutionOffline === true,
       estimationSummary: event.detail?.estimationSummary || null,
       progressSummary: event.detail?.progressSummary || null,
     });

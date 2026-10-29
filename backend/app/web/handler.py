@@ -6,18 +6,22 @@ import re
 import shutil
 import subprocess
 import time
+from zipfile import BadZipFile, ZipFile
 from io import BytesIO
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
 from openpyxl import load_workbook
+from openpyxl.utils.exceptions import InvalidFileException
 
 from ..auth import routes as auth_routes
 from ..auth.service import AuthError
 from ..estimation import extract_estimation_summary, generate_estimation_workbook
+from ..exports import generate_table_export
 from ..progress import generate_progress_report
 from ..valuation.config import AGRICULTURAL_TEMPLATE, ASSETS_DIR, OUTPUT_DIR, PAGES_DIR, SOFFICE
+from ..valuation.kvb_template import generate_kvb_template
 from ..valuation.reports import generate_agricultural_docx, generate_docx
 from ..valuation.schemas import agricultural_schema_payload, schema_payload
 
@@ -38,6 +42,12 @@ def safe_xlsx_name(value):
     name = Path(unquote(str(value or "completed-estimation.xlsx"))).name
     name = re.sub(r"[^a-z0-9._ -]+", "_", name, flags=re.IGNORECASE)
     return name if name.lower().endswith(".xlsx") else "completed-estimation.xlsx"
+
+
+def safe_upload_name(value, allowed_suffixes, fallback):
+    name = Path(unquote(str(value or fallback))).name
+    name = re.sub(r"[^a-z0-9._ -]+", "_", name, flags=re.IGNORECASE).strip(" .")
+    return name if Path(name).suffix.lower() in allowed_suffixes else fallback
 
 class Handler(BaseHTTPRequestHandler):
     def send_json(self, payload, status=200, headers=None):
@@ -68,6 +78,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", "0")
         self.end_headers()
+
+    def send_internal_error(self, error, message):
+        """Log operational details server-side without exposing them to the browser."""
+        self.log_error("%s: %s", message, type(error).__name__)
+        self.send_json({"ok": False, "error": message}, 500)
 
     def do_HEAD(self):
         """Support lightweight availability checks for retained report files."""
@@ -143,6 +158,21 @@ class Handler(BaseHTTPRequestHandler):
                     headers=[("Content-Disposition", 'attachment; filename="Agricultural_Valuation_Master_Template.docx"')],
                 )
                 return
+            if path == "/templates/kvb-valuation.xlsx":
+                try:
+                    generated = generate_kvb_template()
+                except FileNotFoundError:
+                    self.send_error(404)
+                    return
+                except Exception as exc:
+                    self.send_internal_error(exc, "The KVB valuation template could not be prepared. Please try again.")
+                    return
+                self.send_file(
+                    Path(generated.file_name),
+                    data=generated.content,
+                    headers=[("Content-Disposition", f'attachment; filename="{generated.file_name}"')],
+                )
+                return
             pages = {
                 "/": PAGES_DIR / "index.html",
                 "/tasks": PAGES_DIR / "tasks.html",
@@ -188,11 +218,20 @@ class Handler(BaseHTTPRequestHandler):
         if request_path == "/api/estimation/upload":
             self.handle_estimation_upload()
             return
+        if request_path == "/api/valuation/kvb/upload":
+            self.handle_institution_valuation_upload("kvb")
+            return
+        if request_path == "/api/valuation/karnataka/upload":
+            self.handle_institution_valuation_upload("karnataka")
+            return
         if request_path in {"/api/estimation/workbook", "/api/estimation/preview"}:
             self.handle_estimation_generation(request_path)
             return
         if request_path in {"/api/progress/generate", "/api/progress/preview"}:
             self.handle_progress_generation(request_path)
+            return
+        if request_path == "/api/exports/workbook":
+            self.handle_table_export()
             return
         general_paths = {"/api/generate", "/api/preview"}
         agricultural_paths = {"/api/agricultural/generate", "/api/agricultural/preview"}
@@ -246,8 +285,20 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": True, "download": f"/downloads/{docx_name}"})
         except AuthError as exc:
             self.send_json({"ok": False, "error": str(exc), "code": exc.code}, exc.status)
+        except (ValueError, json.JSONDecodeError) as exc:
+            self.send_json({"ok": False, "error": str(exc)}, 400)
         except Exception as exc:
-            self.send_json({"ok": False, "error": str(exc)}, 500)
+            self.send_internal_error(exc, "The valuation report could not be prepared. Please try again.")
+
+    def do_DELETE(self):
+        request_path = urlparse(self.path).path
+        if request_path == "/api/valuation/kvb/upload":
+            self.handle_institution_valuation_removal("kvb")
+            return
+        if request_path == "/api/valuation/karnataka/upload":
+            self.handle_institution_valuation_removal("karnataka")
+            return
+        self.send_error(404)
 
     def handle_estimation_generation(self, request_path):
         try:
@@ -302,7 +353,7 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, json.JSONDecodeError) as exc:
             self.send_json({"ok": False, "error": str(exc)}, 400)
         except Exception as exc:
-            self.send_json({"ok": False, "error": str(exc)}, 500)
+            self.send_internal_error(exc, "The estimation workbook could not be prepared. Please try again.")
 
     def handle_estimation_upload(self):
         try:
@@ -336,8 +387,82 @@ class Handler(BaseHTTPRequestHandler):
             )
         except AuthError as exc:
             self.send_json({"ok": False, "error": str(exc), "code": exc.code}, exc.status)
-        except Exception as exc:
+        except (BadZipFile, InvalidFileException):
+            self.send_json({"ok": False, "error": "The selected file could not be read as a valid Excel workbook."}, 400)
+        except ValueError as exc:
             self.send_json({"ok": False, "error": str(exc)}, 400)
+        except Exception as exc:
+            self.send_internal_error(exc, "The completed Excel workbook could not be attached. Please try again.")
+
+    def handle_institution_valuation_upload(self, institution):
+        """Retain the offline artifact required by an institution-specific valuation."""
+        try:
+            auth_routes.require_full_session(self)
+            size = int(self.headers.get("Content-Length", "0"))
+            if size <= 0:
+                raise ValueError("Select the completed report file to attach.")
+            if size > 25 * 1024 * 1024:
+                raise ValueError("The report file is larger than the 25 MB limit.")
+            content = self.rfile.read(size)
+            if institution == "kvb":
+                file_name = safe_upload_name(self.headers.get("X-File-Name"), {".xlsx"}, "completed-kvb-valuation.xlsx")
+                if len(content) < 4 or content[:2] != b"PK":
+                    raise ValueError("Select a completed KVB Excel workbook (.xlsx).")
+                workbook = load_workbook(BytesIO(content), read_only=True, data_only=False)
+                workbook.close()
+                prefix = "kvb-valuation-upload"
+            else:
+                file_name = safe_upload_name(self.headers.get("X-File-Name"), {".docx", ".pdf"}, "completed-valocity-report.pdf")
+                suffix = Path(file_name).suffix.lower()
+                if suffix == ".pdf" and not content.startswith(b"%PDF-"):
+                    raise ValueError("The selected file is not a valid PDF report.")
+                if suffix == ".docx":
+                    if len(content) < 4 or content[:2] != b"PK":
+                        raise ValueError("The selected file is not a valid DOCX report.")
+                    with ZipFile(BytesIO(content)) as archive:
+                        if "word/document.xml" not in archive.namelist():
+                            raise ValueError("The selected file is not a valid DOCX report.")
+                prefix = "karnataka-valuation-upload"
+            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            stored_name = f"{prefix}-{time.time_ns()}-{file_name}"
+            (OUTPUT_DIR / stored_name).write_bytes(content)
+            self.send_json({
+                "ok": True,
+                "fileName": file_name,
+                "savedName": stored_name,
+                "size": len(content),
+                "download": f"/downloads/{stored_name}",
+            }, 201)
+        except AuthError as exc:
+            self.send_json({"ok": False, "error": str(exc), "code": exc.code}, exc.status)
+        except (BadZipFile, InvalidFileException):
+            self.send_json({"ok": False, "error": "The selected file could not be read as the required report format."}, 400)
+        except ValueError as exc:
+            self.send_json({"ok": False, "error": str(exc)}, 400)
+        except Exception as exc:
+            self.send_internal_error(exc, "The completed valuation report could not be attached. Please try again.")
+
+    def handle_institution_valuation_removal(self, institution):
+        """Remove only a validated institution-upload artifact from the local output store."""
+        try:
+            auth_routes.require_full_session(self)
+            stored_name = Path(unquote(str(self.headers.get("X-Stored-Name", "")))).name
+            prefix = "kvb-valuation-upload-" if institution == "kvb" else "karnataka-valuation-upload-"
+            allowed_suffixes = {".xlsx"} if institution == "kvb" else {".docx", ".pdf"}
+            if not stored_name.startswith(prefix) or Path(stored_name).suffix.lower() not in allowed_suffixes:
+                raise ValueError("The completed report attachment reference is invalid.")
+            stored_path = OUTPUT_DIR / stored_name
+            if stored_path.exists():
+                if not stored_path.is_file():
+                    raise ValueError("The completed report attachment could not be removed.")
+                stored_path.unlink()
+            self.send_json({"ok": True})
+        except AuthError as exc:
+            self.send_json({"ok": False, "error": str(exc), "code": exc.code}, exc.status)
+        except ValueError as exc:
+            self.send_json({"ok": False, "error": str(exc)}, 400)
+        except Exception as exc:
+            self.send_internal_error(exc, "The completed valuation report attachment could not be removed. Please try again.")
 
     def handle_progress_generation(self, request_path):
         try:
@@ -379,4 +504,24 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, json.JSONDecodeError) as exc:
             self.send_json({"ok": False, "error": str(exc)}, 400)
         except Exception as exc:
-            self.send_json({"ok": False, "error": str(exc)}, 500)
+            self.send_internal_error(exc, "The progress or completion report could not be prepared. Please try again.")
+
+    def handle_table_export(self):
+        try:
+            auth_routes.require_full_session(self)
+            size = int(self.headers.get("Content-Length", "0"))
+            if size <= 0 or size > 5 * 1024 * 1024:
+                raise ValueError("The export request is empty or too large.")
+            payload = json.loads(self.rfile.read(size))
+            exported = generate_table_export(payload)
+            self.send_file(
+                Path(exported.file_name),
+                data=exported.content,
+                headers=[("Content-Disposition", f'attachment; filename="{exported.file_name}"')],
+            )
+        except AuthError as exc:
+            self.send_json({"ok": False, "error": str(exc), "code": exc.code}, exc.status)
+        except (ValueError, json.JSONDecodeError) as exc:
+            self.send_json({"ok": False, "error": str(exc)}, 400)
+        except Exception as exc:
+            self.send_internal_error(exc, "The Excel export could not be created. Please try again.")

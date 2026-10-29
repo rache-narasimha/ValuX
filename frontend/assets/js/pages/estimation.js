@@ -168,7 +168,7 @@
     const options = ready ? profile.components.filter(compatibleComponent) : [];
     return `<div class="panel" data-key="components"><h2>Component Selection</h2><p class="hint">Add only the structures present at the property. The order below becomes the workbook order after the Abstract.</p>
       ${ready ? `<div class="component-toolbar"><div class="field"><label for="component-type">Component</label><select id="component-type"><option value="">Select component</option>${options.map((component) => `<option value="${component.kind}">${escapeHtml(component.label)}</option>`).join("")}</select></div><div class="field"><label for="component-name">Component name <span class="optional-label">Optional</span></label><input id="component-name" placeholder="For example, Production Hall 2"></div><div class="field" id="custom-roof-wrap" hidden><label for="custom-roof-type">Custom component construction</label><select id="custom-roof-type">${customRoofOptions()}</select></div><button type="button" class="primary" id="add-component">Add component</button></div>` : `<div class="empty-state">Complete Property Configuration before adding components.</div>`}
-      <div class="component-list">${state.components.length ? state.components.map(componentCard).join("") : `<div class="empty-state">No components selected yet.</div>`}</div>${state.components.length ? reportModePanel() : ""}</div>`;
+      <div class="component-list">${state.components.length ? state.components.map(componentCard).join("") : `<div class="empty-state">No components selected yet.</div>`}</div>${state.components.length ? `<div class="component-mode-separator" aria-hidden="true"></div>${reportModePanel()}` : ""}</div>`;
   }
 
   function reportModePanel() {
@@ -841,7 +841,10 @@
   }
 
   function workbookErrorMessage(error) {
-    return error instanceof Error ? error.message : "The workbook could not be prepared.";
+    const message = error instanceof Error ? error.message.trim() : "";
+    return message && !/^(failed to fetch|networkerror|load failed)$/i.test(message)
+      ? message
+      : "The workbook could not be prepared. Check your connection and try again.";
   }
 
   function workbookState(mode) {
@@ -1020,9 +1023,10 @@
   }
 
   function scheduleSave() {
-    $("status").textContent = "Saving draft…";
+    $("status").classList.add("is-saving");
+    $("status").setAttribute("aria-label", "Saving draft locally");
     window.clearTimeout(saveTimer);
-    saveTimer = window.setTimeout(persistDraftNow, 250);
+    saveTimer = window.setTimeout(persistDraftNow, 700);
   }
 
   function persistDraftNow() {
@@ -1030,6 +1034,8 @@
     saveTimer = null;
     localStorage.setItem(DRAFT_KEY, JSON.stringify(state));
     $("status").textContent = "Saved locally";
+    $("status").classList.remove("is-saving");
+    $("status").removeAttribute("aria-label");
   }
 
   function restoreDraft() {

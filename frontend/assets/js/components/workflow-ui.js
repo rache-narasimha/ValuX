@@ -30,31 +30,47 @@
     return "#087ea4";
   }
 
+  function taskUrl(task) {
+    return `/tasks/detail?id=${encodeURIComponent(task.id)}`;
+  }
+
+  function openTaskControl(task) {
+    return `<a class="row-open" href="${taskUrl(task)}" title="Open task" aria-label="Open ${escape(task.reportName)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></a>`;
+  }
+
+  function paymentControl(task, options) {
+    if (options.paymentAction === false) return "";
+    if (WorkflowAccess.can("updatePayment", task)) {
+      return `<button class="row-action row-payment-action" type="button" data-payment-task="${escape(task.id)}">Payment</button>`;
+    }
+    if (task.status === "Closed") {
+      return '<button class="row-action row-payment-action" type="button" disabled title="Payment is locked after closure">Payment locked</button>';
+    }
+    return "";
+  }
+
   function taskRow(task, options = {}) {
     const hold = task.status === "On Hold" && task.holdReason ? `<span class="task-secondary">${escape(task.holdReason)}</span>` : "";
     const assignee = task.assignee || "Unassigned";
     const paymentSummary = TaskStore.paymentSummary(task);
     const payment = paymentSummary.status;
-    const quickPayment = options.paymentAction !== false && WorkflowAccess.can("updatePayment", task)
-      ? `<button class="row-action" type="button" data-payment-task="${escape(task.id)}">Payment</button>`
-      : task.status === "Closed" && options.paymentAction !== false
-        ? '<button class="row-action" type="button" disabled title="Payment is locked after closure">Payment locked</button>'
-        : `<span class="row-arrow" aria-hidden="true">›</span>`;
+    const paymentAction = paymentControl(task, options);
+    const openTask = openTaskControl(task);
     if (options.variant === "table") {
       return `<article class="task-table-row" data-task-id="${escape(task.id)}">
-        <a class="task-row-link" href="/tasks/detail?id=${encodeURIComponent(task.id)}" aria-label="Open ${escape(task.reportName)}"></a>
+        <a class="task-row-link" href="${taskUrl(task)}" aria-hidden="true" tabindex="-1"></a>
         <div class="task-table-id"><span class="task-id">${escape(task.id)}</span></div>
         <div class="task-table-person"><strong>${escape(task.customerName)}</strong><small>${escape(task.reportLabel)}</small></div>
         <div class="task-table-property"><span>${escape(task.propertyBrief)}</span><small>${escape(task.institutionName)} · ${escape(task.branch)}</small></div>
         <div class="task-table-assignee"><span class="table-avatar">${escape(assignee.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase())}</span><strong>${escape(assignee)}</strong></div>
         <div class="task-table-due"><strong>${date(task.dueDate)}</strong></div>
         <div class="task-table-status"><span class="status-badge ${statusClass(task.status)}">${escape(task.status)}</span>${hold}</div>
-        <div class="task-table-payment"><span class="payment-badge ${paymentClass(payment)}">${escape(payment)}</span><small>${paymentSummary.outstanding === null ? "N/A" : `${currency(paymentSummary.outstanding)} due`}</small></div>
-        <div class="task-table-action">${quickPayment}</div>
+        <div class="task-table-payment"><span class="payment-badge ${paymentClass(payment)}">${escape(payment)}</span><small>${paymentSummary.outstanding === null ? "N/A" : `${currency(paymentSummary.outstanding)} due`}</small>${paymentAction}</div>
+        <div class="task-table-action">${openTask}</div>
       </article>`;
     }
     return `<article class="task-row" data-task-id="${escape(task.id)}">
-      <a class="task-row-link" href="/tasks/detail?id=${encodeURIComponent(task.id)}" aria-label="Open ${escape(task.reportName)}"></a>
+      <a class="task-row-link" href="${taskUrl(task)}" aria-hidden="true" tabindex="-1"></a>
       <div class="task-row-main">
         <p class="task-id">${escape(task.id)}</p>
         <h3>${escape(task.reportName)}</h3>
@@ -65,8 +81,8 @@
       <div class="task-row-meta">
         <span class="status-badge ${statusClass(task.status)}">${escape(task.status)}</span>${hold}
       </div>
-      <div class="task-row-payment task-wide"><small>Payment</small><span class="payment-badge ${paymentClass(payment)}">${escape(payment)}</span><small>${paymentSummary.outstanding === null ? "N/A" : `${currency(paymentSummary.outstanding)} due`}</small></div>
-      ${quickPayment}
+      <div class="task-row-payment task-wide"><small>Payment</small><span class="payment-badge ${paymentClass(payment)}">${escape(payment)}</span><small>${paymentSummary.outstanding === null ? "N/A" : `${currency(paymentSummary.outstanding)} due`}</small>${paymentAction}</div>
+      <div class="task-row-action">${openTask}</div>
     </article>`;
   }
 

@@ -99,9 +99,9 @@
     element("hold-task-button").hidden = !canChange || task.status !== "In Progress";
     element("resume-task-button").hidden = !canChange || task.status !== "On Hold";
     const reopen = element("reopen-task-button");
-    const fatherClosedView = WorkflowAccess.currentRole() === "father" && task.status === "Closed";
-    reopen.hidden = !fatherClosedView;
-    reopen.disabled = fatherClosedView && !WorkflowAccess.can("reopenTask", task);
+    const fatherTerminalView = WorkflowAccess.currentRole() === "father" && ["Completed", "Closed"].includes(task.status);
+    reopen.hidden = !fatherTerminalView;
+    reopen.disabled = fatherTerminalView && !WorkflowAccess.can("reopenTask", task);
     reopen.title = reopen.disabled ? `The ${TaskStore.REOPEN_WINDOW_DAYS}-day reopening window has expired.` : "";
   }
 
@@ -147,29 +147,34 @@
 
   function configureFinalReport() {
     const card = element("final-report-card");
+    const terminal = ["Completed", "Closed"].includes(task.status);
     const closed = task.status === "Closed";
-    card.hidden = !closed;
-    if (!closed) return;
+    card.hidden = !terminal;
+    if (!terminal) return;
     const download = element("download-final-docx");
-    const artifact = TaskStore.finalArtifact(task);
-    const artifactLabel = task.reportGroup === "estimation" ? "Excel report" : "DOCX";
+    const artifact = closed ? TaskStore.finalArtifact(task) : TaskStore.latestArtifact(task);
+    const artifactLabel = task.reportGroup === "estimation" || task.institutionCode === "KVB" ? "Excel report" : task.institutionCode === "KB" ? "Valocity report" : "DOCX";
     if (artifact?.url) {
       download.hidden = false;
       download.textContent = `Download final ${artifactLabel}`;
       download.href = artifact.url;
-      download.setAttribute("download", artifact.filename || (task.reportGroup === "estimation" ? "final-estimation.xlsx" : "final-report.docx"));
-      element("final-report-message").textContent = `Final ${artifactLabel} recorded ${WorkflowUI.date(artifact.generatedAt)} and retained at closure.`;
+      download.setAttribute("download", artifact.filename || (task.reportGroup === "estimation" || task.institutionCode === "KVB" ? "final-estimation.xlsx" : task.institutionCode === "KB" ? "final-valocity-report" : "final-report.docx"));
+      element("final-report-message").textContent = closed
+        ? `Final ${artifactLabel} recorded ${WorkflowUI.date(artifact.generatedAt)} and retained at closure.`
+        : `Completed ${artifactLabel} recorded ${WorkflowUI.date(artifact.generatedAt)}.`;
       verifyFinalReport(artifact);
     } else {
       download.hidden = true;
-      element("final-report-message").textContent = `The final ${artifactLabel} is unavailable because no downloadable file reference was captured before this request was closed.`;
+      element("final-report-message").textContent = closed
+        ? `The final ${artifactLabel} is unavailable because no downloadable file reference was captured before this request was closed.`
+        : `No completed ${artifactLabel} is currently available for download.`;
     }
     const deadline = TaskStore.reopenDeadline(task);
     element("reopen-deadline").textContent = WorkflowAccess.currentRole() === "father"
       ? TaskStore.canReopen(task)
         ? `Reopening is available through ${WorkflowUI.date(deadline)}.`
         : `The reopening window ended on ${WorkflowUI.date(deadline)}.`
-      : "Only the CEO can reopen a closed task.";
+      : "Only the CEO can reopen a completed or closed task.";
   }
 
   async function verifyFinalReport(artifact) {
@@ -178,7 +183,8 @@
       if (!response.ok) throw new Error("File not found");
     } catch (_error) {
       const current = TaskStore.get(taskId);
-      if (current?.status !== "Closed" || TaskStore.finalArtifact(current)?.url !== artifact.url) return;
+      const currentArtifact = current?.status === "Closed" ? TaskStore.finalArtifact(current) : TaskStore.latestArtifact(current);
+      if (!current || !["Completed", "Closed"].includes(current.status) || currentArtifact?.url !== artifact.url) return;
       element("download-final-docx").hidden = true;
       element("final-report-message").textContent = "The final report reference is recorded, but the file is no longer available on this installation.";
     }
@@ -228,9 +234,8 @@
     element("payment-warning").hidden = !summary.outsideStandard;
     element("payment-warning").textContent = summary.outsideStandard ? "This payment due date is beyond the standard seven-day period after completion." : "";
     element("activity-list").innerHTML = task.activity.slice().reverse().map((event) => `<li><span class="activity-dot activity-${WorkflowUI.escape(event.type)}"></span><div><p>${WorkflowUI.escape(event.text)}</p><small>${WorkflowUI.escape(event.author)} · ${WorkflowUI.date(event.createdAt)}</small></div></li>`).join("");
-    element("reopen-artifact-message").textContent = task.reportGroup === "estimation"
-      ? "The task returns to In Progress and requires a newly generated or attached completed Excel report before completion."
-      : "The task returns to In Progress and requires a newly generated DOCX before completion.";
+    element("reopen-title").textContent = `Reopen ${task.status.toLowerCase()} task`;
+    element("reopen-artifact-message").textContent = `The task returns to In Progress and requires a newly generated or attached ${TaskStore.requiredArtifactLabel(task)} before completion.`;
     configurePayment();
     configureFinalReport();
     element("note-form").hidden = !WorkflowAccess.can("addNote", task);

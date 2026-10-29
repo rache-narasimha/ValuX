@@ -47,6 +47,10 @@ assert.equal(active.id, "BOB-WIFI-VAL-131026");
 assert.equal(active.status, "In Progress");
 assert.equal(active.activity.length, 2);
 assert.ok(active.activity.every((event) => event.id));
+assert.throws(() => store.create(input()), /already represents this assignment/i);
+const cancelledDuplicate = store.create(input({ customerName: "Cancelled Duplicate", propertyBrief: "Duplicate release test" }));
+store.cancel(cancelledDuplicate.id, "Created by Mistake", "Entered twice.");
+assert.equal(store.create(input({ customerName: "Cancelled Duplicate", propertyBrief: "Duplicate release test" })).status, "In Progress");
 const activePayment = store.updatePayment(active.id, { estimated: 5000, agreed: 4500, received: 1000, note: "Advance received." });
 assert.equal(activePayment.status, "In Progress");
 assert.equal(activePayment.payment.status, "Partially Received");
@@ -56,7 +60,7 @@ assert.equal(store.paymentSummary(activePayment).outstanding, 3500);
 const unassigned = store.create(input({ customerName: "Unassigned Customer", assignee: "", initialNote: "" }));
 assert.equal(unassigned.status, "Unassigned");
 assert.equal(unassigned.assignee, "");
-assert.equal(store.query({ institution: "BOB", period: "monthly" }).total, 2);
+assert.equal(store.query({ institution: "BOB", period: "monthly" }).total, 4);
 assert.equal(store.query({ institution: "PNB", period: "monthly" }).total, 0);
 assert.equal(store.matchesPeriod(active, "daily"), false);
 assert.equal(store.matchesPeriod(active, "monthly"), true);
@@ -82,12 +86,19 @@ assert.equal(resumed.activity.length, activityBeforeResume + 1);
 store.markReportGenerated(active.id, "docx", { url: "/downloads/valuation-report-1.docx", filename: "valuation-report-1.docx" });
 const completed = store.complete(active.id, "Report issued.");
 assert.equal(completed.status, "Completed");
+assert.equal(store.canReopen(completed), true);
+assert.equal(store.canReopen(completed, new Date(new Date(completed.completedAt).getTime() + 8 * 24 * 60 * 60 * 1000)), false);
+const reopenedCompleted = store.reopen(active.id, "A correction is required before closure.");
+assert.equal(reopenedCompleted.status, "In Progress");
+assert.equal(reopenedCompleted.completedAt, null);
+store.markReportGenerated(active.id, "docx", { url: "/downloads/valuation-report-1-corrected.docx", filename: "valuation-report-1-corrected.docx" });
+assert.equal(store.complete(active.id, "Corrected report issued.").status, "Completed");
 const paid = store.updatePayment(active.id, { estimated: 5000, agreed: 4500, received: 4500, note: "Received." });
 assert.equal(paid.payment.status, "Received");
 assert.ok(paid.payment.updatedAt);
 const closed = store.close(active.id, "Request closed.");
 assert.equal(closed.status, "Closed");
-assert.equal(closed.finalDocx.url, "/downloads/valuation-report-1.docx");
+assert.equal(closed.finalDocx.url, "/downloads/valuation-report-1-corrected.docx");
 assert.throws(() => store.updatePayment(active.id, { agreed: 4500, received: 4500 }), /closed task/i);
 assert.equal(store.canReopen(closed), true);
 assert.equal(store.canReopen(closed, new Date(new Date(closed.closedAt).getTime() + 8 * 24 * 60 * 60 * 1000)), false);
@@ -98,6 +109,38 @@ store.markReportGenerated(active.id, "pdf");
 assert.throws(() => store.complete(active.id, "Correction completed."), /new DOCX/i);
 store.markReportGenerated(active.id, "docx", { url: "/downloads/valuation-report-2.docx" });
 assert.equal(store.complete(active.id, "Corrected report completed.").status, "Completed");
+
+const kvb = store.create(input({
+  customerName: "KVB Offline Customer", institutionCode: "KVB", institutionName: "Karur Vysya Bank",
+  propertyBrief: "KVB offline valuation", assignedDate: "2026-10-14", dueDate: "2026-10-16",
+}));
+store.markReportGenerated(kvb.id, "xlsx", {
+  url: "/downloads/kvb-valuation-upload-1.xlsx", filename: "completed-kvb.xlsx",
+  source: "Uploaded KVB Excel", institutionOffline: true, storageId: "kvb-valuation-upload-1.xlsx",
+});
+assert.equal(store.requiredArtifactLabel(store.get(kvb.id)), "completed KVB Excel report");
+assert.equal(store.removeInstitutionArtifact(kvb.id).reportGeneratedAt, null);
+assert.equal(store.latestArtifact(store.get(kvb.id)), null);
+store.markReportGenerated(kvb.id, "xlsx", {
+  url: "/downloads/kvb-valuation-upload-2.xlsx", filename: "completed-kvb-replacement.xlsx",
+  source: "Uploaded KVB Excel", institutionOffline: true, storageId: "kvb-valuation-upload-2.xlsx",
+});
+assert.equal(store.complete(kvb.id, "KVB workbook attached.").status, "Completed");
+store.updatePayment(kvb.id, { estimated: 3000, agreed: 3000, received: 3000 });
+assert.equal(store.close(kvb.id, "KVB valuation closed.").finalXlsx.filename, "completed-kvb-replacement.xlsx");
+
+const karnataka = store.create(input({
+  customerName: "Karnataka Offline Customer", institutionCode: "KB", institutionName: "Karnataka Bank",
+  propertyBrief: "Valocity valuation", assignedDate: "2026-10-15", dueDate: "2026-10-17",
+}));
+store.markReportGenerated(karnataka.id, "pdf", {
+  url: "/downloads/karnataka-valuation-upload-1.pdf", filename: "valocity-report.pdf",
+  source: "Attached Valocity report", institutionOffline: true,
+});
+assert.equal(store.requiredArtifactLabel(store.get(karnataka.id)), "completed Valocity DOCX or PDF report");
+assert.equal(store.complete(karnataka.id, "Valocity report attached.").status, "Completed");
+store.updatePayment(karnataka.id, { estimated: 3000, agreed: 3000, received: 3000 });
+assert.equal(store.close(karnataka.id, "Karnataka valuation closed.").finalInstitutionArtifact.filename, "valocity-report.pdf");
 
 const estimation = store.create(input({
   customerName: "Estimation Customer", reportKey: "estimation", propertyBrief: "Commercial estimate",
@@ -128,11 +171,44 @@ const progress = store.create(input({
 }));
 assert.equal(store.REPORTS.progress.route, "/progress-completion");
 assert.equal(progress.linkedEstimationId, estimation.id);
+assert.throws(() => store.create(input({
+  customerName: "Estimation Customer", reportKey: "progress", propertyBrief: "Commercial estimate",
+  linkedEstimationId: estimation.id,
+})), /Progress task .* already exists/i);
+const laterProgress = store.create(input({
+  customerName: "Estimation Customer", reportKey: "progress", propertyBrief: "Commercial estimate",
+  linkedEstimationId: estimation.id, assignedDate: "2026-10-14", dueDate: "2026-10-16",
+}));
+assert.equal(laterProgress.reportGroup, "progress");
 store.markReportGenerated(progress.id, "docx", {
   url: "/downloads/progress-report.docx", filename: "progress.docx",
   progressSummary: { linkedEstimationId: estimation.id, reportType: "progress", reportDate: "2026-10-13", components: [{ label: "Ground Floor", completionPercent: 50 }] },
 });
 assert.equal(store.progressReportsFor(estimation.id)[0].id, progress.id);
+
+const completionTask = store.create(input({
+  customerName: "Estimation Customer", reportKey: "completion", propertyBrief: "Commercial estimate",
+  linkedEstimationId: estimation.id, assignedDate: "2026-10-15", dueDate: "2026-10-17",
+}));
+assert.throws(() => store.create(input({
+  customerName: "Estimation Customer", reportKey: "completion", propertyBrief: "Commercial estimate",
+  linkedEstimationId: estimation.id, assignedDate: "2026-10-16", dueDate: "2026-10-18",
+})), /Completion task .* already exists/i);
+store.markReportGenerated(completionTask.id, "docx", {
+  url: "/downloads/completion-report.docx", filename: "completion.docx",
+  progressSummary: { linkedEstimationId: estimation.id, reportType: "completion", reportDate: "2026-10-15", components: [{ label: "Ground Floor", completionPercent: 100 }] },
+});
+store.complete(completionTask.id, "Completion report issued.");
+store.updatePayment(completionTask.id, { estimated: 3000, agreed: 3000, received: 3000 });
+assert.equal(store.close(completionTask.id, "Completion closed.").status, "Closed");
+assert.equal(store.estimationCandidates().some((candidate) => candidate.id === estimation.id), false);
+assert.equal(store.reopen(completionTask.id, "Completion correction required.").status, "In Progress");
+assert.equal(store.estimationCandidates().some((candidate) => candidate.id === estimation.id), false);
+assert.equal(store.cancel(completionTask.id, "Wrong Details", "Cancelled after reopening for a correction.").status, "Cancelled");
+assert.throws(() => store.create(input({
+  customerName: "Estimation Customer", reportKey: "progress", propertyBrief: "Commercial estimate",
+  linkedEstimationId: estimation.id, assignedDate: "2026-10-17", dueDate: "2026-10-19",
+})), /No further progress or completion task/i);
 
 assert.throws(() => store.cancel(unassigned.id, "Custom", ""), /explain the cancellation/i);
 values.set("sln.workflow.tasks.v1", "{damaged-json");

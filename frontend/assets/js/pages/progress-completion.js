@@ -18,6 +18,10 @@
   const numeric = (value) => { const result = Number(String(value ?? "").replaceAll(",", "")); return Number.isFinite(result) ? result : 0; };
   const currency = (value) => `₹${numeric(value).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
   const clone = (value) => JSON.parse(JSON.stringify(value));
+  const reportErrorMessage = (error, fallback) => {
+    const message = error instanceof Error ? error.message.trim() : "";
+    return message && !/^(failed to fetch|networkerror|load failed)$/i.test(message) ? message : fallback;
+  };
 
   function localToday() {
     const now = new Date();
@@ -195,12 +199,15 @@
   }
 
   function scheduleSave() {
-    element("status").textContent = "Saving draft…";
+    element("status").classList.add("is-saving");
+    element("status").setAttribute("aria-label", "Saving draft locally");
     window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(draftState()));
       element("status").textContent = "Saved locally";
-    }, 250);
+      element("status").classList.remove("is-saving");
+      element("status").removeAttribute("aria-label");
+    }, 700);
   }
 
   function restoreDraft() {
@@ -281,7 +288,7 @@
         element("status").textContent = "DOCX generated";
       }
     } catch (error) {
-      window.alert(error.message || "The report could not be generated.");
+      window.alert(reportErrorMessage(error, "The report could not be generated. Check your connection and try again."));
       element("status").textContent = "Report generation failed";
     } finally { element("processing").hidden = true; }
   }

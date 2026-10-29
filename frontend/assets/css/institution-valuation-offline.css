@@ -1,0 +1,44 @@
+/* KVB and Karnataka Bank valuation files are prepared externally, then retained with the task. */
+.institution-offline-valuation { display: grid; gap: 16px; }
+.offline-valuation-card,
+.offline-artifact-card {
+  padding: clamp(18px, 3vw, 28px);
+  border: 1px solid #e6cdbf;
+  border-radius: 14px;
+  background: #fffaf6;
+}
+.offline-valuation-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.offline-valuation-heading h2,
+.offline-artifact-card h3 { margin: 3px 0 8px; color: #5e291b; }
+.offline-valuation-heading p:not(.eyebrow) { max-width: 680px; margin: 0; color: #61757e; line-height: 1.55; }
+.offline-mode-badge { flex: 0 0 auto; padding: 7px 10px; border-radius: 999px; background: #f7e8df; color: #7a371f; font-size: .74rem; font-weight: 850; }
+.offline-steps { display: grid; gap: 8px; margin: 20px 0; padding: 15px 17px 15px 37px; border: 1px solid #efd8cb; border-radius: 10px; background: #fff; color: #593b31; line-height: 1.45; }
+.offline-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.offline-template-download { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-height: 42px; text-decoration: none; }
+.institution-offline-valuation .file-input { display: none; }
+.offline-upload-status { min-height: 1.3em; margin: 13px 0 0; color: #5a6d73; font-size: .86rem; }
+.offline-artifact-card { padding-block: 18px; }
+.offline-artifact-card h3 { font-size: 1rem; }
+.offline-artifact { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 10px; border: 1px solid #b9d8c5; border-radius: 10px; background: #f3fbf5; color: #28573d; }
+.offline-artifact > span { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #3f8b5e; color: #fff; font-weight: 900; }
+.offline-artifact-details { display: grid; flex: 1 1 auto; min-width: 0; gap: 2px; }
+.offline-artifact strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.offline-artifact small { color: #527260; font-size: .76rem; }
+.offline-artifact-actions { display: flex; flex: 0 0 auto; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.offline-artifact-actions .secondary { flex: 0 0 auto; text-decoration: none; }
+.offline-artifact-download { display: inline-grid; width: 38px; min-width: 38px; height: 38px; min-height: 38px; padding: 0; place-items: center; line-height: 1; }
+.offline-artifact-download svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+.offline-artifact-pending { margin: 0; color: #80502f; }
+.offline-nav-label { display: block; padding: 11px 13px; border-radius: 8px; background: #fff0e7; color: #71301e; font-size: .86rem; font-weight: 800; }
+html[data-theme="dark"] .offline-valuation-card,
+html[data-theme="dark"] .offline-artifact-card { border-color: var(--line); background: var(--surface); }
+html[data-theme="dark"] .offline-steps { border-color: var(--line); background: var(--cream); color: var(--ink); }
+html[data-theme="dark"] .offline-artifact { background: #203a2d; border-color: #3f6c54; color: #bce8d0; }
+@media (max-width: 620px) {
+  .offline-valuation-heading { display: grid; gap: 12px; }
+  .offline-mode-badge { justify-self: start; }
+  .offline-actions > .button-link,
+  .offline-actions > .attachment-button { width: 100%; justify-content: center; }
+  .offline-artifact { align-items: flex-start; flex-wrap: wrap; }
+  .offline-artifact-actions { width: 100%; padding-left: 34px; justify-content: flex-start; }
+}

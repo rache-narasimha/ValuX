@@ -41,6 +41,25 @@
 .preview-grid button { position: absolute; top: 7px; right: 7px; width: 28px; height: 28px; border: 0; border-radius: 50%; background: rgba(65, 30, 21, .85); color: #fff; cursor: pointer; }
 .modal-card { width: min(1100px, 100%); }
 #preview-frame { width: 100%; min-height: 75vh; border: 0; background: #fff; }
+html[data-theme="dark"] .progress-utility-bar,
+html[data-theme="dark"] .linked-estimate-card,
+html[data-theme="dark"] .bank-calculation-grid article { background: #2a1d18; border-color: #604237; color: #f7ded0; }
+html[data-theme="dark"] .linked-estimate-card small,
+html[data-theme="dark"] .linked-estimate-card span,
+html[data-theme="dark"] .section-title-row p,
+html[data-theme="dark"] .bank-calculation-grid span { color: #c7aaa0; }
+html[data-theme="dark"] .linked-estimate-card strong,
+html[data-theme="dark"] .bank-calculation-grid strong { color: #ffd8c5; }
+html[data-theme="dark"] .progress-table-wrap,
+html[data-theme="dark"] .progress-table th,
+html[data-theme="dark"] .progress-table td,
+html[data-theme="dark"] .confirmation-field { border-color: #604237; }
+html[data-theme="dark"] .progress-table th { background: #35261f; color: #f7ded0; }
+html[data-theme="dark"] .progress-table tfoot th { background: #44301b; color: #f6d49a; }
+html[data-theme="dark"] .report-type-badge { background: #513025; color: #ffc4a6; }
+html[data-theme="dark"] .report-type-badge.is-complete { background: #203a2d; color: #8cddb2; }
+html[data-theme="dark"] .progress-table .reset-calculation { background: #513025; color: #ffc4a6; }
+html[data-theme="dark"] .error-notice { background: #4b2722; color: #ffb1a7; }
 @media (max-width: 900px) {
   .linked-estimate-card, .bank-calculation-grid { grid-template-columns: 1fr; }
   .section-title-row { flex-direction: column; }

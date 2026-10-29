@@ -1,4 +1,7 @@
 /** General-property valuation form controller: fields, floors, calculations, drafts, media, preview, and generation. */
+if (window.InstitutionValuationOffline?.activate()) {
+  // KVB and Karnataka Bank deliberately use their approved external workflows.
+} else {
 const state = {
   schema: null,
   sections: [],
@@ -32,6 +35,13 @@ const {
   numeric,
   title,
 } = window.ValuationUI;
+
+function reportErrorMessage(error, fallback) {
+  const message = error instanceof Error ? error.message.trim() : "";
+  return message && !/^(failed to fetch|networkerror|load failed)$/i.test(message)
+    ? message
+    : fallback;
+}
 
 // Assignment context and report-section configuration.
 function linkedTaskValues() {
@@ -536,6 +546,8 @@ function calculateAll() {
 let saveTimer;
 function saveDraft() {
   clearTimeout(saveTimer);
+  byId("status").classList.add("is-saving");
+  byId("status").setAttribute("aria-label", "Saving draft locally");
   saveTimer = setTimeout(() => {
     localStorage.setItem(
       STORAGE_KEY,
@@ -546,7 +558,9 @@ function saveDraft() {
       }),
     );
     byId("status").textContent = "Saved locally";
-  }, 250);
+    byId("status").classList.remove("is-saving");
+    byId("status").removeAttribute("aria-label");
+  }, 700);
 }
 function restoreDraft() {
   try {
@@ -726,7 +740,7 @@ byId("preview-report").onclick = async () => {
     status.textContent = "Preview ready";
   } catch (error) {
     status.textContent = "Preview failed";
-    alert(error.message);
+    alert(reportErrorMessage(error, "The preview could not be created. Check your connection and try again."));
   } finally {
     setProcessing(false);
   }
@@ -774,9 +788,10 @@ byId("valuation-form").addEventListener("submit", async (e) => {
     location.href = response.download;
   } catch (error) {
     status.textContent = "Generation failed";
-    alert(error.message);
+    alert(reportErrorMessage(error, "The report could not be generated. Check your connection and try again."));
   } finally {
     setProcessing(false);
   }
 });
 init();
+}
