@@ -107,6 +107,7 @@
     copy.assignee = copy.assignee || "";
     copy.holdReason = copy.holdReason || "";
     copy.reportGeneratedAt = copy.reportGeneratedAt || null;
+    copy.reportFresh = copy.reportFresh !== false;
     copy.latestDocx = copy.latestDocx || null;
     copy.finalDocx = copy.finalDocx || null;
     copy.latestXlsx = copy.latestXlsx || null;
@@ -215,6 +216,7 @@
   function hasFreshRequiredArtifact(task) {
     const artifact = latestArtifact(task);
     if (!artifact?.url || !artifact.generatedAt) return false;
+    if (task.reportFresh === false) return false;
     return !task.reopenedAt || new Date(artifact.generatedAt) >= new Date(task.reopenedAt);
   }
 

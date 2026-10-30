@@ -256,6 +256,7 @@ body.report-linked > header .back-link { margin-bottom: 0; }
 #final-report-card { display: grid; gap: 10px; }
 #final-report-card[hidden] { display: none; }
 #final-report-card .button-link { justify-content: center; }
+#final-report-card .retained-report-download { justify-self: start; }
 
 .settings-layout { display: grid; grid-template-columns: minmax(300px, .8fr) minmax(520px, 1.5fr); gap: 20px; align-items: start; margin-top: 24px; }
 .settings-editor { position: sticky; top: 92px; }

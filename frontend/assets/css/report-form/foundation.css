@@ -245,6 +245,19 @@ textarea:focus {
   margin-top: 16px;
   background: #f4f8f9;
 }
+.media-preview-item {
+  display: grid;
+  justify-items: start;
+  gap: 9px;
+}
+.media-preview-item .remove-map {
+  margin: 0;
+}
+.validation-target {
+  border-color: #b33b24 !important;
+  outline: 3px solid rgba(179, 59, 36, 0.18);
+  outline-offset: 2px;
+}
 footer {
   display: flex;
   align-items: center;

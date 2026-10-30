@@ -204,6 +204,13 @@ def _uses_separate_abstract(state: Mapping[str, Any]) -> bool:
     return not sheets or any(float(sheet.get("level") or 0) > 3 for sheet in sheets)
 
 
+def expected_estimation_sheet_names(state: Mapping[str, Any]) -> tuple[str, ...]:
+    """Return the canonical worksheet topology for a configured estimation."""
+    specs = _detail_specs(state, _load_manifest())
+    detail_names = tuple(spec.name for spec in specs)
+    return ("Abstract", *detail_names) if _uses_separate_abstract(state) else detail_names
+
+
 def _find_label_row(ws: Worksheet, label: str, column: int = 1) -> int:
     for row in range(1, ws.max_row + 1):
         if str(ws.cell(row, column).value or "").strip() == label:

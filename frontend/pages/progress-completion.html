@@ -81,8 +81,8 @@
           <section class="panel" data-section="photos">
             <h2>Photographs and report generation</h2>
             <section class="subgroup">
-              <h3>Authenticated site photographs</h3>
-              <p class="hint">The report follows the valuation-photo layout: 1–4 photographs use one per row, 5–6 use two per row, and 7–9 use three per row. Additional photographs continue on another page without cropping.</p>
+              <h3>Authenticated site photographs <span aria-hidden="true">*</span></h3>
+              <p class="hint">Attach at least one site photograph. The report follows the valuation-photo layout: 1–4 photographs use one per row, 5–6 use two per row, and 7–9 use three per row. Additional photographs continue on another page without cropping.</p>
               <input id="photo-upload" type="file" accept="image/*" multiple />
               <p class="hint media-save-note">Task-linked photographs are retained with the draft. Practice photographs remain local to this browser.</p>
               <div id="photo-preview" class="preview-grid"></div>
@@ -95,7 +95,7 @@
             <span id="progress">Section 1 of 4</span>
             <button type="button" class="secondary" id="next">Next section</button>
             <button type="button" class="preview-button" id="preview-report">Preview report</button>
-            <button type="button" class="primary" id="generate-docx">Generate DOCX</button>
+            <button type="button" class="primary" id="generate-docx" disabled>Generate DOCX</button>
           </footer>
         </form>
       </section>

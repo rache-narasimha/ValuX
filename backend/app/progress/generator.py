@@ -181,6 +181,9 @@ def _validate(payload: Mapping[str, Any]) -> dict[str, Any]:
     raw_components = payload.get("components")
     if not isinstance(raw_components, list) or not raw_components:
         raise ValueError("The linked estimation report has no component estimates.")
+    photos = list(payload.get("photos") or [])
+    if not photos:
+        raise ValueError("Attach at least one authenticated site photograph before generating the report.")
     for index, raw in enumerate(raw_components, start=1):
         label = str((raw or {}).get("label") or "").strip()
         if not label:
@@ -204,6 +207,17 @@ def _validate(payload: Mapping[str, Any]) -> dict[str, Any]:
 
     report_date = _date(details.get("reportDate"), "Report date")
     visit_date = _date(details.get("visitDate"), "Site-visit date")
+    bank = dict(payload.get("bank") or {})
+    institution_code = str(institution.get("code") or "").strip().upper()
+    if institution_code == "KB":
+        bank["balanceAsOn"] = _date(bank.get("balanceAsOn"), "Balance outstanding date", required=False)
+        bank["date"] = _date(bank.get("date"), "Bank assessment date", required=False)
+        releases = []
+        for index, release in enumerate(bank.get("releases") or [], start=1):
+            current = dict(release or {})
+            current["date"] = _date(current.get("date"), f"Loan release date {index}", required=False)
+            releases.append(current)
+        bank["releases"] = releases
     no_deviation = str(details.get("noDeviation") or "").lower()
     if no_deviation not in {"yes", "no"}:
         raise ValueError("Confirm whether the construction follows the sanctioned plan without deviation.")
@@ -225,7 +239,7 @@ def _validate(payload: Mapping[str, Any]) -> dict[str, Any]:
         "institution": institution,
         "linked": linked,
         "details": details,
-        "bank": dict(payload.get("bank") or {}),
+        "bank": bank,
         "components": components,
         "reportDate": report_date,
         "visitDate": visit_date,
@@ -234,7 +248,7 @@ def _validate(payload: Mapping[str, Any]) -> dict[str, Any]:
         "materialsAtSite": materials,
         "totalValue": total_value,
         "noDeviation": no_deviation,
-        "photos": list(payload.get("photos") or []),
+        "photos": photos,
     }
 
 

@@ -18,6 +18,7 @@
   }
 
   let task = taskId && window.TaskStore ? TaskStore.get(taskId) : null;
+  let pageReportDirty = false;
   if (!task) return;
   if (!WorkflowAccess.can("openReport", task)) {
     alert("This report can be edited only after the task is assigned to you. Open assignment details to claim or transfer it first.");
@@ -86,9 +87,14 @@
   }
 
   function completionBlockReason(current) {
+    const refreshReportMessage = current.reportGroup === "estimation"
+      ? "Generate or attach the latest completed Excel report before marking this task Completed."
+      : "Preview and generate the latest report before marking this task Completed.";
     if (current.status === "On Hold") return "Resume work before marking this task Completed.";
     if (current.status !== "In Progress") return `A ${current.status} task cannot be marked Completed.`;
+    if (pageReportDirty) return `The form has changed. ${refreshReportMessage}`;
     if (!current.reportGeneratedAt) return "Generate the report successfully before marking this task Completed.";
+    if (current.reportFresh === false) return `The retained report is outdated because the form changed. ${refreshReportMessage}`;
     if ((current.reportGroup === "estimation" || TaskStore.requiresInstitutionOfflineArtifact(current)) && !TaskStore.hasFreshRequiredArtifact(current)) {
       return `Generate or attach the ${TaskStore.requiredArtifactLabel(current)} before marking this task Completed.`;
     }
@@ -108,7 +114,9 @@
     document.getElementById("report-hold").hidden = !canChange || task.status !== "In Progress";
     document.getElementById("report-resume").hidden = !canChange || task.status !== "On Hold";
     const generated = Boolean(task.reportGeneratedAt);
-    document.getElementById("generation-state").textContent = generated ? `Generated ${WorkflowUI.date(task.reportGeneratedAt)}` : "Report not generated";
+    document.getElementById("generation-state").textContent = generated
+      ? task.reportFresh === false ? "Report outdated" : `Generated ${WorkflowUI.date(task.reportGeneratedAt)}`
+      : "Report not generated";
     const completionReason = completionBlockReason(task);
     [document.getElementById("complete-task"), document.getElementById("report-complete-top")].forEach((button) => {
       button.classList.toggle("is-unavailable", Boolean(completionReason));
@@ -194,6 +202,7 @@
   window.addEventListener("sln:report-generated", async (event) => {
     try {
       if (event.detail?.registered === true) {
+        pageReportDirty = false;
         if (event.detail.task) TaskStore.acceptServerTask(event.detail.task);
         else await TaskStore.refresh(taskId);
       } else if (event.detail?.registered === false) {
@@ -214,6 +223,10 @@
     } catch (error) {
       requestWorkNote(error.message || "The generated report could not be recorded against this task.");
     }
+  });
+  window.addEventListener("sln:report-dirty", () => {
+    pageReportDirty = true;
+    render();
   });
   render();
 })();

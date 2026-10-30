@@ -156,7 +156,8 @@
     const artifactLabel = task.reportGroup === "estimation" || task.institutionCode === "KVB" ? "Excel report" : task.institutionCode === "KB" ? "Valocity report" : "DOCX";
     if (artifact?.url) {
       download.hidden = false;
-      download.textContent = `Download final ${artifactLabel}`;
+      download.title = `Download final ${artifactLabel}`;
+      download.setAttribute("aria-label", `Download final ${artifactLabel}`);
       download.href = artifact.url;
       download.setAttribute("download", artifact.filename || (task.reportGroup === "estimation" || task.institutionCode === "KVB" ? "final-estimation.xlsx" : task.institutionCode === "KB" ? "final-valocity-report" : "final-report.docx"));
       element("final-report-message").textContent = closed

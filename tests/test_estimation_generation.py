@@ -287,6 +287,45 @@ def assert_canara_panel_list(generate):
         assert "Canara Bank" in header, sheet.title
 
 
+def assert_offline_summary_validation():
+    from backend.app.estimation.summary import validate_estimation_summary
+
+    state = {
+        "propertyType": "industrial",
+        "components": [
+            {"name": "Production Hall", "kind": "normal_machinery_hall", "sheets": []},
+            {"name": "RCC Building", "kind": "rcc_building", "sheets": [{"key": "ground", "label": "Ground Floor", "level": 1}]},
+        ],
+    }
+    valid = validate_estimation_summary(state, {
+        "components": [
+            {"label": "Production Hall", "estimatedCost": 0, "source": "workbook"},
+            {"label": "RCC Building - Ground Floor", "estimatedCost": 125000, "source": "workbook"},
+        ],
+        "worksheetNames": ["Abstract", "Production Hall", "RCC Building - Ground Floor"],
+        "totalEstimatedCost": 125000,
+    })
+    assert [item["label"] for item in valid["components"]] == ["Production Hall", "RCC Building - Ground Floor"]
+
+    try:
+        validate_estimation_summary(state, {
+            "components": [
+                {"label": "Production Hall", "estimatedCost": None},
+                {"label": "Additional custom work", "estimatedCost": 5000},
+            ],
+            "worksheetNames": ["Abstract", "Production Hall", "Unrelated Sheet"],
+        })
+    except ValueError as error:
+        message = str(error)
+        assert "Missing worksheets: RCC Building - Ground Floor" in message
+        assert "Unexpected worksheets: Unrelated Sheet" in message
+        assert "Missing components: RCC Building - Ground Floor" in message
+        assert "Unexpected components: Additional custom work" in message
+        assert "Final value missing for: Production Hall" in message
+    else:
+        raise AssertionError("Missing, blank and additional workbook content must be rejected")
+
+
 def main():
     generate = load_generator()
     assert_controlled_steel(generate)
@@ -296,6 +335,7 @@ def main():
     assert_every_master_variant_is_selectable(generate)
     assert_a4_print_layout(generate)
     assert_canara_panel_list(generate)
+    assert_offline_summary_validation()
     print("PASS: deployable Python estimation generation")
 
 

@@ -38,6 +38,13 @@
     return `<a class="row-open" href="${taskUrl(task)}" title="Open task" aria-label="Open ${escape(task.reportName)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></a>`;
   }
 
+  function reportDownloadControl(task) {
+    if (!["Completed", "Closed"].includes(task.status)) return "";
+    const artifact = task.status === "Closed" ? TaskStore.finalArtifact(task) : TaskStore.latestArtifact(task);
+    if (!artifact?.url) return "";
+    return `<a class="row-open row-download" href="${escape(artifact.url)}" download="${escape(artifact.filename || "report")}" title="Download retained report" aria-label="Download retained report for ${escape(task.reportName)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></a>`;
+  }
+
   function paymentControl(task, options) {
     if (options.paymentAction === false) return "";
     if (WorkflowAccess.can("updatePayment", task)) {
@@ -55,7 +62,7 @@
     const paymentSummary = TaskStore.paymentSummary(task);
     const payment = paymentSummary.status;
     const paymentAction = paymentControl(task, options);
-    const openTask = openTaskControl(task);
+    const rowAction = reportDownloadControl(task) || openTaskControl(task);
     if (options.variant === "table") {
       return `<article class="task-table-row" data-task-id="${escape(task.id)}">
         <a class="task-row-link" href="${taskUrl(task)}" aria-hidden="true" tabindex="-1"></a>
@@ -66,7 +73,7 @@
         <div class="task-table-due"><strong>${date(task.dueDate)}</strong></div>
         <div class="task-table-status"><span class="status-badge ${statusClass(task.status)}">${escape(task.status)}</span>${hold}</div>
         <div class="task-table-payment"><span class="payment-badge ${paymentClass(payment)}">${escape(payment)}</span><small>${paymentSummary.outstanding === null ? "N/A" : `${currency(paymentSummary.outstanding)} due`}</small>${paymentAction}</div>
-        <div class="task-table-action">${openTask}</div>
+        <div class="task-table-action">${rowAction}</div>
       </article>`;
     }
     return `<article class="task-row" data-task-id="${escape(task.id)}">
@@ -82,7 +89,7 @@
         <span class="status-badge ${statusClass(task.status)}">${escape(task.status)}</span>${hold}
       </div>
       <div class="task-row-payment task-wide"><small>Payment</small><span class="payment-badge ${paymentClass(payment)}">${escape(payment)}</span><small>${paymentSummary.outstanding === null ? "N/A" : `${currency(paymentSummary.outstanding)} due`}</small>${paymentAction}</div>
-      <div class="task-row-action">${openTask}</div>
+      <div class="task-row-action">${rowAction}</div>
     </article>`;
   }
 

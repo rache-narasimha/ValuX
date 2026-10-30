@@ -60,6 +60,74 @@
     fields.search.value = initial.get("search") || "";
   }
 
+  function isoDate(value) {
+    const current = value instanceof Date ? value : new Date(value);
+    return [current.getFullYear(), String(current.getMonth() + 1).padStart(2, "0"), String(current.getDate()).padStart(2, "0")].join("-");
+  }
+
+  function weekOptions(reference) {
+    const years = [reference.getFullYear() - 1, reference.getFullYear(), reference.getFullYear() + 1];
+    const weeks = [];
+    years.forEach((year) => {
+      const date = new Date(year, 0, 1);
+      date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+      while (date.getFullYear() <= year || (date.getFullYear() === year + 1 && date.getMonth() === 0)) {
+        const monday = new Date(date);
+        const sunday = new Date(date);
+        sunday.setDate(sunday.getDate() + 6);
+        if (monday.getFullYear() === year || sunday.getFullYear() === year) {
+          weeks.push({ value: isoDate(monday), label: InstitutionMetrics.periodLabel("weekly", monday) });
+        }
+        date.setDate(date.getDate() + 7);
+      }
+    });
+    return weeks;
+  }
+
+  function renderPeriodFilter() {
+    const switcher = document.getElementById("task-period-switch");
+    const picker = document.getElementById("task-period-picker");
+    const activePeriod = fields.period.value;
+    const options = [
+      ["", "Any time"], ["daily", "Daily"], ["weekly", "Weekly"], ["monthly", "Monthly"], ["yearly", "Yearly"],
+    ];
+    switcher.innerHTML = options.map(([value, label]) => `<button type="button" data-task-period="${value}" class="${value === activePeriod ? "active" : ""}" aria-pressed="${value === activePeriod}">${label}</button>`).join("");
+    switcher.querySelectorAll("[data-task-period]").forEach((button) => button.addEventListener("click", () => {
+      const next = button.dataset.taskPeriod;
+      if (next === fields.period.value) return;
+      fields.period.value = next;
+      renderPeriodFilter();
+      reset();
+    }));
+    picker.hidden = !activePeriod;
+    if (!activePeriod) {
+      picker.innerHTML = "";
+      return;
+    }
+    const inputId = "task-period-picker-value";
+    if (activePeriod === "daily") {
+      picker.innerHTML = `<label>Date<input id="${inputId}" type="date" value="${isoDate(periodReference)}" /></label>`;
+    } else if (activePeriod === "weekly") {
+      const selectedMonday = isoDate(TaskStore.periodBounds("weekly", periodReference).start);
+      picker.innerHTML = `<label>Week<select id="${inputId}">${weekOptions(periodReference).map((week) => `<option value="${week.value}"${week.value === selectedMonday ? " selected" : ""}>${week.label}</option>`).join("")}</select></label>`;
+    } else if (activePeriod === "monthly") {
+      picker.innerHTML = `<label>Month<input id="${inputId}" type="month" value="${isoDate(periodReference).slice(0, 7)}" /></label>`;
+    } else {
+      const year = periodReference.getFullYear();
+      picker.innerHTML = `<label>Year<select id="${inputId}">${Array.from({ length: 7 }, (_, index) => year - 3 + index).map((value) => `<option value="${value}"${value === year ? " selected" : ""}>${value}</option>`).join("")}</select></label>`;
+    }
+    document.getElementById(inputId).addEventListener("change", (event) => {
+      const value = event.target.value;
+      periodReference = activePeriod === "monthly"
+        ? new Date(`${value}-01T00:00:00`)
+        : activePeriod === "yearly"
+          ? new Date(`${value}-01-01T00:00:00`)
+          : new Date(`${value}T00:00:00`);
+      renderPeriodFilter();
+      reset();
+    });
+  }
+
   function queryOptions(limit = visible) {
     return Object.fromEntries([
       ["group", fields.group.value], ["institution", fields.institution.value],
@@ -74,7 +142,7 @@
     const parts = [];
     if (fields.group.value !== "all") parts.push(`Report section: ${GROUP_LABELS[fields.group.value]}`);
     if (fields.institution.value) parts.push(`Institution: ${fields.institution.options[fields.institution.selectedIndex]?.textContent || fields.institution.value}`);
-    if (fields.period.value) parts.push(`Assigned during: ${fields.period.options[fields.period.selectedIndex].textContent}`);
+    if (fields.period.value) parts.push(`Assigned during: ${InstitutionMetrics.periodLabel(fields.period.value, periodReference)}`);
     if (fields.status.value) parts.push(`Status: ${fields.status.value}`);
     if (fields.assignee.value) parts.push(`Assigned to: ${fields.assignee.value}`);
     if (fields.holdReason.value) parts.push(`On hold: ${fields.holdReason.value}`);
@@ -342,7 +410,10 @@
   }
 
   populateFilters();
-  Object.entries(fields).forEach(([key, field]) => field.addEventListener(key === "search" ? "input" : "change", reset));
+  renderPeriodFilter();
+  Object.entries(fields).forEach(([key, field]) => {
+    if (key !== "period") field.addEventListener(key === "search" ? "input" : "change", reset);
+  });
   document.getElementById("clear-institution").addEventListener("click", () => { window.location.href = "/tasks?view=institutions"; });
   loadMore.addEventListener("click", () => { visible += PAGE_SIZE; render(); });
   document.getElementById("export-tasks").addEventListener("click", (event) => exportTasks(event.currentTarget));

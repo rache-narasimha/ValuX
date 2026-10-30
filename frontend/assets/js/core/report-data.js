@@ -6,6 +6,7 @@
   const taskCode = params.get("task") || "";
   const localOnly = params.get("practice") === "1" || !taskCode || !window.BusinessApi;
   let revision = 0;
+  let previewState = null;
   let saveChain = Promise.resolve();
 
   function localLoad(key) {
@@ -14,9 +15,13 @@
   }
 
   async function load(localKey) {
-    if (localOnly) return localLoad(localKey);
+    if (localOnly) {
+      previewState = null;
+      return localLoad(localKey);
+    }
     const response = await BusinessApi.get(`/api/tasks/${encodeURIComponent(taskCode)}/draft`);
     revision = Number(response.draft?.revision || 0);
+    previewState = response.draft?.preview || null;
     return response.draft?.payload || null;
   }
 
@@ -47,6 +52,7 @@
     await saveChain.catch(() => {});
     await BusinessApi.delete(`/api/tasks/${encodeURIComponent(taskCode)}/draft`);
     revision = 0;
+    previewState = null;
   }
 
   async function requestHeaders(headers = {}) {
@@ -76,5 +82,7 @@
     requestHeaders,
     requestPayload,
     refreshTask,
+    preview: () => previewState ? { ...previewState } : null,
+    setPreview: (value) => { previewState = value ? { ...value } : null; },
   };
 })();

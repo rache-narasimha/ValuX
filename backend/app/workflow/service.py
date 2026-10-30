@@ -148,6 +148,16 @@ def _payment_values(row: dict[str, Any]) -> dict[str, Any]:
 def _task_payload(row: dict[str, Any], activities: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     group, _code, label = REPORTS[row["report_key"]]
     payment = _payment_values(row)
+    # Estimation freshness is persisted in task_artifacts.stale_at whenever its
+    # canonical draft fingerprint changes. Comparing old stored fingerprints
+    # here would permanently reject XLSX artifacts created before that rule.
+    fingerprint_tracked = row["report_key"] in {"valuation-general", "valuation-agricultural", "progress", "completion"}
+    fingerprint_current = (
+        not fingerprint_tracked
+        or row.get("latest_revision_input_fingerprint") is None
+        or row.get("draft_input_fingerprint") is None
+        or row.get("latest_revision_input_fingerprint") == row.get("draft_input_fingerprint")
+    )
     task = {
         "internalId": str(row["id"]),
         "id": row["task_code"],
@@ -174,6 +184,11 @@ def _task_payload(row: dict[str, Any], activities: list[dict[str, Any]] | None =
         "linkedEstimationId": row.get("linked_estimation_task_code") or "",
         "linkedEstimationInternalId": str(row["linked_estimation_task_id"]) if row.get("linked_estimation_task_id") else "",
         "reportGeneratedAt": _iso(row.get("report_generated_at")),
+        "reportFresh": bool(
+            row.get("latest_artifact_id")
+            and row.get("latest_artifact_stale_at") is None
+            and fingerprint_current
+        ),
         "completedAt": _iso(row.get("completed_at")),
         "closedAt": _iso(row.get("closed_at")),
         "reopenedAt": _iso(row.get("reopened_at")),
@@ -268,8 +283,11 @@ TASK_SELECT = """
            la.id AS latest_artifact_id, la.artifact_type AS latest_artifact_type,
            la.artifact_source AS latest_artifact_source,
            la.created_at AS latest_artifact_created_at,
+           la.stale_at AS latest_artifact_stale_at,
            lf.original_filename AS latest_file_name, lf.size_bytes AS latest_file_size,
            lr.payload AS latest_revision_payload,
+           lr.input_fingerprint AS latest_revision_input_fingerprint,
+           rd.input_fingerprint AS draft_input_fingerprint,
            fa.id AS final_artifact_id, fa.artifact_type AS final_artifact_type,
            fa.artifact_source AS final_artifact_source,
            fa.created_at AS final_artifact_created_at,
@@ -290,6 +308,7 @@ TASK_SELECT = """
     LEFT JOIN app.task_artifacts la ON la.id = t.latest_artifact_id
     LEFT JOIN app.stored_files lf ON lf.id = la.stored_file_id AND lf.removed_at IS NULL
     LEFT JOIN app.report_revisions lr ON lr.id = la.report_revision_id
+    LEFT JOIN app.report_drafts rd ON rd.task_id = t.id
     LEFT JOIN app.task_artifacts fa ON fa.id = t.final_artifact_id
     LEFT JOIN app.stored_files ff ON ff.id = fa.stored_file_id AND ff.removed_at IS NULL
     LEFT JOIN LATERAL (
@@ -657,6 +676,8 @@ def mark_report_generated(task_code: str, payload: dict[str, Any], session: dict
             raise WorkflowError("This report is not editable by the current user.", 403, "forbidden")
         if not row.get("latest_artifact_id") or not row.get("report_generated_at"):
             raise WorkflowError("The generated or attached report file was not retained against this task.", 409, "artifact_missing")
+        if row.get("latest_artifact_stale_at"):
+            raise WorkflowError("The retained report is outdated. Preview and generate it again before continuing.", 409, "stale_report")
         _update_task(database, row["id"], "status = status", ())
     return _mutate(task_code, payload, session, action)
 
@@ -670,6 +691,8 @@ def mark_report_removed(task_code: str, payload: dict[str, Any], session: dict[s
 
 
 def complete(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+    media_storage_keys: list[str] = []
+
     def action(database, row, actor, values):
         note = _required(values.get("note"), "Add a completion work note.")
         if not _can_change(actor, row):
@@ -678,6 +701,26 @@ def complete(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -
             raise WorkflowError("Generate or attach the report successfully before completing the task.", 409, "invalid_transition")
         if row.get("reopened_at") and row["report_generated_at"] < row["reopened_at"]:
             raise WorkflowError("Generate or attach a new report after reopening before completing the task again.", 409, "stale_report")
+        standard_valuation = (
+            row["report_key"] in {"valuation-general", "valuation-agricultural"}
+            and row["institution_code_snapshot"] not in {"KVB", "KB"}
+        )
+        if row["report_key"] == "estimation" and row.get("latest_artifact_stale_at"):
+            raise WorkflowError("The retained report is outdated because the form changed. Generate or attach it again before completing the task.", 409, "stale_report")
+        if row["report_key"] in {"progress", "completion"}:
+            if row.get("latest_artifact_stale_at") or (
+                row.get("latest_revision_input_fingerprint")
+                and row.get("draft_input_fingerprint")
+                and row["latest_revision_input_fingerprint"] != row["draft_input_fingerprint"]
+            ):
+                raise WorkflowError("The retained report is outdated because the form changed. Preview and generate it again before completing the task.", 409, "stale_report")
+        if standard_valuation:
+            if row.get("latest_artifact_stale_at") or (
+                row.get("latest_revision_input_fingerprint")
+                and row.get("draft_input_fingerprint")
+                and row["latest_revision_input_fingerprint"] != row["draft_input_fingerprint"]
+            ):
+                raise WorkflowError("The retained report is outdated because the form changed. Preview and generate it again before completing the task.", 409, "stale_report")
         now = datetime.now(UTC)
         _update_task(database, row["id"], "status = 'Completed', completed_at = %s, closed_at = NULL", (now,))
         database.execute("UPDATE app.task_payments SET due_date = COALESCE(due_date, %s), version = version + 1, updated_at = NOW() WHERE task_id = %s", (date.today() + timedelta(days=7), row["id"]))
@@ -688,7 +731,44 @@ def complete(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -
             database.execute("UPDATE app.tasks SET completion_blocked_at = COALESCE(completion_blocked_at, %s), completion_blocked_by_task_id = COALESCE(completion_blocked_by_task_id, %s), version = version + 1, updated_at = NOW() WHERE id = %s", (now, row["id"], linked["id"]))
         _activity(database, row["id"], actor, "status", "Task marked Completed after report generation.")
         _activity(database, row["id"], actor, "note", note)
-    return _mutate(task_code, payload, session, action)
+        if row["report_key"] in {"valuation-general", "valuation-agricultural", "progress", "completion"}:
+            media_rows = database.execute(
+                """
+                SELECT sf.id, sf.storage_key
+                FROM app.report_draft_files rdf
+                JOIN app.stored_files sf ON sf.id = rdf.stored_file_id
+                WHERE rdf.task_id = %s AND sf.removed_at IS NULL
+                """,
+                (row["id"],),
+            ).fetchall()
+            if media_rows:
+                media_storage_keys.extend(item["storage_key"] for item in media_rows)
+                file_ids = [item["id"] for item in media_rows]
+                database.execute("DELETE FROM app.report_draft_files WHERE task_id = %s", (row["id"],))
+                database.execute("UPDATE app.stored_files SET removed_at = NOW() WHERE id = ANY(%s)", (file_ids,))
+            draft = database.execute("SELECT payload FROM app.report_drafts WHERE task_id = %s FOR UPDATE", (row["id"],)).fetchone()
+            if draft:
+                cleaned = dict(draft["payload"] or {})
+                cleaned["photos"] = []
+                if row["report_key"] in {"valuation-general", "valuation-agricultural"}:
+                    cleaned["map"] = None
+                database.execute(
+                    """
+                    UPDATE app.report_drafts
+                    SET payload = %s, input_fingerprint = NULL,
+                        preview_fingerprint = NULL, preview_token = NULL,
+                        preview_artifact_id = NULL, updated_at = NOW()
+                    WHERE task_id = %s
+                    """,
+                    (Jsonb(cleaned), row["id"]),
+                )
+
+    result = _mutate(task_code, payload, session, action)
+    if media_storage_keys:
+        from ..reports import service as report_service
+
+        report_service._delete_physical(media_storage_keys)
+    return result
 
 
 def update_payment(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:

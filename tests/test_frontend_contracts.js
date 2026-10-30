@@ -93,6 +93,12 @@ assert.match(taskStoreSource, /progress:\s*\{[^}]*route:\s*"\/progress-completio
 assert.match(taskStoreSource, /completion:\s*\{[^}]*route:\s*"\/progress-completion"/, "Completion assignments must open the linked report form");
 assert.match(taskStoreSource, /requiresInstitutionOfflineArtifact/, "Institution-specific offline valuation artifacts must be lifecycle-gated");
 
+const progressControllerSource = fs.readFileSync(path.join(root, "frontend", "assets", "js", "pages", "progress-completion.js"), "utf8");
+assert.match(progressControllerSource, /ReportData\.setPreview\(\{ id: result\.preview_id, url: result\.preview \}\)/, "Progress previews must be retained across unchanged reloads");
+assert.match(progressControllerSource, /new CustomEvent\("sln:report-dirty"\)/, "Progress input changes must invalidate retained reports");
+assert.match(progressControllerSource, /Please preview the latest report before downloading the DOCX/, "Progress DOCX generation must require the latest preview");
+assert.match(progressControllerSource, /Attach at least one authenticated site photograph/, "Progress and Completion reports must require a site photograph before preview or generation");
+
 const generalPage = fs.readFileSync(path.join(root, "frontend", "pages", "general.html"), "utf8");
 assert.match(generalPage, /institution-valuation-offline\.js/, "General valuation must load the institution-specific offline workflow controller");
 const institutionOfflineSource = fs.readFileSync(path.join(root, "frontend", "assets", "js", "pages", "institution-valuation-offline.js"), "utf8");
@@ -113,6 +119,11 @@ assert.match(tasksPage, /id="export-tasks"/, "Assignment lists must expose the f
 assert.match(tasksPage, /id="export-institutions"/, "The institution directory must expose its Excel export");
 assert.match(tasksPage, /export-icon-button[^>]*title="Export to Excel"/, "Excel exports must use an icon with a hover label");
 assert.match(tasksPage, /src="\/assets\/js\/core\/workbook-export\.js"/, "Task exports must load the workbook download helper");
+assert.match(tasksPage, /id="task-period-switch"/, "Assignment lists must use the selectable date-period control");
+assert.match(tasksPage, /id="task-period-picker"/, "Assignment lists must allow a selected day, week, month, or year");
+const taskListSource = fs.readFileSync(path.join(root, "frontend", "assets", "js", "pages", "task-list.js"), "utf8");
+assert.match(taskListSource, /function weekOptions\(reference\)/, "Assignment lists must provide selectable week ranges");
+assert.match(taskListSource, /type="month"/, "Assignment lists must provide a month picker beyond the current month");
 
 const newTaskPage = fs.readFileSync(path.join(root, "frontend", "pages", "new-task.html"), "utf8");
 const newTaskSource = fs.readFileSync(path.join(root, "frontend", "assets", "js", "pages", "new-task.js"), "utf8");
@@ -160,6 +171,21 @@ assert.match(
   estimationController,
   /async function downloadWorkbook\(mode\)\s*\{[\s\S]*?const selectedMode = synchroniseWorkMode\(\);[\s\S]*?const requiredWorkMode = mode === "completed" \? "online" : "offline";[\s\S]*?selectedMode !== requiredWorkMode/,
   "Completed Excel generation must map to the Fill online preparation mode before validating it",
+);
+assert.match(
+  estimationController,
+  /confirmReportInvalidation[\s\S]*?Change the preparation method to[\s\S]*?Existing component data was retained/,
+  "Changing estimation preparation mode must warn about output invalidation while retaining component data",
+);
+assert.match(
+  estimationController,
+  /ReportData\.preview\(\)[\s\S]*?Preview the current workbook before generating the completed Excel report/,
+  "Online estimation generation must require the current persisted preview",
+);
+assert.match(
+  estimationController,
+  /ReportData\.setPreview\(\{ id: preview\.preview_id, url: preview\.preview \}\)/,
+  "Estimation preview approval must be retained by the shared report-data boundary",
 );
 
 console.log("PASS: frontend pages, controllers, IDs, and local assets are consistent");

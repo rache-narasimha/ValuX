@@ -80,7 +80,6 @@ def main():
     completion_payload["requestedReportType"] = "completion"
     completion_payload["institution"] = {"code": "CANARA", "name": "Canara Bank", "branch": "Adoni"}
     completion_payload["details"]["materialsAtSite"] = 0
-    completion_payload["photos"] = []
     for component in completion_payload["components"]:
         component["completionPercent"] = 100
         component["completedCost"] = component["estimatedCost"]
@@ -95,6 +94,15 @@ def main():
     assert "FORMAT" not in completion_text
     assert "Nil" in completion_text
 
+    missing_photos = copy.deepcopy(completion_payload)
+    missing_photos["photos"] = []
+    try:
+        generate(missing_photos)
+    except ValueError as error:
+        assert "photograph" in str(error)
+    else:
+        raise AssertionError("Progress and Completion reports must require a site photograph")
+
     invalid = copy.deepcopy(completion_payload)
     invalid["requestedReportType"] = "progress"
     try:
@@ -103,6 +111,15 @@ def main():
         assert "Completion report" in str(error)
     else:
         raise AssertionError("A 100% Progress report should be rejected as Completion work")
+
+    future_bank_date = copy.deepcopy(payload())
+    future_bank_date["bank"]["releases"][0]["date"] = "2999-01-01"
+    try:
+        generate(future_bank_date)
+    except ValueError as error:
+        assert "Loan release date 1 cannot be later than today" in str(error)
+    else:
+        raise AssertionError("Future Karnataka Bank release dates must be rejected")
     print(f"PASS: {progress_path}")
     print(f"PASS: {completion_path}")
 

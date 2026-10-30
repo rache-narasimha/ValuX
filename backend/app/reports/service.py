@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import re
 import uuid
 from copy import deepcopy
@@ -186,16 +187,63 @@ def get_draft(task_code: str, session: dict[str, Any]) -> dict[str, Any] | None:
     with connection() as database:
         task = _task(database, task_code)
         _require_editable(actor, task)
-        row = database.execute("SELECT * FROM app.report_drafts WHERE task_id = %s", (task["id"],)).fetchone()
+        row = database.execute(
+            """
+            SELECT d.*, a.id AS preview_file_artifact_id, sf.removed_at AS preview_removed_at
+            FROM app.report_drafts d
+            LEFT JOIN app.task_artifacts a
+              ON a.id = d.preview_artifact_id
+             AND a.task_id = d.task_id
+             AND a.artifact_type = 'preview_pdf'
+            LEFT JOIN app.stored_files sf ON sf.id = a.stored_file_id
+            WHERE d.task_id = %s
+            """,
+            (task["id"],),
+        ).fetchone()
     if not row:
         return None
+    preview = None
+    if (
+        row.get("preview_file_artifact_id")
+        and row.get("preview_removed_at") is None
+        and row.get("preview_fingerprint")
+        and row.get("preview_fingerprint") == row.get("input_fingerprint")
+        and row.get("preview_token")
+    ):
+        preview = {
+            "id": row["preview_token"],
+            "url": f'/api/tasks/{task_code}/artifacts/{row["preview_file_artifact_id"]}/download',
+            "fingerprint": row["preview_fingerprint"],
+        }
     return {
         "reportKey": row["report_key"],
         "schemaVersion": row["schema_version"],
         "payload": row["payload"],
         "revision": row["revision"],
         "updatedAt": row["updated_at"].isoformat(),
+        "preview": preview,
     }
+
+
+def require_current_preview(task_code: str, session: dict[str, Any], preview_token: str) -> None:
+    """Require a preview that still belongs to the task's current saved inputs."""
+    actor = _actor(session)
+    token = _text(preview_token)
+    if not token:
+        raise ReportDataError("Preview the latest report before generating the DOCX.", 409, "preview_required")
+    with connection() as database:
+        task = _task(database, task_code)
+        _require_editable(actor, task)
+        row = database.execute(
+            """
+            SELECT preview_token, preview_fingerprint, input_fingerprint
+            FROM app.report_drafts
+            WHERE task_id = %s
+            """,
+            (task["id"],),
+        ).fetchone()
+    if not row or row.get("preview_token") != token or row.get("preview_fingerprint") != row.get("input_fingerprint"):
+        raise ReportDataError("The form changed after preview. Preview the latest report before generating the DOCX.", 409, "preview_required")
 
 
 def save_draft(task_code: str, values: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
@@ -223,6 +271,7 @@ def save_draft(task_code: str, values: dict[str, Any], session: dict[str, Any]) 
             if expected_revision != current_revision:
                 raise ReportDataError("This report draft changed in another session. Reload it before saving again.", 409, "draft_conflict")
             normalized = _persist_inline_images(deepcopy(payload), task, actor, database, created_keys)
+            input_fingerprint = report_input_fingerprint(normalized, report_key, schema_version)
             referenced: set[uuid.UUID] = set()
             _collect_file_ids(normalized, referenced)
             existing_rows = database.execute(
@@ -248,20 +297,61 @@ def save_draft(task_code: str, values: dict[str, Any], session: dict[str, Any]) 
                 """
                 INSERT INTO app.report_drafts (
                     task_id, report_key, schema_version, payload, revision,
-                    updated_by_user_id
-                ) VALUES (%s, %s, %s, %s, %s, %s)
+                    updated_by_user_id, input_fingerprint
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (task_id) DO UPDATE SET
                     report_key = EXCLUDED.report_key,
                     schema_version = EXCLUDED.schema_version,
                     payload = EXCLUDED.payload,
                     revision = EXCLUDED.revision,
+                    input_fingerprint = EXCLUDED.input_fingerprint,
+                    preview_fingerprint = CASE
+                        WHEN app.report_drafts.preview_fingerprint = EXCLUDED.input_fingerprint
+                        THEN app.report_drafts.preview_fingerprint ELSE NULL END,
+                    preview_token = CASE
+                        WHEN app.report_drafts.preview_fingerprint = EXCLUDED.input_fingerprint
+                        THEN app.report_drafts.preview_token ELSE NULL END,
+                    preview_artifact_id = CASE
+                        WHEN app.report_drafts.preview_fingerprint = EXCLUDED.input_fingerprint
+                        THEN app.report_drafts.preview_artifact_id ELSE NULL END,
                     updated_by_user_id = EXCLUDED.updated_by_user_id,
                     updated_at = NOW()
                 """,
-                (task["id"], report_key, schema_version, Jsonb(normalized), new_revision, actor["id"]),
+                (task["id"], report_key, schema_version, Jsonb(normalized), new_revision, actor["id"], input_fingerprint),
             )
+            tracked_artifact_type = None
+            if task["report_key"] == "estimation":
+                tracked_artifact_type = "estimation_xlsx"
+            elif task["report_key"] == "progress":
+                tracked_artifact_type = "progress_docx"
+            elif task["report_key"] == "completion":
+                tracked_artifact_type = "completion_docx"
+            elif task["report_key"] in {"valuation-general", "valuation-agricultural"} and task["institution_code_snapshot"] not in {"KVB", "KB"}:
+                tracked_artifact_type = "valuation_docx"
+            if tracked_artifact_type:
+                latest = database.execute(
+                    """
+                    SELECT a.id, r.input_fingerprint
+                    FROM app.tasks t
+                    JOIN app.task_artifacts a ON a.id = t.latest_artifact_id
+                    LEFT JOIN app.report_revisions r ON r.id = a.report_revision_id
+                    WHERE t.id = %s AND a.artifact_type = %s
+                    """,
+                    (task["id"], tracked_artifact_type),
+                ).fetchone()
+                if latest:
+                    database.execute(
+                        "UPDATE app.task_artifacts SET stale_at = CASE WHEN %s = %s THEN NULL ELSE COALESCE(stale_at, NOW()) END WHERE id = %s",
+                        (latest.get("input_fingerprint"), input_fingerprint, latest["id"]),
+                    )
         _delete_physical(remove_keys)
-        return {"reportKey": report_key, "schemaVersion": schema_version, "payload": normalized, "revision": new_revision}
+        return {
+            "reportKey": report_key,
+            "schemaVersion": schema_version,
+            "payload": normalized,
+            "revision": new_revision,
+            "inputFingerprint": input_fingerprint,
+        }
     except Exception:
         _delete_physical(created_keys)
         raise
@@ -286,6 +376,11 @@ def delete_draft(task_code: str, session: dict[str, Any]) -> None:
         database.execute("DELETE FROM app.report_draft_files WHERE task_id = %s", (task["id"],))
         if rows:
             database.execute("UPDATE app.stored_files SET removed_at = NOW() WHERE id = ANY(%s)", ([row["id"] for row in rows],))
+        if task["report_key"] in {"valuation-general", "valuation-agricultural", "estimation", "progress", "completion"} and task.get("latest_artifact_id"):
+            database.execute(
+                "UPDATE app.task_artifacts SET stale_at = COALESCE(stale_at, NOW()) WHERE id = %s",
+                (task["latest_artifact_id"],),
+            )
         database.execute("DELETE FROM app.report_drafts WHERE task_id = %s", (task["id"],))
     _delete_physical(remove_keys)
 
@@ -357,6 +452,53 @@ def _compact_payload(value: Any) -> Any:
     if "storedFileId" not in result and isinstance(value.get("data"), str) and value["data"].startswith("data:image/"):
         result["inlineImageSha256"] = hashlib.sha256(value["data"].encode("utf-8")).hexdigest()
     return result
+
+
+def report_input_fingerprint(
+    payload: dict[str, Any] | None,
+    report_key: str,
+    schema_version: str = "1",
+    template_version: str = "1",
+) -> str:
+    """Return a stable identity for inputs that affect the retained report."""
+    source = payload if isinstance(payload, dict) else {}
+    identity = {
+        "reportKey": report_key,
+        "schemaVersion": str(schema_version or "1"),
+        "templateVersion": str(template_version or "1"),
+    }
+    if report_key == "estimation":
+        details = deepcopy(source.get("details") if isinstance(source.get("details"), dict) else {})
+        # These values describe generated/downloaded output and browser position;
+        # they are not inputs used to construct the workbook itself.
+        details.pop("finalReport", None)
+        details.pop("offlineWorkbook", None)
+        report_input = {
+            **identity,
+            "propertyType": source.get("propertyType"),
+            "construction": source.get("construction"),
+            "subtype": source.get("subtype"),
+            "details": _compact_payload(details),
+            "components": _compact_payload(source.get("components") if isinstance(source.get("components"), list) else []),
+        }
+    elif report_key in {"progress", "completion"}:
+        report_input = {
+            **identity,
+            "linkedEstimationId": source.get("linkedEstimationId"),
+            "details": _compact_payload(source.get("details") if isinstance(source.get("details"), dict) else {}),
+            "components": _compact_payload(source.get("components") if isinstance(source.get("components"), list) else []),
+            "bank": _compact_payload(source.get("bank") if isinstance(source.get("bank"), dict) else {}),
+            "photos": _compact_payload(source.get("photos") if isinstance(source.get("photos"), list) else []),
+        }
+    else:
+        report_input = {
+            **identity,
+            "values": _compact_payload(source.get("values") if isinstance(source.get("values"), dict) else {}),
+            "photos": _compact_payload(source.get("photos") if isinstance(source.get("photos"), list) else []),
+            "map": _compact_payload(source.get("map")),
+        }
+    encoded = json.dumps(report_input, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def _decimal(value: Any) -> Decimal:
@@ -448,6 +590,7 @@ def register_artifact(
     schema_version: str = "1",
     template_version: str = "1",
     current: bool = True,
+    preview_token: str = "",
 ) -> dict[str, Any]:
     actor = _actor(session)
     if artifact_type not in ARTIFACT_TYPES:
@@ -467,6 +610,16 @@ def register_artifact(
             task = _task(database, task_code, lock=True)
             _require_editable(actor, task)
             _validate_artifact(task, artifact_type)
+            draft_meta = None
+            if task["report_key"] in {"valuation-general", "valuation-agricultural", "estimation", "progress", "completion"}:
+                draft_meta = database.execute(
+                    "SELECT schema_version, payload FROM app.report_drafts WHERE task_id = %s",
+                    (task["id"],),
+                ).fetchone()
+                if draft_meta:
+                    schema_version = draft_meta["schema_version"]
+            fingerprint_payload = draft_meta["payload"] if draft_meta and task["report_key"] in {"estimation", "progress", "completion"} else payload
+            input_fingerprint = report_input_fingerprint(fingerprint_payload, task["report_key"], schema_version, template_version)
             revision_id = None
             revision_payload = None
             if artifact_type != "preview_pdf":
@@ -485,10 +638,10 @@ def register_artifact(
                     """
                     INSERT INTO app.report_revisions (
                         id, task_id, revision_number, report_key, schema_version,
-                        template_version, payload, created_by_user_id
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        template_version, payload, created_by_user_id, input_fingerprint
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (revision_id, task["id"], revision_number, task["report_key"], schema_version, template_version, Jsonb(revision_payload), actor["id"]),
+                    (revision_id, task["id"], revision_number, task["report_key"], schema_version, template_version, Jsonb(revision_payload), actor["id"], input_fingerprint),
                 )
             snapshot_id = None
             if current and artifact_type == "estimation_xlsx":
@@ -502,11 +655,23 @@ def register_artifact(
                 """
                 INSERT INTO app.task_artifacts (
                     id, task_id, stored_file_id, report_revision_id, artifact_type,
-                    artifact_source, created_by_user_id
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    artifact_source, created_by_user_id, input_fingerprint
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (artifact_id, task["id"], file_id, revision_id, artifact_type, source, actor["id"]),
+                (artifact_id, task["id"], file_id, revision_id, artifact_type, source, actor["id"], input_fingerprint),
             )
+            if artifact_type == "preview_pdf" and preview_token:
+                database.execute(
+                    """
+                    UPDATE app.report_drafts
+                    SET preview_fingerprint = %s,
+                        preview_token = %s,
+                        preview_artifact_id = %s,
+                        updated_at = NOW()
+                    WHERE task_id = %s AND input_fingerprint = %s
+                    """,
+                    (input_fingerprint, preview_token, artifact_id, task["id"], input_fingerprint),
+                )
             if current:
                 previous = database.execute(
                     """

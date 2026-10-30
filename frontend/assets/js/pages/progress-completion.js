@@ -13,6 +13,8 @@
   const state = { linkedEstimationId: task?.linkedEstimationId || "", current: 0, details: {}, components: [], bank: { releases: [] }, photos: [] };
   let saveTimer = null;
   let previousReports = [];
+  let previewId = null;
+  let generatedChangeAcknowledged = false;
 
   const element = (id) => document.getElementById(id);
   const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -30,6 +32,7 @@
   }
 
   function selectedTask() { return state.linkedEstimationId ? TaskStore.get(state.linkedEstimationId) : null; }
+  function currentTask() { return taskId && window.TaskStore ? TaskStore.get(taskId) : null; }
   function linkedSummary() { return selectedTask()?.estimationSummary || null; }
   function requestedReportType() { return practice ? element("practice-report-type").value : task?.reportGroup || "progress"; }
   function isKarnataka() { const linked = selectedTask(); return linked?.institutionCode === "KB" || linked?.institutionName?.trim().toLowerCase() === "karnataka bank"; }
@@ -149,7 +152,7 @@
 
   function renderReleases() {
     const releases = state.bank.releases || [];
-    element("release-rows").innerHTML = releases.length ? releases.map((release, index) => `<div class="release-row"><div class="field"><label for="release-date-${index}">Release date</label><input id="release-date-${index}" type="date" value="${escape(release.date || "")}" data-release-date="${index}"></div><div class="field"><label for="release-amount-${index}">Amount (Rs.)</label><input id="release-amount-${index}" type="number" min="0" step="any" value="${escape(release.amount ?? "")}" data-release-amount="${index}"></div><button type="button" class="secondary" data-remove-release="${index}">Remove</button></div>`).join("") : '<p class="hint">No previous loan releases entered.</p>';
+    element("release-rows").innerHTML = releases.length ? releases.map((release, index) => `<div class="release-row"><div class="field"><label for="release-date-${index}">Release date</label><input id="release-date-${index}" type="date" max="${TODAY}" value="${escape(release.date || "")}" data-release-date="${index}"></div><div class="field"><label for="release-amount-${index}">Amount (Rs.)</label><input id="release-amount-${index}" type="number" min="0" step="any" value="${escape(release.amount ?? "")}" data-release-amount="${index}"></div><button type="button" class="secondary" data-remove-release="${index}">Remove</button></div>`).join("") : '<p class="hint">No previous loan releases entered.</p>';
     renderBankCalculations();
   }
 
@@ -207,7 +210,33 @@
   }
 
   function draftState() {
-    return clone(state);
+    return clone({
+      linkedEstimationId: state.linkedEstimationId,
+      details: state.details,
+      components: state.components,
+      bank: state.bank,
+      photos: state.photos,
+    });
+  }
+
+  function confirmReportInvalidation() {
+    const current = currentTask();
+    if (!current?.reportGeneratedAt || current.reportFresh === false || generatedChangeAcknowledged) return true;
+    const accepted = window.confirm("Changing report details will make the retained report outdated. Continue and regenerate the report before completing this task?");
+    if (accepted) generatedChangeAcknowledged = true;
+    return accepted;
+  }
+
+  function markDirty() {
+    previewId = null;
+    ReportData.setPreview(null);
+    element("generate-docx").disabled = true;
+    window.dispatchEvent(new CustomEvent("sln:report-dirty"));
+  }
+
+  function reportInputChanged() {
+    markDirty();
+    scheduleSave();
   }
 
   function scheduleSave() {
@@ -232,6 +261,7 @@
     element("status").textContent = ReportData.localOnly ? "Saved locally" : "Saved";
     element("status").classList.remove("is-saving");
     element("status").removeAttribute("aria-label");
+    if (generatedChangeAcknowledged && ReportData.taskCode) await ReportData.refreshTask();
   }
 
   async function restoreDraft() {
@@ -251,9 +281,12 @@
     const issues = [];
     const linked = linkedSummary();
     if (!linked || !state.components.length) issues.push("Select a finalized estimation report with component costs.");
+    if (!state.photos.length) issues.push("Attach at least one authenticated site photograph.");
     if (!state.details.reportDate) issues.push("Enter the report date.");
     if (!state.details.visitDate) issues.push("Enter the site-visit date.");
     if (state.details.reportDate > TODAY || state.details.visitDate > TODAY) issues.push("Report and visit dates cannot be later than today.");
+    if (isKarnataka() && [state.bank.balanceAsOn, state.bank.date].some((value) => value && value > TODAY)) issues.push("Bank assessment dates cannot be later than today.");
+    if (isKarnataka() && (state.bank.releases || []).some((release) => release.date && release.date > TODAY)) issues.push("Loan release dates cannot be later than today.");
     if (!String(state.details.place || "").trim()) issues.push("Enter the report place.");
     state.components.forEach((component) => {
       const current = calculation(component);
@@ -282,7 +315,8 @@
       details: { ...state.details, materialsAtSite: numeric(state.details.materialsAtSite) },
       components: state.components.map((component) => { const current = calculation(component); return { id: component.id, label: component.label, estimatedCost: current.estimated, completionPercent: current.percent, completedCost: current.completed }; }),
       bank: clone(state.bank),
-      photos: state.photos.map(({ name, data }) => ({ name, data })),
+      photos: state.photos.map(({ name, data, storedFileId }) => ({ name, data, storedFileId })),
+      preview_id: previewId,
     };
   }
 
@@ -291,6 +325,10 @@
     element("validation-message").hidden = !issues.length;
     element("validation-message").innerHTML = issues.length ? `<strong>Complete these items first</strong><ul>${issues.map((issue) => `<li>${escape(issue)}</li>`).join("")}</ul>` : "";
     if (issues.length) { showSection(sections().indexOf("photos"), true); return; }
+    if (mode === "generate" && !previewId) {
+      window.alert("Please preview the latest report before downloading the DOCX.");
+      return;
+    }
     element("processing").hidden = false;
     element("processing-title").textContent = mode === "preview" ? "Rendering report preview" : "Generating Word report";
     element("processing-stage").textContent = "Building the certificate, calculations and photo pages…";
@@ -302,6 +340,9 @@
       if (mode === "preview") {
         element("preview-frame").src = result.preview;
         element("preview-modal").hidden = false;
+        previewId = result.preview_id;
+        ReportData.setPreview({ id: result.preview_id, url: result.preview });
+        element("generate-docx").disabled = false;
         element("status").textContent = "Preview ready";
       } else {
         const link = document.createElement("a");
@@ -311,6 +352,7 @@
         link.click();
         link.remove();
         window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: "docx", download: result.download, filename: result.filename, progressSummary: result.summary, registered: result.registered === true, task: result.task || null } }));
+        generatedChangeAcknowledged = false;
         element("status").textContent = "DOCX generated";
       }
     } catch (error) {
@@ -325,7 +367,12 @@
 
   function renderPhotos() {
     element("photo-preview").innerHTML = state.photos.map((photo, index) => `<figure><img src="${escape(photo.data)}" alt="Site photograph ${index + 1}"><button type="button" data-remove-photo="${index}" aria-label="Remove photograph ${index + 1}">×</button></figure>`).join("");
-    document.querySelectorAll("[data-remove-photo]").forEach((button) => button.addEventListener("click", () => { state.photos.splice(Number(button.dataset.removePhoto), 1); renderPhotos(); }));
+    document.querySelectorAll("[data-remove-photo]").forEach((button) => button.addEventListener("click", () => {
+      if (!confirmReportInvalidation()) return;
+      state.photos.splice(Number(button.dataset.removePhoto), 1);
+      renderPhotos();
+      reportInputChanged();
+    }));
   }
 
   function wire() {
@@ -336,27 +383,38 @@
       "loan-account": [state.bank, "accountNumber"], "limit-sanctioned": [state.bank, "limitSanctioned"], "balance-as-on": [state.bank, "balanceAsOn"],
       "balance-outstanding": [state.bank, "balanceOutstanding"], "margin-percent": [state.bank, "marginPercent"], "bank-page-date": [state.bank, "date"],
     };
-    Object.entries(bindings).forEach(([id, [owner, key]]) => element(id).addEventListener("input", (event) => { owner[key] = event.target.value; if (["materials-at-site", "margin-percent"].includes(id)) { renderComponents(); renderBankCalculations(); } scheduleSave(); }));
-    document.querySelectorAll('input[name="no-deviation"]').forEach((input) => input.addEventListener("change", () => { state.details.noDeviation = input.value; element("deviation-wrap").hidden = input.value !== "no"; scheduleSave(); }));
+    Object.entries(bindings).forEach(([id, [owner, key]]) => element(id).addEventListener("input", (event) => {
+      if (!confirmReportInvalidation()) { event.target.value = owner[key] ?? ""; return; }
+      owner[key] = event.target.value;
+      if (["materials-at-site", "margin-percent"].includes(id)) { renderComponents(); renderBankCalculations(); }
+      reportInputChanged();
+    }));
+    document.querySelectorAll('input[name="no-deviation"]').forEach((input) => input.addEventListener("change", () => {
+      if (!confirmReportInvalidation()) { syncInputsFromState(); return; }
+      state.details.noDeviation = input.value;
+      element("deviation-wrap").hidden = input.value !== "no";
+      reportInputChanged();
+    }));
     element("component-rows").addEventListener("change", (event) => {
+      if (!confirmReportInvalidation()) { renderComponents(); return; }
       const percentIndex = event.target.dataset.progressPercent;
       const completedIndex = event.target.dataset.progressCompleted;
       if (percentIndex !== undefined) { const component = state.components[Number(percentIndex)]; component.completionPercent = event.target.value; if (!component.manualCompleted) component.completedCost = calculation(component).calculated; }
       if (completedIndex !== undefined) { const component = state.components[Number(completedIndex)]; component.completedCost = event.target.value; component.manualCompleted = true; }
-      renderComponents(); renderBankCalculations(); scheduleSave();
+      renderComponents(); renderBankCalculations(); reportInputChanged();
     });
-    element("component-rows").addEventListener("click", (event) => { const index = event.target.dataset.resetCompleted; if (index === undefined) return; const component = state.components[Number(index)]; component.manualCompleted = false; component.completedCost = calculation(component).calculated; renderComponents(); renderBankCalculations(); scheduleSave(); });
-    element("add-release").addEventListener("click", () => { state.bank.releases.push({ date: "", amount: "" }); renderReleases(); scheduleSave(); });
-    element("release-rows").addEventListener("input", (event) => { const dateIndex = event.target.dataset.releaseDate; const amountIndex = event.target.dataset.releaseAmount; if (dateIndex !== undefined) state.bank.releases[Number(dateIndex)].date = event.target.value; if (amountIndex !== undefined) state.bank.releases[Number(amountIndex)].amount = event.target.value; renderBankCalculations(); scheduleSave(); });
-    element("release-rows").addEventListener("click", (event) => { const index = event.target.dataset.removeRelease; if (index === undefined) return; state.bank.releases.splice(Number(index), 1); renderReleases(); scheduleSave(); });
-    element("photo-upload").addEventListener("change", async (event) => { const added = await Promise.all([...event.target.files].map(fileToData)); const existing = new Set(state.photos.map((photo) => photo.key)); state.photos.push(...added.filter((photo) => !existing.has(photo.key))); event.target.value = ""; renderPhotos(); });
+    element("component-rows").addEventListener("click", (event) => { const index = event.target.dataset.resetCompleted; if (index === undefined) return; if (!confirmReportInvalidation()) return; const component = state.components[Number(index)]; component.manualCompleted = false; component.completedCost = calculation(component).calculated; renderComponents(); renderBankCalculations(); reportInputChanged(); });
+    element("add-release").addEventListener("click", () => { if (!confirmReportInvalidation()) return; state.bank.releases.push({ date: "", amount: "" }); renderReleases(); reportInputChanged(); });
+    element("release-rows").addEventListener("input", (event) => { const dateIndex = event.target.dataset.releaseDate; const amountIndex = event.target.dataset.releaseAmount; if (!confirmReportInvalidation()) { renderReleases(); return; } if (dateIndex !== undefined) state.bank.releases[Number(dateIndex)].date = event.target.value; if (amountIndex !== undefined) state.bank.releases[Number(amountIndex)].amount = event.target.value; renderBankCalculations(); reportInputChanged(); });
+    element("release-rows").addEventListener("click", (event) => { const index = event.target.dataset.removeRelease; if (index === undefined) return; if (!confirmReportInvalidation()) return; state.bank.releases.splice(Number(index), 1); renderReleases(); reportInputChanged(); });
+    element("photo-upload").addEventListener("change", async (event) => { if (!confirmReportInvalidation()) { event.target.value = ""; return; } const added = await Promise.all([...event.target.files].map(fileToData)); const existing = new Set(state.photos.map((photo) => photo.key)); state.photos.push(...added.filter((photo) => !existing.has(photo.key))); event.target.value = ""; renderPhotos(); reportInputChanged(); });
     element("previous").addEventListener("click", () => showSection(state.current - 1, true));
     element("next").addEventListener("click", () => showSection(state.current + 1, true));
     element("preview-report").addEventListener("click", () => requestReport("preview"));
     element("generate-docx").addEventListener("click", () => requestReport("generate"));
     element("close-preview").addEventListener("click", () => { element("preview-modal").hidden = true; });
     element("preview-modal").addEventListener("click", (event) => { if (event.target === element("preview-modal")) element("preview-modal").hidden = true; });
-    element("discard-draft").addEventListener("click", async () => { if (!window.confirm("Discard this progress/completion draft?")) return; try { await ReportData.discard(DRAFT_KEY); state.details = {}; state.bank = { releases: [] }; state.photos = []; loadLinkedEstimate(state.linkedEstimationId); element("status").textContent = "Draft discarded"; renderPhotos(); } catch (error) { element("status").textContent = error.message || "Draft could not be discarded"; } });
+    element("discard-draft").addEventListener("click", async () => { if (!window.confirm("Discard this progress/completion draft? The retained report will become outdated and must be previewed and generated again.")) return; try { markDirty(); await ReportData.discard(DRAFT_KEY); state.details = {}; state.bank = { releases: [] }; state.photos = []; loadLinkedEstimate(state.linkedEstimationId); element("status").textContent = "Draft discarded"; renderPhotos(); } catch (error) { element("status").textContent = error.message || "Draft could not be discarded"; } });
   }
 
   async function initialize() {
@@ -367,6 +425,12 @@
       element("preview-report").disabled = true;
     }
     await restoreDraft();
+    const restoredPreview = ReportData.preview();
+    if (restoredPreview?.id) {
+      previewId = restoredPreview.id;
+      element("generate-docx").disabled = false;
+      element("status").textContent = "Draft and latest preview restored";
+    }
     element("practice-estimation-wrap").hidden = !practice;
     element("practice-type-wrap").hidden = !practice;
     if (practice) {

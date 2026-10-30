@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import uuid
 from contextlib import contextmanager
 from datetime import date, timedelta
@@ -120,12 +121,45 @@ try:
         "version_conflict",
     )
     valuation = service.resume(valuation["id"], {"version": valuation["version"], "note": "Documents received."}, father)
+    png = base64.b64encode(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+    ).decode("ascii")
+    draft = report_service.save_draft(
+        valuation["id"],
+        {
+            "reportKey": "valuation-general", "schemaVersion": "3", "revision": 0,
+            "payload": {"values": {"test": suffix}, "photos": [{"name": "site.png", "data": f"data:image/png;base64,{png}"}], "map": None},
+        },
+        father,
+    )
     valuation = report_service.register_artifact(
         valuation["id"], father, content=b"workflow valuation", filename="valuation.docx",
-        artifact_type="valuation_docx", source="generated", payload={"values": {"test": suffix}},
+        artifact_type="valuation_docx", source="generated", payload=draft["payload"],
     )["task"]
     stored_keys = [row["storage_key"] for row in database.execute("SELECT storage_key FROM app.stored_files WHERE created_by_user_id = %s", (father_id,)).fetchall()]
+    changed = report_service.save_draft(
+        valuation["id"],
+        {
+            "reportKey": "valuation-general", "schemaVersion": "3", "revision": draft["revision"],
+            "payload": {**draft["payload"], "values": {"test": f"{suffix}-changed"}},
+        },
+        father,
+    )
+    valuation = service.get_task(valuation["id"])
+    assert valuation["reportFresh"] is False
+    expect_error(
+        lambda: service.complete(valuation["id"], {"version": valuation["version"], "note": "Outdated report."}, father),
+        "stale_report",
+    )
+    valuation = report_service.register_artifact(
+        valuation["id"], father, content=b"workflow valuation replacement", filename="valuation-replacement.docx",
+        artifact_type="valuation_docx", source="generated", payload=changed["payload"],
+    )["task"]
+    assert valuation["reportFresh"] is True
     valuation = service.complete(valuation["id"], {"version": valuation["version"], "note": "Report verified."}, father)
+    assert database.execute("SELECT COUNT(*) AS count FROM app.report_draft_files WHERE task_id = %s", (uuid.UUID(valuation["internalId"]),)).fetchone()["count"] == 0
+    cleaned_payload = database.execute("SELECT payload FROM app.report_drafts WHERE task_id = %s", (uuid.UUID(valuation["internalId"]),)).fetchone()["payload"]
+    assert cleaned_payload["photos"] == [] and cleaned_payload["map"] is None
     valuation = service.update_payment(
         valuation["id"],
         {"version": valuation["version"], "estimated": 5000, "agreed": 4500, "received": 4500, "dueDate": today.isoformat()},
@@ -139,9 +173,19 @@ try:
     assert valuation["reportGeneratedAt"] is None
 
     estimation = service.create_task(payload("estimation", f"Estimate {suffix}"), father)
+    estimation_state = {
+        "propertyType": "residential",
+        "details": {"workMode": "online", "applicantName": f"Estimate {suffix}"},
+        "components": [{"name": "Ground Floor", "formData": {"finalAmount": 100000}}],
+    }
+    estimation_draft = report_service.save_draft(
+        estimation["id"],
+        {"reportKey": "estimation", "schemaVersion": "3", "revision": 0, "payload": estimation_state},
+        father,
+    )
     estimation = report_service.register_artifact(
         estimation["id"], father, content=b"workflow estimation", filename="estimation.xlsx",
-        artifact_type="estimation_xlsx", source="generated", payload={"details": {}},
+        artifact_type="estimation_xlsx", source="generated", payload=estimation_state,
         summary={
             "applicantName": f"Estimate {suffix}", "projectLocation": f"Property for Estimate {suffix}",
             "propertyType": "residential", "components": [{"id": "gf", "label": "Ground Floor", "estimatedCost": 100000, "source": "component"}],
@@ -149,23 +193,81 @@ try:
         },
     )["task"]
     stored_keys = [row["storage_key"] for row in database.execute("SELECT storage_key FROM app.stored_files WHERE created_by_user_id = %s", (father_id,)).fetchall()]
+    changed_estimation_state = {**estimation_state, "details": {**estimation_state["details"], "place": "Changed"}}
+    report_service.save_draft(
+        estimation["id"],
+        {
+            "reportKey": "estimation", "schemaVersion": "3", "revision": estimation_draft["revision"],
+            "payload": changed_estimation_state,
+        },
+        father,
+    )
+    estimation = service.get_task(estimation["id"])
+    expect_error(
+        lambda: service.complete(estimation["id"], {"version": estimation["version"], "note": "Outdated estimate."}, father),
+        "stale_report",
+    )
+    estimation = report_service.register_artifact(
+        estimation["id"], father, content=b"workflow estimation replacement", filename="estimation-replacement.xlsx",
+        artifact_type="estimation_xlsx", source="generated", payload=changed_estimation_state,
+        summary={
+            "applicantName": f"Estimate {suffix}", "projectLocation": f"Property for Estimate {suffix}",
+            "propertyType": "residential", "components": [{"id": "gf", "label": "Ground Floor", "estimatedCost": 100000, "source": "component"}],
+            "totalEstimatedCost": 100000,
+        },
+    )["task"]
     estimation = service.complete(estimation["id"], {"version": estimation["version"], "note": "Estimate completed."}, father)
 
     candidates = service.eligible_estimations("completion", today.isoformat())
     assert any(item["id"] == estimation["id"] for item in candidates["items"])
 
     completion = service.create_task(payload("completion", f"Estimate {suffix}", linked=estimation["id"]), father)
+    completion_state = {
+        "linkedEstimationId": estimation["id"],
+        "details": {"reportDate": today.isoformat(), "visitDate": today.isoformat(), "place": "Adoni", "noDeviation": "yes"},
+        "components": [{"id": "gf", "label": "Ground Floor", "estimatedCost": 100000, "completionPercent": 100, "completedCost": 100000, "manualCompleted": False}],
+        "bank": {"releases": []},
+        "photos": [{"name": "completion.png", "data": f"data:image/png;base64,{png}"}],
+    }
+    completion_draft = report_service.save_draft(
+        completion["id"],
+        {"reportKey": "completion", "schemaVersion": "1", "revision": 0, "payload": completion_state},
+        father,
+    )
     completion = report_service.register_artifact(
         completion["id"], father, content=b"workflow completion", filename="completion.docx",
-        artifact_type="completion_docx", source="generated", payload={"components": []},
-        summary={"reportType": "completion", "components": []},
+        artifact_type="completion_docx", source="generated", payload=completion_draft["payload"],
+        summary={"reportType": "completion", "components": completion_state["components"]},
     )["task"]
     linked_reports = service.progress_reports_for(estimation["id"])
     assert [item["id"] for item in linked_reports] == [completion["id"]]
     assert linked_reports[0]["progressSummary"]["reportType"] == "completion"
     expect_error(lambda: service.progress_reports_for(valuation["id"]), "invalid_request")
     stored_keys = [row["storage_key"] for row in database.execute("SELECT storage_key FROM app.stored_files WHERE created_by_user_id = %s", (father_id,)).fetchall()]
+    changed_completion_state = {
+        **completion_state,
+        "details": {**completion_state["details"], "visitDate": (today - timedelta(days=1)).isoformat()},
+    }
+    changed_completion_draft = report_service.save_draft(
+        completion["id"],
+        {"reportKey": "completion", "schemaVersion": "1", "revision": completion_draft["revision"], "payload": changed_completion_state},
+        father,
+    )
+    completion = service.get_task(completion["id"])
+    assert completion["reportFresh"] is False
+    expect_error(
+        lambda: service.complete(completion["id"], {"version": completion["version"], "note": "Outdated completion report."}, father),
+        "stale_report",
+    )
+    completion = report_service.register_artifact(
+        completion["id"], father, content=b"workflow completion replacement", filename="completion-replacement.docx",
+        artifact_type="completion_docx", source="generated", payload=changed_completion_draft["payload"],
+        summary={"reportType": "completion", "components": changed_completion_state["components"]},
+    )["task"]
     completion = service.complete(completion["id"], {"version": completion["version"], "note": "Construction complete."}, father)
+    assert database.execute("SELECT COUNT(*) AS count FROM app.report_draft_files WHERE task_id = %s", (uuid.UUID(completion["internalId"]),)).fetchone()["count"] == 0
+    cleaned_completion = database.execute("SELECT payload FROM app.report_drafts WHERE task_id = %s", (uuid.UUID(completion["internalId"]),)).fetchone()["payload"]
+    assert cleaned_completion["photos"] == []
     locked_estimation = service.get_task(estimation["id"])
     assert locked_estimation["completionLockedAt"]
     expect_error(

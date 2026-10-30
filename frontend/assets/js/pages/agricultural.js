@@ -9,6 +9,7 @@ const state = {
   documentCount: 1,
   previewReady: false,
   previewId: null,
+  generatedChangeAcknowledged: false,
   processing: false,
 };
 const PAGE_PARAMS = new URLSearchParams(window.location.search);
@@ -115,6 +116,7 @@ function renderDocuments(saved = {}) {
     );
 }
 function addDocument() {
+  if (!confirmReportInvalidation()) return;
   state.documentCount++;
   renderDocuments();
   wireInputs();
@@ -123,6 +125,7 @@ function addDocument() {
 }
 function removeDocument(index) {
   if (index === 1) return;
+  if (!confirmReportInvalidation()) return;
   const existing = collectValues(),
     shifted = {};
   Object.entries(existing).forEach(([key, value]) => {
@@ -263,20 +266,30 @@ function mediaSection(panel) {
   panel.innerHTML +=
     '<section class="subgroup"><h3>Property photographs</h3><p class="hint">New selections are added to the photographs already shown. The report uses one photo per row for 1–4 photos, two per row for 5–6, and three per row for 7–9. More than nine continues on the next page. Every image is rotated from its camera metadata, scaled proportionally and never cropped.</p><input id="photo-upload" type="file" accept="image/*" multiple><p class="hint media-save-note">Task-linked photographs are retained with the draft. Practice photographs remain local to this browser.</p><div id="photo-preview" class="preview-grid"></div></section><section class="subgroup"><h3>Route map</h3><p class="hint">Upload one map screenshot. It is placed on its own page after the photographs.</p><input id="map-upload" type="file" accept="image/*"><div id="map-preview" class="map-preview"></div></section>';
   panel.querySelector("#photo-upload").onchange = async (event) => {
+    if (!confirmReportInvalidation()) {
+      event.target.value = "";
+      return;
+    }
     const added = await Promise.all([...event.target.files].map(fileData));
     const known = new Set(state.photos.map((photo) => photo.key));
     state.photos.push(...added.filter((photo) => !known.has(photo.key)));
     event.target.value = "";
     renderPreviews();
     markDirty();
+    saveDraft();
   };
   panel.querySelector("#map-upload").onchange = async (event) => {
+    if (!confirmReportInvalidation()) {
+      event.target.value = "";
+      return;
+    }
     state.map = event.target.files[0]
       ? await fileData(event.target.files[0])
       : null;
     event.target.value = "";
     renderPreviews();
     markDirty();
+    saveDraft();
   };
 }
 
@@ -295,24 +308,47 @@ function renderPreviews() {
     host.querySelectorAll("[data-remove-photo]").forEach(
       (button) =>
         (button.onclick = () => {
+          if (!confirmReportInvalidation()) return;
           state.photos.splice(Number(button.dataset.removePhoto), 1);
           renderPreviews();
           markDirty();
+          saveDraft();
         }),
     );
   }
   const mapHost = byId("map-preview");
   if (mapHost)
     mapHost.innerHTML = state.map
-      ? `<img src="${state.map.data}" alt="Route map preview">`
+      ? `<div class="media-preview-item"><img src="${state.map.data}" alt="Route map preview"><button type="button" class="secondary remove-map">Remove map</button></div>`
       : "";
+  mapHost?.querySelector(".remove-map")?.addEventListener("click", () => {
+    if (!confirmReportInvalidation()) return;
+    state.map = null;
+    const upload = byId("map-upload");
+    if (upload) upload.value = "";
+    renderPreviews();
+    markDirty();
+    saveDraft();
+  });
 }
 
+function currentTask() {
+  return ReportData.taskCode && window.TaskStore ? TaskStore.get(ReportData.taskCode) : null;
+}
+function confirmReportInvalidation() {
+  const task = currentTask();
+  if (!task?.reportGeneratedAt || task.reportFresh === false || state.generatedChangeAcknowledged) return true;
+  const accepted = window.confirm("Changing report details will make the retained report outdated. Continue and regenerate the report before completing this task?");
+  if (accepted) state.generatedChangeAcknowledged = true;
+  return accepted;
+}
 function markDirty() {
   state.previewReady = false;
   state.previewId = null;
+  ReportData.setPreview(null);
   byId("generate-docx").disabled = true;
   byId("generate-pdf").disabled = true;
+  window.dispatchEvent(new CustomEvent("sln:report-dirty"));
 }
 function reportPayload(format = "pdf") {
   calculateAll();
@@ -358,6 +394,26 @@ function show(index) {
   updateNavigation();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
+function validateRequiredFields(form) {
+  if (form.checkValidity()) return true;
+  const invalid = [...form.elements].find((control) => typeof control.checkValidity === "function" && !control.checkValidity());
+  const message = "Complete the highlighted required field before previewing the report.";
+  byId("status").textContent = message;
+  if (invalid) {
+    const panel = invalid.closest(".panel");
+    const index = state.sections.indexOf(panel);
+    if (index >= 0) show(index);
+    invalid.classList.add("validation-target");
+    invalid.addEventListener("input", () => invalid.classList.remove("validation-target"), { once: true });
+    window.setTimeout(() => {
+      invalid.focus({ preventScroll: true });
+      invalid.scrollIntoView({ behavior: "smooth", block: "center" });
+      invalid.reportValidity();
+    }, 250);
+  }
+  window.alert(message);
+  return false;
+}
 
 let saveTimer;
 async function persistDraftNow() {
@@ -375,6 +431,7 @@ async function persistDraftNow() {
   byId("status").textContent = ReportData.localOnly ? "Saved locally" : "Saved";
   byId("status").classList.remove("is-saving");
   byId("status").removeAttribute("aria-label");
+  if (state.generatedChangeAcknowledged && ReportData.taskCode) await ReportData.refreshTask();
 }
 function saveDraft() {
   clearTimeout(saveTimer);
@@ -401,7 +458,27 @@ function wireInputs() {
       if (input.type === "file" || input.readOnly || input.dataset.wired)
         return;
       input.dataset.wired = "1";
+      input.addEventListener("focus", () => {
+        input.dataset.previousValue = input.value;
+        input.dataset.previousChecked = String(input.checked);
+      });
+      if (input.type === "checkbox" || input.type === "radio") {
+        input.addEventListener("click", (event) => {
+          if (!confirmReportInvalidation()) event.preventDefault();
+        });
+      } else if (input.tagName !== "SELECT") {
+        input.addEventListener("beforeinput", (event) => {
+          if (!confirmReportInvalidation()) event.preventDefault();
+        });
+      }
       const changed = () => {
+        if (!confirmReportInvalidation()) {
+          input.value = input.dataset.previousValue ?? input.value;
+          if (input.type === "checkbox" || input.type === "radio") input.checked = input.dataset.previousChecked === "true";
+          return;
+        }
+        input.dataset.previousValue = input.value;
+        input.dataset.previousChecked = String(input.checked);
         if (input.id === "institution.type") applyInstitutionOptions();
         calculateAll();
         applySaleAgreementRule();
@@ -476,6 +553,14 @@ async function init() {
   calculateAll();
   applySaleAgreementRule();
   show(0);
+  const restoredPreview = ReportData.preview();
+  if (restoredPreview?.id) {
+    state.previewId = restoredPreview.id;
+    state.previewReady = true;
+    byId("generate-docx").disabled = false;
+    byId("generate-pdf").disabled = false;
+    byId("status").textContent = "Latest preview restored";
+  }
 }
 
 byId("previous").onclick = () => show(state.current - 1);
@@ -485,7 +570,7 @@ byId("agricultural-form").addEventListener("click", (event) => {
 });
 byId("preview-report").onclick = async () => {
   const form = byId("agricultural-form");
-  if (!form.reportValidity() || state.processing) return;
+  if (!validateRequiredFields(form) || state.processing) return;
   const status = byId("status");
   status.textContent = "Building preview…";
   setProcessing(
@@ -508,6 +593,7 @@ byId("preview-report").onclick = async () => {
     byId("preview-modal").hidden = false;
     state.previewId = response.preview_id;
     state.previewReady = true;
+    ReportData.setPreview({ id: response.preview_id, url: response.preview });
     status.textContent = "Preview ready";
   } catch (error) {
     status.textContent = "Preview failed";
@@ -551,6 +637,7 @@ byId("agricultural-form").addEventListener("submit", async (event) => {
       return data;
     });
     status.textContent = "Generated";
+    state.generatedChangeAcknowledged = false;
     window.dispatchEvent(new CustomEvent("sln:report-generated", {
       detail: {
         format: state.format,

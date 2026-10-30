@@ -17,7 +17,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 
 from ..auth import routes as auth_routes
 from ..auth.service import AuthError
-from ..estimation import extract_estimation_summary, generate_estimation_workbook
+from ..estimation import extract_estimation_summary, generate_estimation_workbook, validate_estimation_summary
 from ..exports import generate_table_export
 from ..progress import generate_progress_report
 from ..reports import routes as report_routes
@@ -325,11 +325,13 @@ class Handler(BaseHTTPRequestHandler):
                     artifact = report_service.register_artifact(
                         task_code, session, content=pdf_path.read_bytes(), filename=pdf_name,
                         artifact_type="preview_pdf", source="generated", payload=payload, current=False,
+                        preview_token=preview_id if is_preview else "",
                     )
                 if is_preview:
                     self.send_json({"ok": True, "preview": artifact["download"] if artifact else f"/previews/{pdf_name}?v={time.time_ns()}", "preview_id": preview_id})
                 else:
-                    self.send_json({"ok": True, "download": artifact["download"] if artifact else f"/downloads/{pdf_name}", "registered": False})
+                    download = f'{artifact["download"]}?download=1' if artifact else f"/downloads/{pdf_name}"
+                    self.send_json({"ok": True, "download": download, "filename": artifact["filename"] if artifact else pdf_name, "registered": False})
             else:
                 artifact = None
                 if task_code:
@@ -402,8 +404,9 @@ class Handler(BaseHTTPRequestHandler):
                     artifact = report_service.register_artifact(
                         task_code, session, content=pdf_path.read_bytes(), filename=pdf_path.name,
                         artifact_type="preview_pdf", source="generated", payload=state, current=False,
+                        preview_token=generation_id,
                     )
-                self.send_json({"ok": True, "preview": artifact["download"] if artifact else f"/previews/{pdf_path.name}?v={generation_id}"})
+                self.send_json({"ok": True, "preview": artifact["download"] if artifact else f"/previews/{pdf_path.name}?v={generation_id}", "preview_id": generation_id})
                 return
 
             report_url = ""
@@ -462,7 +465,8 @@ class Handler(BaseHTTPRequestHandler):
             if task_code:
                 draft = report_service.get_draft(task_code, session)
                 draft_state = draft.get("payload") if draft else {}
-                summary = estimation_summary(draft_state, extracted)
+                validated = validate_estimation_summary(draft_state, extracted)
+                summary = estimation_summary(draft_state, validated)
                 artifact = report_service.register_artifact(
                     task_code, session, content=content, filename=file_name,
                     artifact_type="estimation_xlsx", source="uploaded",
@@ -607,6 +611,11 @@ class Handler(BaseHTTPRequestHandler):
             OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
             is_preview = request_path.endswith("/preview")
             generation_id = str(time.time_ns())
+            preview_id = generation_id if is_preview else str(payload.get("preview_id") or "")
+            if preview_id and not re.fullmatch(r"\d+", preview_id):
+                raise ValueError("Invalid preview identifier")
+            if task_code and not is_preview:
+                report_service.require_current_preview(task_code, session, preview_id)
             prefix = "progress-completion-preview" if is_preview else "progress-completion-report"
             docx_path = OUTPUT_DIR / f"{prefix}-{generation_id}.docx"
             generated = generate_progress_report(payload, docx_path)
@@ -626,8 +635,9 @@ class Handler(BaseHTTPRequestHandler):
                     artifact = report_service.register_artifact(
                         task_code, session, content=pdf_path.read_bytes(), filename=pdf_path.name,
                         artifact_type="preview_pdf", source="generated", payload=payload, current=False,
+                        preview_token=preview_id,
                     )
-                self.send_json({"ok": True, "preview": artifact["download"] if artifact else f"/previews/{pdf_path.name}?v={generation_id}", "reportType": generated.report_type})
+                self.send_json({"ok": True, "preview": artifact["download"] if artifact else f"/previews/{pdf_path.name}?v={generation_id}", "preview_id": preview_id, "reportType": generated.report_type})
                 return
             artifact = None
             if task_code:

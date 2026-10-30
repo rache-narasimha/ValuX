@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote, urlparse
 
 from ..auth import routes as auth_routes
 from ..auth.service import AuthError
@@ -35,7 +35,8 @@ def handle_get(handler, path: str) -> bool:
             handler.send_file(record["path"], cache="private, no-store")
             return True
         record = service.artifact_file(unquote(artifact_match.group(1)), artifact_match.group(2), session)
-        disposition = "inline" if record["artifactType"] == "preview_pdf" else "attachment"
+        force_download = (parse_qs(urlparse(handler.path).query).get("download") or [""])[-1] == "1"
+        disposition = "inline" if record["artifactType"] == "preview_pdf" and not force_download else "attachment"
         handler.send_file(
             record["path"],
             cache="private, no-store",

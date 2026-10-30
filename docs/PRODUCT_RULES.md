@@ -102,6 +102,8 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Task lists remain searchable and filterable. Search includes task ID,
   applicant/customer, report, institution, assignee, property details, state,
   hold reason, and payment state where supported.
+- The task-list “Assigned during” filter supports an arbitrary selected day,
+  week, month, or year; it is not limited to the present calendar period.
 - Lists load bounded pages of records and fetch/show more rather than rendering
   an unbounded task collection at once.
 - A non-Cancelled valuation or estimation assignment blocks creation of another
@@ -168,6 +170,10 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - “Payments” opens Completed reports requiring payment tracking.
 - “Reports” opens Closed reports.
 - Recent Activity can be filtered by state.
+- Completed and Closed task rows with a retained report expose a direct
+  download icon without requiring the task to be opened. The task detail view
+  also exposes the retained report download. Completed uses the latest valid
+  artifact; Closed uses the immutable final artifact.
 - The layout should use available horizontal space efficiently, show useful
   task details before opening a record, and become compact on smaller screens.
 - Father/CEO institution charts include every configured bank and NBFC, showing
@@ -193,6 +199,12 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   convenience, but they must not become report fields or generated content.
 - Task-linked report pages show one report/assignment heading; shared shell
   changes must not create duplicate headers or banners.
+- A task-linked general or agricultural valuation preview remains approved
+  across page reloads while the saved report inputs, media references, schema,
+  and template version are unchanged. Report-input freshness is enforced by
+  the backend; changing a report input makes the retained report outdated and
+  requires a new preview and DOCX before completion. Workflow-only changes do
+  not invalidate a report.
 - Draft status indicators remain visually quiet: the existing status text is
   retained while a small saving activity cue appears, then resolves to the
   saved state without moving the form layout.
@@ -200,6 +212,11 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   authenticated sessions. Their draft photographs and route maps use
   task-scoped local files served only through authenticated routes. Practice
   forms remain browser-local and do not create durable task data.
+- General, agricultural, Progress and Completion draft photographs (and route
+  maps where applicable) are retained only while the task is In Progress or On
+  Hold. They are removed from standalone draft storage when the task reaches
+  Completed; the final DOCX retains its embedded images. A reopened task
+  requires media to be uploaded again before regeneration.
 - General-property and agricultural-property forms are separate products.
   Never apply a field, label, document option, template, calculation, or layout
   change to both unless the user explicitly requests both.
@@ -214,9 +231,23 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Preview and DOCX generation must remain consistent, with intentional page
   breaks, standardized fonts, and no static-template line breaks substituted
   for dynamic logic.
+- DOCX is the completion-qualifying artifact for ordinary valuation work. A
+  generated PDF is an optional direct-download copy and does not independently
+  qualify the task for completion or closure.
 - Estimation supports online form entry or a configured offline XLSX workflow.
   A completed estimation XLSX is required before completion and is retained at
   closure. Estimation reports do not require photo or map uploads.
+- An online estimation preview remains approved across reloads while the saved
+  workbook inputs, component configuration, schema and template version remain
+  unchanged. Changing a workbook input invalidates the preview and retained
+  completed XLSX; workflow-only changes do not. Changing between online and
+  offline preparation retains entered component data but requires a newly
+  generated or attached completed XLSX.
+- An offline estimation upload is not required to preserve the downloaded
+  workbook's formulas or formatting. Its worksheet topology and component list
+  must match the configured workbook: missing, renamed, duplicated, additional
+  or unrelated worksheets/components are rejected. Every configured component
+  must have a numeric final value; zero is valid.
 - Karur Vysya Bank general valuations use its supplied Excel format only: the
   application supplies a cleaned bank-template XLSX and the valuer attaches the
   completed XLSX. Karnataka Bank general valuations are completed in Valocity;
@@ -237,7 +268,15 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Karnataka Bank reports include the bank-specific Format/Reference content
   and Branch Sanction page. Reports for other institutions omit those items.
 - Progress/Completion site photographs use the same upload and document-layout
-  rules as valuation reports. The final report artifact is DOCX.
+  rules as valuation reports. At least one authenticated site photograph is
+  mandatory for every Progress or Completion report. The final report artifact
+  is DOCX.
+- A task-linked Progress/Completion preview remains approved across reloads
+  while its saved details, component completion values, Karnataka Bank inputs,
+  photographs, schema and template version remain unchanged. Changing a report
+  input invalidates the preview and retained DOCX; workflow-only changes do
+  not. Completion is blocked by the backend until the latest inputs have been
+  previewed and a fresh DOCX generated.
 
 ## 8. Authentication lifecycle
 
