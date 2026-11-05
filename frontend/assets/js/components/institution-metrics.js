@@ -63,14 +63,15 @@
     }));
   }
 
-  function periodLabel(period, reference = new Date()) {
-    const format = (date, options) => new Intl.DateTimeFormat("en-IN", options).format(date);
+  function periodLabel(period, reference = ValuxTime.todayDate()) {
+    if (!period) return "All time";
+    const format = (date, options) => new Intl.DateTimeFormat("en-IN", { ...options, timeZone: "UTC" }).format(date);
     const { start, end } = TaskStore.periodBounds(period, reference);
     const inclusiveEnd = new Date(end);
-    inclusiveEnd.setDate(inclusiveEnd.getDate() - 1);
+    inclusiveEnd.setUTCDate(inclusiveEnd.getUTCDate() - 1);
     if (period === "daily") return format(start, { day: "2-digit", month: "short", year: "numeric" });
     if (period === "weekly") return `${format(start, { day: "2-digit", month: "short" })} – ${format(inclusiveEnd, { day: "2-digit", month: "short", year: "numeric" })}`;
-    if (period === "yearly") return String(start.getFullYear());
+    if (period === "yearly") return String(start.getUTCFullYear());
     return format(start, { month: "long", year: "numeric" });
   }
 

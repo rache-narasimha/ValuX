@@ -31,6 +31,9 @@
       const error = new Error(payload.error || "The request could not be completed. Please try again.");
       error.code = payload.code || "request_failed";
       error.status = response.status;
+      error.details = payload;
+      error.similarTask = payload.similarTask || null;
+      error.existingTask = payload.existingTask || null;
       throw error;
     }
     return payload;

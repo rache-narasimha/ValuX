@@ -14,6 +14,13 @@
   const dueDate = document.getElementById("due-date");
   const errorMessage = document.getElementById("task-error");
   const submitButton = form.querySelector('button[type="submit"]');
+  const similarWarning = document.getElementById("similar-task-warning");
+  const similarTitle = document.getElementById("similar-task-title");
+  const similarDescription = document.getElementById("similar-task-description");
+  const similarDetails = document.getElementById("similar-task-details");
+  const similarOpen = document.getElementById("similar-task-open");
+  const similarProceed = document.getElementById("similar-task-proceed");
+  const similarCancel = document.getElementById("similar-task-cancel");
   const initialNote = document.getElementById("initial-note");
   const linkedModal = document.getElementById("linked-estimation-modal");
   const linkedResults = document.getElementById("estimation-picker-results");
@@ -26,6 +33,7 @@
   let linkedOffset = 0;
   let linkedRows = [];
   let linkedSearchTimer = null;
+  let pendingSimilarTask = null;
   const picker = EmployeePicker.mount(document.getElementById("assignee-picker"), {
     required: currentUser.role === "employee",
     includeUnassigned: currentUser.role === "father",
@@ -33,10 +41,6 @@
   });
 
   // Institution/report options and priority-derived dates.
-  function iso(date) {
-    return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
-  }
-
   function refreshInstitutions() {
     institution.innerHTML = '<option value="">Select institution</option>';
     const choices = window.INSTITUTIONS[institutionType.value] || [];
@@ -145,9 +149,83 @@
     const priority = document.getElementById("priority").value;
     const range = TaskStore.dueDateRange(priority, assignedDate.value);
     dueDate.min = assignedDate.value;
-    dueDate.max = range.maximum;
     dueDate.value = range.suggested;
-    document.getElementById("due-date-help").textContent = `${priority} priority: suggested ${range.suggested}; latest allowed ${range.maximum} (calendar days).`;
+    document.getElementById("due-date-help").textContent = `${priority} priority: suggested ${range.suggested} (you may choose another calendar date).`;
+  }
+
+  function hideSimilarWarning() {
+    pendingSimilarTask = null;
+    similarWarning.hidden = true;
+  }
+
+  function showSimilarWarning(task, exact = false) {
+    pendingSimilarTask = exact ? null : task;
+    similarTitle.textContent = exact ? "This assignment already exists" : "A very similar assignment was just created";
+    similarDescription.textContent = exact
+      ? "Open the existing task instead of creating an exact duplicate."
+      : "Review the existing task first. If this is genuinely separate work, you can still create the new assignment.";
+    similarDetails.textContent = `${task.id} · ${task.customerName} · ${task.propertyBrief} · ${task.institutionName}, ${task.branch} · ${WorkflowUI.date(task.assignedDate)} · ${task.status}`;
+    similarOpen.href = task.url;
+    similarProceed.hidden = exact;
+    similarWarning.hidden = false;
+    similarWarning.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function taskPayload(allowSimilarTaskId = "") {
+    const reportKey = reportType.value === "valuation" ? `valuation-${valuationType.value}` : reportType.value;
+    if (["progress", "completion"].includes(reportKey) && !linkedEstimation.value) {
+      throw new Error("Select one eligible finalized estimation report before creating this assignment.");
+    }
+    const selectedInstitution = (window.INSTITUTIONS[institutionType.value] || []).find((item) => item.code === institution.value);
+    if (!selectedInstitution) throw new Error("Select a valid bank or NBFC.");
+    const selectedAssignee = picker.value();
+    const assigneeReference = picker.id();
+    if (currentUser.role === "employee" && !selectedAssignee) throw new Error("Employees must assign a new task before creating it.");
+    if (selectedAssignee && !initialNote.value.trim()) {
+      throw new Error("Add an initial work note when assigning the task. Use an acknowledgement for self-assignment or a routing justification for another employee.");
+    }
+    return {
+      institutionType: institutionType.value,
+      institutionCode: institution.value,
+      institutionName: selectedInstitution.name,
+      branch: document.getElementById("branch").value,
+      customerName: document.getElementById("customer-name").value,
+      propertyBrief: document.getElementById("property-brief").value,
+      reportKey,
+      linkedEstimationId: linkedEstimation.value,
+      assignee: assigneeReference,
+      priority: document.getElementById("priority").value,
+      assignedDate: assignedDate.value,
+      dueDate: dueDate.value,
+      initialNote: initialNote.value,
+      allowSimilarTaskId,
+    };
+  }
+
+  async function createAssignment(allowSimilarTaskId = "") {
+    errorMessage.hidden = true;
+    submitButton.disabled = true;
+    similarProceed.disabled = true;
+    submitButton.textContent = "Creating…";
+    try {
+      const task = await TaskStore.create(taskPayload(allowSimilarTaskId));
+      hasUnsavedChanges = false;
+      window.location.replace(`/tasks/detail?id=${encodeURIComponent(task.id)}`);
+    } catch (error) {
+      if (error.code === "similar_task" && error.similarTask) {
+        showSimilarWarning(error.similarTask, false);
+      } else if (error.code === "duplicate" && error.existingTask) {
+        showSimilarWarning(error.existingTask, true);
+      } else {
+        errorMessage.textContent = error.message || "The assignment could not be created. Please try again.";
+        errorMessage.hidden = false;
+        errorMessage.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    } finally {
+      submitButton.disabled = false;
+      similarProceed.disabled = false;
+      submitButton.textContent = "Create assignment";
+    }
   }
 
   // Form initialization, event handling, and submission.
@@ -181,8 +259,7 @@
   picker.input.addEventListener("change", () => {
     try { initialNote.required = Boolean(picker.value()); } catch (_error) { initialNote.required = Boolean(picker.input.value.trim()); }
   });
-  assignedDate.max = iso(new Date());
-  assignedDate.value = iso(new Date());
+  assignedDate.value = ValuxTime.today();
   refreshDates();
   refreshReportType();
   Object.entries(window.INSTITUTIONS).forEach(([type, institutions]) => {
@@ -197,8 +274,12 @@
     document.getElementById("assignee-help").textContent = "Employees must route a new task to themselves or another employee.";
   }
 
-  form.addEventListener("input", () => { hasUnsavedChanges = true; });
-  form.addEventListener("change", () => { hasUnsavedChanges = true; });
+  form.addEventListener("input", () => { hasUnsavedChanges = true; hideSimilarWarning(); });
+  form.addEventListener("change", () => { hasUnsavedChanges = true; hideSimilarWarning(); });
+  similarProceed.addEventListener("click", () => {
+    if (pendingSimilarTask?.id) createAssignment(pendingSimilarTask.id);
+  });
+  similarCancel.addEventListener("click", hideSimilarWarning);
   window.addEventListener("beforeunload", (event) => {
     if (!hasUnsavedChanges) return;
     event.preventDefault();
@@ -214,45 +295,7 @@
       return;
     }
     if (!form.reportValidity()) return;
-    errorMessage.hidden = true;
-    submitButton.disabled = true;
-    submitButton.textContent = "Creating…";
-    try {
-      const reportKey = reportType.value === "valuation" ? `valuation-${valuationType.value}` : reportType.value;
-      if (["progress", "completion"].includes(reportKey) && !linkedEstimation.value) {
-        throw new Error("Select one eligible finalized estimation report before creating this assignment.");
-      }
-      const selectedInstitution = (window.INSTITUTIONS[institutionType.value] || []).find((item) => item.code === institution.value);
-      if (!selectedInstitution) throw new Error("Select a valid bank or NBFC.");
-      const selectedAssignee = picker.value();
-      const assigneeReference = picker.id();
-      if (currentUser.role === "employee" && !selectedAssignee) throw new Error("Employees must assign a new task before creating it.");
-      if (selectedAssignee && !initialNote.value.trim()) {
-        throw new Error("Add a brief description when assigning the task. Use an acknowledgement for self-assignment or a routing justification for another employee.");
-      }
-      const task = await TaskStore.create({
-        institutionType: institutionType.value,
-        institutionCode: institution.value,
-        institutionName: selectedInstitution.name,
-        branch: document.getElementById("branch").value,
-        customerName: document.getElementById("customer-name").value,
-        propertyBrief: document.getElementById("property-brief").value,
-        reportKey,
-        linkedEstimationId: linkedEstimation.value,
-        assignee: assigneeReference,
-        priority: document.getElementById("priority").value,
-        assignedDate: assignedDate.value,
-        dueDate: dueDate.value,
-        initialNote: initialNote.value,
-      });
-      hasUnsavedChanges = false;
-      window.location.replace(`/tasks/detail?id=${encodeURIComponent(task.id)}`);
-    } catch (error) {
-      errorMessage.textContent = error.message || "The assignment could not be created. Please try again.";
-      errorMessage.hidden = false;
-      submitButton.disabled = false;
-      submitButton.textContent = "Create assignment";
-      errorMessage.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
+    hideSimilarWarning();
+    await createAssignment();
   });
 })();

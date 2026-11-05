@@ -22,8 +22,8 @@ KVB_TEMPLATE = KVB_RESOURCES / "kvb_valuation_master.xlsx"
 SCHEMA = GENERAL_RESOURCES / "form_schema.json"
 OUTPUT_DIR = APP_ROOT / "outputs" / "generated_reports"
 SOFFICE = os.environ.get("SOFFICE_PATH") or shutil.which("soffice") or "/usr/bin/soffice"
-DEFAULT_VALUER_NAME_ADDRESS = "K.Sivaprasad,B.E.,M.I.E.,F.I.V.\nH.No:21-2/16A1,SKD Colony Adoni."
-DEFAULT_VALUER_NAME = "K.Sivaprasad"
+DEFAULT_VALUER_NAME_ADDRESS = "K. Siva Prasad, B.E., M.I.E., F.I.V.\nH.No:21-2/16A1,SKD Colony Adoni."
+DEFAULT_VALUER_NAME = "K. Siva Prasad"
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS = {"w": W}

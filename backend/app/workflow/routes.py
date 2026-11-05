@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from ..auth import routes as auth_routes
 from ..auth.service import AuthError
+from ..business_time import TENANT_TIME_ZONE_NAME
 from ..reference import service as reference_service
 from . import service
 
@@ -51,6 +52,7 @@ def page_context_script(session: dict, raw_path: str) -> bytes:
         "summary": service.summary(),
         "institutions": reference_service.list_institutions(session["role"] == "father"),
         "employees": service.employees(),
+        "timeZone": TENANT_TIME_ZONE_NAME,
     }
     safe_json = json.dumps(context, separators=(",", ":")).replace("<", "\\u003c")
     return f"<script>window.__VALUX_BUSINESS_CONTEXT__={safe_json};</script>".encode("utf-8")
@@ -63,7 +65,10 @@ def _query(handler) -> dict[str, str]:
 
 def _error(handler, error: Exception) -> None:
     if isinstance(error, (service.WorkflowError, AuthError)):
-        handler.send_json({"ok": False, "error": str(error), "code": error.code}, error.status)
+        response = {"ok": False, "error": str(error), "code": error.code}
+        if isinstance(error, service.WorkflowError):
+            response.update(error.details)
+        handler.send_json(response, error.status)
         return
     handler.log_error("Workflow request failed: %s", type(error).__name__)
     handler.send_json({"ok": False, "error": "The workflow service encountered an unexpected error."}, 500)
@@ -76,7 +81,7 @@ def handle_get(handler, path: str) -> bool:
         session = auth_routes.require_full_session(handler)
         options = _query(handler)
         if path == "/api/tasks":
-            handler.send_json({"ok": True, **service.list_tasks(options)})
+            handler.send_json({"ok": True, **service.list_tasks(options, session)})
             return True
         if path == "/api/tasks/summary":
             handler.send_json({"ok": True, "summary": service.summary(options.get("group", "all"))})

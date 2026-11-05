@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import uuid
 from contextlib import contextmanager
 from datetime import date, timedelta
@@ -23,6 +24,13 @@ father = {
     "role": "father",
     "login_id": f"reports-father-{suffix}",
 }
+employee_id = uuid.uuid4()
+employee = {
+    "user_id": employee_id,
+    "display_name": f"Reports Employee {suffix}",
+    "role": "employee",
+    "login_id": f"reports-employee-{suffix}",
+}
 today = date.today()
 database = psycopg.connect(DATABASE_URL, row_factory=dict_row)
 original_report_connection = reports.connection
@@ -34,15 +42,15 @@ def shared_connection(*_args, **_kwargs):
     yield database
 
 
-def task_payload(report_key: str, customer: str, linked: str = "") -> dict:
+def task_payload(report_key: str, customer: str, linked: str = "", institution_code: str = "CANARA", assignee: str = "") -> dict:
     return {
-        "institutionCode": "CANARA",
+        "institutionCode": institution_code,
         "branch": "Adoni",
         "customerName": customer,
         "propertyBrief": f"Property for {customer}",
         "reportKey": report_key,
         "linkedEstimationId": linked,
-        "assignee": father["display_name"],
+        "assignee": assignee or father["display_name"],
         "priority": "Urgent",
         "assignedDate": today.isoformat(),
         "dueDate": (today + timedelta(days=1)).isoformat(),
@@ -73,10 +81,25 @@ database.execute(
     """,
     (father_id, father["login_id"], father["display_name"]),
 )
+database.execute(
+    """
+    INSERT INTO auth.users
+        (id, user_id, display_name, role, status, password_hash, must_change_password)
+    VALUES (%s, %s, %s, 'employee', 'active', 'reports-test-only', FALSE)
+    """,
+    (employee_id, employee["login_id"], employee["display_name"]),
+)
 
 stored_keys: list[str] = []
 try:
-    valuation = workflow.create_task(task_payload("valuation-general", f"Draft {suffix}"), father)
+    valuation = workflow.create_task(task_payload("valuation-general", f"Draft {suffix} S/o QA Parent"), father)
+    assert reports.valuation_download_filename(valuation["id"], father, ".docx") == f"{valuation['id']}_Draft_{suffix}_S_o_QA_Parent_General_Valuation_Report.docx"
+    assert reports.valuation_download_filename(valuation["id"], father, ".pdf").endswith("_General_Valuation_Report.pdf")
+    expect_report_error(lambda: reports.valuation_download_filename(valuation["id"], employee, ".docx"), "forbidden")
+    expect_report_error(
+        lambda: reports.require_report_key(valuation["id"], father, "valuation-agricultural"),
+        "report_mismatch",
+    )
     png = base64.b64encode(
         b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
     ).decode("ascii")
@@ -86,7 +109,7 @@ try:
             "reportKey": "valuation-general",
             "schemaVersion": "3",
             "revision": 0,
-            "payload": {"values": {"applicant": "Durable"}, "photos": [{"name": "site.png", "data": f"data:image/png;base64,{png}"}]},
+            "payload": {"values": {"applicant": "Durable", "calculation.overrides": json.dumps({"valuation.present_market_value": "1234567", "valuation.distress_value": "0"})}, "photos": [{"name": "site.png", "data": f"data:image/png;base64,{png}"}]},
         },
         father,
     )
@@ -96,6 +119,10 @@ try:
     assert photo["storedFileId"] and photo["data"].startswith(f"/api/tasks/{valuation['id']}/draft-files/")
     loaded = reports.get_draft(valuation["id"], father)
     assert loaded and loaded["payload"]["values"]["applicant"] == "Durable"
+    assert json.loads(loaded["payload"]["values"]["calculation.overrides"])["valuation.distress_value"] == "0"
+    before_override = reports.report_input_fingerprint(loaded["payload"], "valuation-general")
+    edited_payload = {**loaded["payload"], "values": {**loaded["payload"]["values"], "calculation.overrides": "{}"}}
+    assert before_override != reports.report_input_fingerprint(edited_payload, "valuation-general"), "Manual adjustments must participate in preview freshness"
     hydrated = reports.hydrate_media(valuation["id"], loaded["payload"], father)
     assert hydrated["photos"][0]["data"].startswith("data:image/png;base64,")
     preview = reports.register_artifact(
@@ -115,26 +142,132 @@ try:
         "draft_conflict",
     )
 
+    download_filename = reports.valuation_download_filename(valuation["id"], father, ".docx")
     artifact = reports.register_artifact(
-        valuation["id"], father, content=b"durable valuation", filename="valuation.docx",
+        valuation["id"], father, content=b"durable valuation", filename=download_filename,
         artifact_type="valuation_docx", source="generated", payload=loaded["payload"],
     )
     stored_keys = [row["storage_key"] for row in database.execute("SELECT storage_key FROM app.stored_files WHERE created_by_user_id = %s", (father_id,)).fetchall()]
     assert artifact["task"]["latestDocx"]["url"] == artifact["download"]
+    assert artifact["filename"] == download_filename
+    assert reports.artifact_file(valuation["id"], artifact["artifactId"], father)["filename"] == download_filename
     assert artifact["task"]["reportGeneratedAt"]
     assert artifact["task"]["reportFresh"] is True
     valuation = reports.remove_latest_artifact(valuation["id"], father)
     assert valuation["latestDocx"] is None and valuation["reportGeneratedAt"] is None
 
+    retrospective = workflow.create_task(
+        task_payload("valuation-general", f"Historical valuation {suffix}"),
+        father,
+    )
+    reports.save_draft(
+        retrospective["id"],
+        {
+            "reportKey": "valuation-general", "schemaVersion": "3", "revision": 0,
+            "payload": {"preparationMethod": "offline", "values": {"owner.details": f"Historical owner {suffix}"}, "photos": [], "map": None},
+        },
+        father,
+    )
+    expect_report_error(
+        lambda: reports.register_artifact(
+            retrospective["id"], father, content=b"generated PDF", filename="generated.pdf",
+            artifact_type="valuation_pdf", source="generated", payload={},
+        ),
+        "invalid_request",
+    )
+    retrospective = reports.register_artifact(
+        retrospective["id"], father, content=b"%PDF-1.4 historical", filename="historical.pdf",
+        artifact_type="valuation_pdf", source="uploaded",
+        payload={"retrospective": True, "mode": "plain"},
+        work_note="Imported from the historical valuation register.",
+    )["task"]
+    stored_keys = [row["storage_key"] for row in database.execute("SELECT storage_key FROM app.stored_files WHERE created_by_user_id = %s", (father_id,)).fetchall()]
+    assert retrospective["retrospectiveReady"] is True
+    assert retrospective["latestInstitutionArtifact"]["artifactType"] == "valuation_pdf"
+    retrospective = workflow.complete(
+        retrospective["id"], {"version": retrospective["version"], "note": ""}, father,
+    )
+    assert retrospective["status"] == "Completed"
+    assert any("Imported from the historical valuation register." in event["text"] for event in retrospective["activity"])
+    assert any("offline report upload" in event["text"] for event in retrospective["activity"])
+
+    kvb_offline_bypass = workflow.create_task(
+        task_payload("valuation-general", f"KVB route guard {suffix}", institution_code="KVB"),
+        father,
+    )
+    expect_report_error(
+        lambda: reports.register_artifact(
+            kvb_offline_bypass["id"], father, content=b"PK bypass", filename="bypass.docx",
+            artifact_type="valuation_docx", source="uploaded",
+            payload={"retrospective": True, "mode": "offline"},
+            work_note="This standard offline route must not bypass the KVB workflow.",
+        ),
+        "invalid_request",
+    )
+
+    employee_offline = workflow.create_task(
+        task_payload("valuation-general", f"Employee offline {suffix}", assignee=employee["display_name"]),
+        father,
+    )
+    employee_offline_draft = reports.save_draft(
+        employee_offline["id"],
+        {
+            "reportKey": "valuation-general", "schemaVersion": "3", "revision": 0,
+            "payload": {"preparationMethod": "offline", "values": {"owner.details": f"Owner {suffix}"}, "photos": [], "map": None},
+        },
+        employee,
+    )
+    employee_offline = reports.register_artifact(
+        employee_offline["id"], employee, content=b"PK offline employee report", filename="employee-offline.docx",
+        artifact_type="valuation_docx", source="uploaded",
+        payload={"retrospective": True, "mode": "offline"},
+        work_note="Completed offline by the assigned employee.",
+    )["task"]
+    assert employee_offline_draft["payload"]["preparationMethod"] == "offline"
+    assert employee_offline["retrospectiveReady"] is True
+    assert employee_offline["reportFresh"] is True
+    employee_offline = workflow.complete(
+        employee_offline["id"], {"version": employee_offline["version"], "note": ""}, employee,
+    )
+    assert employee_offline["status"] == "Completed"
+
+    employee_agricultural_offline = workflow.create_task(
+        task_payload("valuation-agricultural", f"Employee agricultural offline {suffix}", assignee=employee["display_name"]),
+        father,
+    )
+    reports.save_draft(
+        employee_agricultural_offline["id"],
+        {
+            "reportKey": "valuation-agricultural", "schemaVersion": "2", "revision": 0,
+            "payload": {"preparationMethod": "offline", "values": {"owner.details": f"Agricultural owner {suffix}"}, "photos": [], "map": None},
+        },
+        employee,
+    )
+    employee_agricultural_offline = reports.register_artifact(
+        employee_agricultural_offline["id"], employee, content=b"%PDF-1.4 agricultural offline", filename="agricultural-offline.pdf",
+        artifact_type="valuation_pdf", source="uploaded",
+        payload={"retrospective": True, "mode": "offline"},
+        work_note="Completed the agricultural valuation offline.",
+    )["task"]
+    assert employee_agricultural_offline["retrospectiveReady"] is True
+    assert employee_agricultural_offline["reportFresh"] is True
+    employee_agricultural_offline = workflow.complete(
+        employee_agricultural_offline["id"], {"version": employee_agricultural_offline["version"], "note": ""}, employee,
+    )
+    assert employee_agricultural_offline["status"] == "Completed"
+
     agricultural = workflow.create_task(task_payload("valuation-agricultural", f"Agricultural {suffix}"), father)
+    assert reports.valuation_download_filename(agricultural["id"], father, ".docx") == f"{agricultural['id']}_Agricultural_{suffix}_Agricultural_Valuation_Report.docx"
     agricultural_draft = reports.save_draft(
         agricultural["id"],
         {
             "reportKey": "valuation-agricultural", "schemaVersion": "1", "revision": 0,
-            "payload": {"values": {"owner.name": f"Owner {suffix}"}, "photos": [], "map": None},
+            "payload": {"values": {"owner.name": f"Owner {suffix}", "calculation.overrides": json.dumps({"valuation.estimated_value_display": "1234567"})}, "photos": [], "map": None},
         },
         father,
     )
+    agricultural_loaded = reports.get_draft(agricultural["id"], father)
+    assert json.loads(agricultural_loaded["payload"]["values"]["calculation.overrides"])["valuation.estimated_value_display"] == "1234567"
     agricultural = reports.register_artifact(
         agricultural["id"], father, content=b"agricultural valuation", filename="agricultural.docx",
         artifact_type="valuation_docx", source="generated", payload=agricultural_draft["payload"],
@@ -186,7 +319,7 @@ try:
         estimation["id"], father, content=b"durable estimate", filename="estimate.xlsx",
         artifact_type="estimation_xlsx", source="generated", payload=estimation_state, summary=summary,
     )["task"]
-    stored_keys = [row["storage_key"] for row in database.execute("SELECT storage_key FROM app.stored_files WHERE created_by_user_id = %s", (father_id,)).fetchall()]
+    stored_keys = [row["storage_key"] for row in database.execute("SELECT storage_key FROM app.stored_files WHERE created_by_user_id = ANY(%s)", ([father_id, employee_id],)).fetchall()]
     assert estimation["latestXlsx"] and estimation["estimationSummary"]["totalEstimatedCost"] == 130000
     assert estimation["reportFresh"] is True
     output_state = {
@@ -265,7 +398,7 @@ try:
     assert reports.get_draft(progress["id"], father)["preview"] is None
     expect_report_error(lambda: reports.require_current_preview(progress["id"], father, "246813579"), "preview_required")
 
-    stored_keys = [row["storage_key"] for row in database.execute("SELECT storage_key FROM app.stored_files WHERE created_by_user_id = %s", (father_id,)).fetchall()]
+    stored_keys = [row["storage_key"] for row in database.execute("SELECT storage_key FROM app.stored_files WHERE created_by_user_id = ANY(%s)", ([father_id, employee_id],)).fetchall()]
     print("PASS: durable report drafts, local files, artifacts, and estimation snapshots")
 finally:
     database.rollback()

@@ -1,12 +1,13 @@
 {
+  "version": 2,
   "report_type": "valuation",
   "valuation_type": "agricultural_land",
   "sections": [
-    { "id": "report", "label": "Report & Valuer" },
+    { "id": "report", "label": "Report Setup" },
     { "id": "property", "label": "Documents & Property" },
-    { "id": "site", "label": "Site Characteristics" },
-    { "id": "valuation", "label": "Land Valuation" },
-    { "id": "media", "label": "Photos, Map & Generate" }
+    { "id": "site", "label": "Site & Land" },
+    { "id": "valuation", "label": "Valuation" },
+    { "id": "media", "label": "Photos & Map" }
   ],
   "fields": [
     {
@@ -16,7 +17,7 @@
       "options": ["Bank", "NBFC"],
       "required": true,
       "section": "report",
-      "group": "Bank / NBFC"
+      "group": "Institution Details"
     },
     {
       "id": "bank.name",
@@ -25,7 +26,7 @@
       "options": [],
       "required": true,
       "section": "report",
-      "group": "Bank / NBFC"
+      "group": "Institution Details"
     },
     {
       "id": "bank.branch",
@@ -33,15 +34,15 @@
       "type": "text",
       "required": true,
       "section": "report",
-      "group": "Bank / NBFC"
+      "group": "Institution Details"
     },
     {
       "id": "report.purpose",
-      "label": "Purpose of valuation",
+      "label": "Purpose of Valuation",
       "type": "text",
       "required": true,
       "section": "report",
-      "group": "Report details"
+      "group": "Report Details"
     },
     {
       "id": "report.assignment_date",
@@ -49,7 +50,7 @@
       "type": "date",
       "required": true,
       "section": "report",
-      "group": "Report details"
+      "group": "Report Details"
     },
     {
       "id": "report.inspection_date",
@@ -57,15 +58,15 @@
       "type": "date",
       "required": true,
       "section": "report",
-      "group": "Report details"
+      "group": "Report Details"
     },
     {
       "id": "report.valuation_date",
-      "label": "Date of valuation",
+      "label": "Date of Valuation",
       "type": "date",
       "required": true,
       "section": "report",
-      "group": "Report details"
+      "group": "Report Details"
     },
     {
       "id": "report.report_date",
@@ -73,7 +74,7 @@
       "type": "date",
       "required": true,
       "section": "report",
-      "group": "Report details"
+      "group": "Report Details"
     },
     {
       "id": "report.place",
@@ -81,7 +82,7 @@
       "type": "text",
       "required": true,
       "section": "report",
-      "group": "Report details"
+      "group": "Report Details"
     },
 
     {
@@ -101,7 +102,7 @@
     },
     {
       "id": "property.description",
-      "label": "Brief description of property",
+      "label": "Property description",
       "type": "textarea",
       "section": "property",
       "group": "Ownership and location"

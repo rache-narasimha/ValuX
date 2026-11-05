@@ -26,6 +26,27 @@ def replace_sdt_text(sdt, value):
     run = etree.SubElement(paragraph, qn("r"))
     etree.SubElement(run, qn("t")).text = value
 
+
+def unwrap_content_controls(docx_path, *, clear=False):
+    """Export ordinary Word content after all automation values are populated."""
+    with ZipFile(docx_path) as archive:
+        parts = [(item, archive.read(item.filename)) for item in archive.infolist()]
+    with ZipFile(docx_path, "w", ZIP_DEFLATED) as archive:
+        for item, data in parts:
+            if item.filename == "word/document.xml":
+                root = etree.fromstring(data)
+                if clear:
+                    for control in root.xpath(".//w:sdt[w:sdtPr/w:tag]", namespaces=NS):
+                        replace_sdt_text(control, "")
+                for control in reversed(root.xpath(".//w:sdt", namespaces=NS)):
+                    content = control.find(qn("sdtContent"))
+                    if content is not None:
+                        for child in list(content):
+                            control.addprevious(child)
+                    control.getparent().remove(control)
+                data = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone="yes")
+            archive.writestr(item, data)
+
 def set_paragraph_text(paragraph, value, color=None, preserve_style=False):
     existing_properties = paragraph.xpath(".//w:rPr", namespaces=NS)
     retained_properties = deepcopy(existing_properties[0]) if preserve_style and existing_properties else None

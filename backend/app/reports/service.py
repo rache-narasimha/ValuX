@@ -16,6 +16,7 @@ from psycopg.types.json import Jsonb
 
 from ..auth.database import connection
 from ..valuation.config import OUTPUT_DIR
+from ..valuation.config import AGRICULTURAL_TEMPLATE, APP_ROOT, TEMPLATE
 from ..workflow import service as workflow_service
 
 
@@ -23,10 +24,13 @@ STORAGE_ROOT = OUTPUT_DIR / "task_files"
 IMAGE_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 ARTIFACT_TYPES = {
     "valuation_docx": ({".docx"}, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    "valuation_pdf": ({".pdf"}, "application/pdf"),
     "kvb_xlsx": ({".xlsx"}, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
     "valocity_docx": ({".docx"}, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
     "valocity_pdf": ({".pdf"}, "application/pdf"),
     "estimation_xlsx": ({".xlsx"}, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    "estimation_docx": ({".docx"}, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    "estimation_pdf": ({".pdf"}, "application/pdf"),
     "progress_docx": ({".docx"}, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
     "completion_docx": ({".docx"}, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
     "preview_pdf": ({".pdf"}, "application/pdf"),
@@ -40,6 +44,20 @@ class ReportDataError(Exception):
         super().__init__(message)
         self.status = status
         self.code = code
+
+
+def _current_template_version(report_key: str) -> str:
+    sources = {
+        "valuation-general": [TEMPLATE],
+        "valuation-agricultural": [AGRICULTURAL_TEMPLATE],
+        "estimation": [APP_ROOT / "resources/estimation/estimation_manifest.json", APP_ROOT / "backend/app/estimation/generator.py"],
+        "progress": [APP_ROOT / "backend/app/progress/generator.py"],
+        "completion": [APP_ROOT / "backend/app/progress/generator.py"],
+    }.get(report_key, [])
+    digest = hashlib.sha256()
+    for path in sources:
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:16] if sources else "1"
 
 
 def _text(value: Any) -> str:
@@ -246,6 +264,30 @@ def require_current_preview(task_code: str, session: dict[str, Any], preview_tok
         raise ReportDataError("The form changed after preview. Preview the latest report before generating the DOCX.", 409, "preview_required")
 
 
+def require_report_key(task_code: str, session: dict[str, Any], expected_report_key: str) -> None:
+    actor = _actor(session)
+    with connection() as database:
+        task = _task(database, task_code)
+        _require_editable(actor, task)
+    if task["report_key"] != expected_report_key:
+        raise ReportDataError("This report page does not match the selected task.", 409, "report_mismatch")
+
+
+def valuation_download_filename(task_code: str, session: dict[str, Any], suffix: str) -> str:
+    """Name new generated downloads from the assignment, keeping storage IDs separate."""
+    with connection() as database:
+        task = _task(database, task_code)
+        _require_editable(_actor(session), task)
+    report_type = {"valuation-general": "General", "valuation-agricultural": "Agricultural"}.get(task["report_key"])
+    if not report_type or suffix not in {".docx", ".pdf"}:
+        raise ReportDataError("Invalid valuation download format.")
+    # Applicant names often contain S/o or W/o. Treat those slashes as name
+    # punctuation rather than as a filesystem path that discards the prefix.
+    applicant = re.sub(r"[^a-zA-Z0-9._-]+", "_", _text(task.get("customer_name")))[:90].strip("_.") or "Applicant"
+    code = _safe_name(task["task_code"], "Task").replace(" ", "_")
+    return f"{code}_{applicant}_{report_type}_Valuation_Report{suffix}"
+
+
 def save_draft(task_code: str, values: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
     actor = _actor(session)
     payload = values.get("payload")
@@ -271,7 +313,14 @@ def save_draft(task_code: str, values: dict[str, Any], session: dict[str, Any]) 
             if expected_revision != current_revision:
                 raise ReportDataError("This report draft changed in another session. Reload it before saving again.", 409, "draft_conflict")
             normalized = _persist_inline_images(deepcopy(payload), task, actor, database, created_keys)
-            input_fingerprint = report_input_fingerprint(normalized, report_key, schema_version)
+            details = normalized.get("details") or {}
+            mode = details.get("workMode") if report_key == "estimation" else normalized.get("preparationMethod")
+            upload_type = details.get("uploadType") if report_key == "estimation" else normalized.get("uploadType")
+            selected_source = "online" if mode == "online" else upload_type if mode == "offline" else None
+            preparation_changed = workflow_service.set_preparation_source(database, task, actor, selected_source)
+            input_fingerprint = report_input_fingerprint(
+                normalized, report_key, schema_version, _current_template_version(report_key)
+            )
             referenced: set[uuid.UUID] = set()
             _collect_file_ids(normalized, referenced)
             existing_rows = database.execute(
@@ -335,7 +384,7 @@ def save_draft(task_code: str, values: dict[str, Any], session: dict[str, Any]) 
                     FROM app.tasks t
                     JOIN app.task_artifacts a ON a.id = t.latest_artifact_id
                     LEFT JOIN app.report_revisions r ON r.id = a.report_revision_id
-                    WHERE t.id = %s AND a.artifact_type = %s
+                    WHERE t.id = %s AND (a.artifact_type = %s OR a.artifact_type IN ('estimation_docx','estimation_pdf','valuation_pdf'))
                     """,
                     (task["id"], tracked_artifact_type),
                 ).fetchone()
@@ -351,6 +400,7 @@ def save_draft(task_code: str, values: dict[str, Any], session: dict[str, Any]) 
             "payload": normalized,
             "revision": new_revision,
             "inputFingerprint": input_fingerprint,
+            "preparationChanged": preparation_changed,
         }
     except Exception:
         _delete_physical(created_keys)
@@ -497,6 +547,10 @@ def report_input_fingerprint(
             "photos": _compact_payload(source.get("photos") if isinstance(source.get("photos"), list) else []),
             "map": _compact_payload(source.get("map")),
         }
+        # An offline attachment cannot remain qualified under a newly selected
+        # upload type. Keep online/legacy fingerprints unchanged.
+        if source.get("preparationMethod") == "offline" and _text(source.get("uploadType")):
+            report_input["uploadType"] = _text(source["uploadType"])
     encoded = json.dumps(report_input, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
@@ -558,23 +612,45 @@ def _create_snapshot(database, task: dict[str, Any], revision_id: uuid.UUID | No
     return snapshot_id
 
 
-def _validate_artifact(task: dict[str, Any], artifact_type: str) -> None:
+def _validate_artifact(
+    task: dict[str, Any],
+    artifact_type: str,
+    source: str = "generated",
+    payload: dict[str, Any] | None = None,
+) -> None:
     if artifact_type == "preview_pdf":
         return
+    retrospective = bool(
+        source == "uploaded"
+        and isinstance(payload, dict)
+        and payload.get("retrospective") is True
+    )
+    if (
+        retrospective
+        and task["report_key"] in {"valuation-general", "valuation-agricultural"}
+        and artifact_type in {"valuation_docx", "valuation_pdf"}
+        and not (
+            task["report_key"] == "valuation-general"
+            and task["institution_code_snapshot"] in {"KVB", "KB"}
+        )
+    ):
+        return
     allowed = {
-        "estimation": {"estimation_xlsx"},
+        "estimation": {"estimation_xlsx", "estimation_docx", "estimation_pdf"},
         "progress": {"progress_docx"},
         "completion": {"completion_docx"},
     }.get(task["report_group"], {"valuation_docx", "kvb_xlsx", "valocity_docx", "valocity_pdf"})
     if artifact_type not in allowed:
         raise ReportDataError("This report file type does not match the task.")
-    if task["report_group"] == "valuation":
+    if task["report_key"] == "valuation-general":
         if task["institution_code_snapshot"] == "KVB" and artifact_type != "kvb_xlsx":
             raise ReportDataError("Karur Vysya Bank valuations require the completed KVB Excel report.")
         if task["institution_code_snapshot"] == "KB" and artifact_type not in {"valocity_docx", "valocity_pdf"}:
             raise ReportDataError("Karnataka Bank valuations require a Valocity DOCX or PDF report.")
         if task["institution_code_snapshot"] not in {"KVB", "KB"} and artifact_type != "valuation_docx":
             raise ReportDataError("This valuation requires the generated DOCX report.")
+    elif task["report_key"] == "valuation-agricultural" and artifact_type != "valuation_docx":
+        raise ReportDataError("Agricultural valuations require the generated DOCX report.")
 
 
 def register_artifact(
@@ -591,12 +667,18 @@ def register_artifact(
     template_version: str = "1",
     current: bool = True,
     preview_token: str = "",
+    work_note: str = "",
 ) -> dict[str, Any]:
     actor = _actor(session)
     if artifact_type not in ARTIFACT_TYPES:
         raise ReportDataError("The report artifact type is invalid.")
     if source not in {"generated", "uploaded"}:
         raise ReportDataError("The report artifact source is invalid.")
+    retrospective = bool(
+        source == "uploaded"
+        and isinstance(payload, dict)
+        and payload.get("retrospective") is True
+    )
     suffixes, default_content_type = ARTIFACT_TYPES[artifact_type]
     safe_name = _safe_name(filename, f"report{next(iter(suffixes))}")
     if Path(safe_name).suffix.lower() not in suffixes:
@@ -609,7 +691,18 @@ def register_artifact(
         with connection() as database:
             task = _task(database, task_code, lock=True)
             _require_editable(actor, task)
-            _validate_artifact(task, artifact_type)
+            _validate_artifact(task, artifact_type, source, payload)
+            try:
+                workflow_service.require_estimation_ready(database, task, payload)
+            except workflow_service.WorkflowError as error:
+                raise ReportDataError(str(error), error.status, error.code) from error
+            selected_source = (payload or {}).get("preparationSource") or ("retrospective" if retrospective else "online" if source == "generated" and artifact_type != "preview_pdf" else None)
+            if selected_source is not None and selected_source not in {"online", "template", "retrospective"}:
+                raise ReportDataError("Select a valid preparation method.", 400, "invalid_preparation_source")
+            if selected_source == "template" and not task.get("template_downloaded_at"):
+                raise ReportDataError("Download the template for this task before uploading a filled template.", 409, "template_download_required")
+            workflow_service.set_preparation_source(database, task, actor, selected_source)
+            template_version = _current_template_version(task["report_key"])
             draft_meta = None
             if task["report_key"] in {"valuation-general", "valuation-agricultural", "estimation", "progress", "completion"}:
                 draft_meta = database.execute(
@@ -618,7 +711,14 @@ def register_artifact(
                 ).fetchone()
                 if draft_meta:
                     schema_version = draft_meta["schema_version"]
-            fingerprint_payload = draft_meta["payload"] if draft_meta and task["report_key"] in {"estimation", "progress", "completion"} else payload
+            if retrospective and (
+                not draft_meta
+                or (((draft_meta.get("payload") or {}).get("details") or {}).get("workMode") if task["report_key"] == "estimation" else (draft_meta.get("payload") or {}).get("preparationMethod")) != "offline"
+            ):
+                raise ReportDataError("Select Complete offline and upload before attaching the report.", 409, "preparation_method_required")
+            fingerprint_payload = draft_meta["payload"] if draft_meta and (
+                task["report_key"] in {"estimation", "progress", "completion"} or retrospective
+            ) else payload
             input_fingerprint = report_input_fingerprint(fingerprint_payload, task["report_key"], schema_version, template_version)
             revision_id = None
             revision_payload = None
@@ -644,7 +744,7 @@ def register_artifact(
                     (revision_id, task["id"], revision_number, task["report_key"], schema_version, template_version, Jsonb(revision_payload), actor["id"], input_fingerprint),
                 )
             snapshot_id = None
-            if current and artifact_type == "estimation_xlsx":
+            if current and artifact_type in {"estimation_xlsx", "estimation_docx", "estimation_pdf"}:
                 if not summary:
                     raise ReportDataError("The estimation component summary is missing.")
                 snapshot_id = _create_snapshot(database, task, revision_id, summary, actor["id"])
@@ -692,6 +792,17 @@ def register_artifact(
                     "UPDATE app.tasks SET latest_artifact_id = %s, report_generated_at = NOW(), version = version + 1, updated_at = NOW() WHERE id = %s",
                     (artifact_id, task["id"]),
                 )
+                if work_note:
+                    database.execute(
+                        """
+                        INSERT INTO app.task_activities (
+                            id, task_id, event_type, actor_user_id, actor_name_snapshot,
+                            message, details
+                        ) VALUES (%s, %s, 'note', %s, %s, %s, %s)
+                        """,
+                        (uuid.uuid4(), task["id"], actor["id"], actor["name"], work_note,
+                         Jsonb({"retrospectiveUpload": True, "artifactId": str(artifact_id)})),
+                    )
                 message = "Completed report attached successfully." if source == "uploaded" else f"{Path(safe_name).suffix[1:].upper()} report generated successfully."
                 database.execute(
                     """

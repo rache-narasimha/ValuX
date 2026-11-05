@@ -81,6 +81,14 @@ def amount_in_words(value):
         parts.append(under_thousand(n))
     return " ".join(parts).title()
 
+
+def valuation_amount_in_words(value):
+    """Title-case valuation amounts with standard compound-number hyphens."""
+    words = amount_in_words(value)
+    tens = "|".join(word.title() for word in TENS[2:])
+    units = "|".join(word.title() for word in ONES[1:10])
+    return re.sub(rf"\b({tens}) ({units})\b", r"\1-\2", words)
+
 def display_date(value):
     text = str(value or "")
     match = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", text)
@@ -124,7 +132,7 @@ def normalized_document_values(values):
         details = str(values.get("sale_agreement.details", "")).strip()
         agreement_value = str(values.get("sale_agreement.value", "")).strip()
         if agreement_value:
-            value_text = f"Agreement value: {agreement_value}"
+            value_text = f"Agreement Value: {agreement_value}"
             details = f"{details}; {value_text}" if details else value_text
         result[f"documents.{index}.type"] = "Sale Agreement"
         result[f"documents.{index}.details"] = details

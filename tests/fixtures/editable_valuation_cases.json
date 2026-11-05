@@ -1,0 +1,147 @@
+[
+  {
+    "kind": "general",
+    "values": {
+      "land.extent_value": "1",
+      "land.extent_unit": "acre",
+      "land.rate_unit": "acre",
+      "land.adopted_rate_value": "4542058",
+      "building.floors.1.structure_type": "rcc"
+    },
+    "overrides": {},
+    "expected": {
+      "abstract.total": 4542058,
+      "valuation.present_market_value": 4542000,
+      "valuation.realizable_value": 4088000,
+      "valuation.distress_value": 3634000,
+      "abstract.extra": 0,
+      "abstract.services": 0
+    }
+  },
+  {
+    "kind": "general",
+    "values": {
+      "land.extent_value": "1",
+      "land.extent_unit": "acre",
+      "land.rate_unit": "acre",
+      "land.adopted_rate_value": "4542058",
+      "building.floors.1.structure_type": "rcc"
+    },
+    "overrides": {
+      "valuation.present_market_value": "1234567",
+      "valuation.distress_value": "0"
+    },
+    "expected": {
+      "valuation.present_market_value": 1234567,
+      "valuation.realizable_value": 1111000,
+      "valuation.distress_value": 0
+    }
+  },
+  {
+    "kind": "general",
+    "values": {
+      "land.extent_value": "1",
+      "land.extent_unit": "acre",
+      "land.rate_unit": "acre",
+      "land.adopted_rate_value": "4542058",
+      "building.floors.1.structure_type": "rcc"
+    },
+    "overrides": {
+      "abstract.total": "1000500",
+      "valuation.realizable_value": "987654"
+    },
+    "expected": {
+      "abstract.total": 1000500,
+      "valuation.present_market_value": 1000500,
+      "valuation.realizable_value": 987654,
+      "valuation.distress_value": 800000
+    }
+  },
+  {
+    "kind": "general",
+    "values": {
+      "land.extent_value": "1",
+      "land.extent_unit": "acre",
+      "land.rate_unit": "acre",
+      "land.adopted_rate_value": "1000",
+      "building.floors.1.structure_type": "rcc",
+      "building.floors.1.plinth_area": "1000",
+      "building.floors.1.replacement_rate": "1000",
+      "building.floors.1.age": "10",
+      "extra.item_1": "300",
+      "extra.item_2": "Included"
+    },
+    "overrides": {
+      "land.converted_extent": "2",
+      "land.estimated_value": "12345",
+      "building.floors.1.total_life": "50",
+      "building.floors.1.replacement_cost": "800000",
+      "building.floors.1.depreciation": "120000",
+      "building.floors.1.net_value": "700000",
+      "abstract.building": "750000",
+      "abstract.extra": "1000",
+      "abstract.services": "0"
+    },
+    "expected": {
+      "land.estimated_value": 12345,
+      "building.floors.1.total_life": 50,
+      "building.floors.1.replacement_cost": 800000,
+      "building.floors.1.depreciation": 120000,
+      "building.floors.1.net_value": 700000,
+      "abstract.building": 750000,
+      "abstract.extra": 1000,
+      "abstract.services": 0,
+      "abstract.total": 763345,
+      "valuation.present_market_value": 763000
+    }
+  },
+  {
+    "kind": "agricultural",
+    "values": {
+      "valuation.total_extent_value": "1",
+      "valuation.extent_unit": "acre",
+      "valuation.adopted_rate_value": "4542058",
+      "valuation.adopted_rate_unit": "acre"
+    },
+    "overrides": {},
+    "expected": {
+      "valuation.estimated_value_display": 4542000,
+      "valuation.book_value_display": 4542000,
+      "valuation.distress_value_display": 3634000
+    }
+  },
+  {
+    "kind": "agricultural",
+    "values": {
+      "valuation.total_extent_value": "1",
+      "valuation.extent_unit": "acre",
+      "valuation.adopted_rate_value": "4542058",
+      "valuation.adopted_rate_unit": "acre"
+    },
+    "overrides": {
+      "valuation.converted_extent_display": "2",
+      "valuation.estimated_value_display": "1234567",
+      "valuation.book_value_display": "1200000",
+      "valuation.distress_value_display": "0"
+    },
+    "expected": {
+      "valuation.estimated_value_display": 1234567,
+      "valuation.book_value_display": 1200000,
+      "valuation.distress_value_display": 0
+    }
+  },
+  {
+    "kind": "agricultural",
+    "values": {
+      "valuation.total_extent_value": "1",
+      "valuation.extent_unit": "acre",
+      "valuation.adopted_rate_value": "4542500",
+      "valuation.adopted_rate_unit": "acre"
+    },
+    "overrides": {},
+    "expected": {
+      "valuation.estimated_value_display": 4542500,
+      "valuation.distress_value_display": 3634000
+    }
+  }
+]

@@ -5,12 +5,13 @@ from __future__ import annotations
 import base64
 import uuid
 from contextlib import contextmanager
-from datetime import date, timedelta
+from datetime import timedelta
 
 import psycopg
 from psycopg.rows import dict_row
 
 from backend.app.auth.config import DATABASE_URL
+from backend.app.business_time import tenant_today
 from backend.app.reports import service as report_service
 from backend.app.workflow import service
 
@@ -32,7 +33,7 @@ employee = {
 }
 
 
-def expect_error(callback, code: str) -> None:
+def expect_error(callback, code: str) -> service.WorkflowError:
     database.execute("SAVEPOINT expected_workflow_error")
     try:
         callback()
@@ -40,12 +41,12 @@ def expect_error(callback, code: str) -> None:
         database.execute("ROLLBACK TO SAVEPOINT expected_workflow_error")
         database.execute("RELEASE SAVEPOINT expected_workflow_error")
         assert error.code == code, (error.code, str(error))
-        return
+        return error
     database.execute("RELEASE SAVEPOINT expected_workflow_error")
     raise AssertionError(f"Expected WorkflowError with code {code}")
 
 
-today = date.today()
+today = tenant_today()
 
 
 def payload(report_key: str, customer: str, assignee: str = father["display_name"], linked: str = "") -> dict:
@@ -96,6 +97,12 @@ try:
     assert valuation["status"] == "In Progress"
     assert valuation["version"] == 1
     expect_error(lambda: service.create_task(valuation_input, father), "duplicate")
+    similar_input = {**valuation_input, "customerName": f"Valuation {suffix} A", "propertyBrief": f"Property for Valuation {suffix} A"}
+    similar_error = expect_error(lambda: service.create_task(similar_input, father), "similar_task")
+    assert similar_error.details["similarTask"]["id"] == valuation["id"]
+    similar_input["allowSimilarTaskId"] = valuation["id"]
+    similar_valuation = service.create_task(similar_input, father)
+    assert similar_valuation["id"] != valuation["id"]
     expect_error(
         lambda: service.create_task(payload("valuation-general", f"Employee unassigned {suffix}", assignee=""), employee),
         "forbidden",

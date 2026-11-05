@@ -23,7 +23,7 @@ const context = {
   CustomEvent: class CustomEvent { constructor(type) { this.type = type; } },
   window: {
     __VALUX_AUTH_CONTEXT__: { user: { role: "father", name: "K. Sivaprasad" } },
-    __VALUX_BUSINESS_CONTEXT__: { task: structuredClone(baseTask), linkedTask: null, employees: [] },
+    __VALUX_BUSINESS_CONTEXT__: { task: structuredClone(baseTask), linkedTask: null, employees: [], timeZone: "Asia/Kolkata" },
     dispatchEvent() {},
     BusinessApi: {
       async get(requestPath, values) {
@@ -61,7 +61,10 @@ context.window.window = context.window;
 context.window.CustomEvent = context.CustomEvent;
 context.BusinessApi = context.window.BusinessApi;
 
+const timeSource = fs.readFileSync(path.join(__dirname, "..", "frontend", "assets", "js", "core", "time.js"), "utf8");
 const source = fs.readFileSync(path.join(__dirname, "..", "frontend", "assets", "js", "core", "task-store.js"), "utf8");
+vm.runInNewContext(timeSource, context);
+context.ValuxTime = context.window.ValuxTime;
 vm.runInNewContext(source, context);
 const store = context.window.TaskStore;
 

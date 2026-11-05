@@ -9,8 +9,8 @@
   background: #edf7fa;
   color: var(--ink);
 }
-.report-task-context__summary { display: grid; gap: 5px; }
-.report-task-context__summary strong { color: var(--navy); font-size: 0.93rem; }
+.report-task-context__summary { display: grid; min-width: 0; gap: 5px; }
+.report-task-context__summary strong { min-width: 0; overflow-wrap: anywhere; color: var(--navy); font-size: 0.93rem; line-height: 1.35; }
 .report-task-context__eyebrow { color: var(--blue); font-size: 0.72rem; font-weight: 850; letter-spacing: 0.05em; text-transform: uppercase; }
 .report-task-context__summary .status-badge { justify-self: start; }
 .report-task-context__action { display: grid; grid-template-columns: 120px minmax(150px, 1fr) minmax(180px, 1.2fr) auto; gap: 9px; align-items: end; }
@@ -33,6 +33,50 @@
 .report-task-notes textarea { width: 100%; min-height: 88px; box-sizing: border-box; padding: 10px; border: 1px solid #9ebac5; border-radius: 8px; color: var(--ink); font: inherit; }
 .report-task-notes button { justify-self: start; border: 0; border-radius: 8px; padding: 10px 14px; cursor: pointer; }
 .report-task-notes__links { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 18px; font-size: 0.84rem; font-weight: 800; }
+
+.report-task-context-compact {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "summary state actions"
+    "links state actions";
+  padding-block: 12px;
+}
+.report-task-context-compact .report-task-context__summary { grid-area: summary; }
+.report-task-context__meta { min-width: 0; overflow-wrap: anywhere; color: var(--muted); font-size: .7rem; }
+.report-task-context__state { display: grid; grid-area: state; place-items: center; }
+.report-direct-actions {
+  display: flex;
+  grid-area: actions;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 7px;
+}
+.report-direct-actions button {
+  min-height: 36px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 7px;
+  padding: 8px 12px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.report-direct-actions button:disabled { opacity: .48; cursor: not-allowed; }
+.report-direct-actions button.is-unavailable,
+.report-note-actions button.is-unavailable { opacity: .52; cursor: not-allowed; }
+.report-task-context-compact .report-task-context__links { grid-area: links; justify-self: start; }
+
+@media (max-width: 1150px) {
+  .report-task-context-compact {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "summary state"
+      "links links"
+      "actions actions";
+  }
+  .report-direct-actions { justify-content: flex-start; flex-wrap: wrap; }
+}
 
 @media (max-width: 1050px) {
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -78,7 +122,12 @@
   .inline-form { grid-template-columns: 1fr; }
   .inline-form label { grid-column: auto; }
   .form-actions { position: sticky; bottom: 0; padding: 12px; margin: 0 -15px -40px; background: rgba(242, 246, 247, 0.95); }
-  .report-task-context { grid-template-columns: 1fr; padding: 16px; }
+  .report-task-context,
+  .report-task-context-compact { grid-template-columns: 1fr; padding: 16px; }
+  .report-task-context-compact { grid-template-areas: "summary" "state" "actions" "links"; }
+  .report-task-context__state { place-items: start; }
+  .report-direct-actions { justify-content: stretch; }
+  .report-direct-actions button { flex: 1 1 140px; }
   .report-task-context__action { grid-template-columns: 1fr; }
   .report-task-context__links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .report-task-notes { margin: 22px 15px 38px; }

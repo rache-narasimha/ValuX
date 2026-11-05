@@ -14,6 +14,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Mm, Pt, RGBColor
 
+from ..business_time import tenant_today
 from ..valuation.formatting import amount_in_words, display_date, indian_number, number_value
 from ..valuation.media import insert_uploaded_media
 
@@ -47,8 +48,6 @@ def _date(value: Any, label: str, *, required: bool = True) -> str:
         parsed = date.fromisoformat(text)
     except ValueError as exc:
         raise ValueError(f"{label} must be a valid date.") from exc
-    if parsed > date.today():
-        raise ValueError(f"{label} cannot be later than today.")
     return text
 
 
@@ -261,7 +260,7 @@ def _project_table(document, data):
     _set_column_widths(table, [2.78, 3.98])
     rows = [
         ("1. Name of the Branch", f"{institution.get('name', '')}, {institution.get('branch', '')}".strip(", ")),
-        ("2. Name & address of the borrower", "\n".join(filter(None, [str(linked.get("applicantName") or "").strip(), str(linked.get("applicantAddress") or "").strip()]))),
+        ("2. Name & address of the borrower", ", ".join(filter(None, [str(linked.get("applicantName") or "").strip(), str(linked.get("projectLocation") or "").strip()]))),
         ("3. Locality and address of the construction site", "\n".join(filter(None, [str(linked.get("workDescription") or "").strip(), str(linked.get("projectLocation") or "").strip()]))),
         ("4. Name of panel valuer", VALUER_NAME),
         ("5. Name of Bank's official who accompanied the panel valuer", "\n".join(filter(None, [str(details.get("officialName") or "").strip(), str(details.get("officialDesignation") or "").strip()]))),

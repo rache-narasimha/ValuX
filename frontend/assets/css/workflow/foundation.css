@@ -523,6 +523,28 @@ html[data-theme="dark"] {
   font-size: 0.85rem;
   font-weight: 750;
 }
+.similar-task-warning {
+  margin: 0 0 16px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid color-mix(in srgb, var(--amber) 42%, transparent);
+  border-radius: 10px;
+  background: var(--amber-soft);
+  color: var(--ink);
+}
+.similar-task-warning[hidden] { display: none; }
+.similar-task-warning strong { display: block; margin-bottom: 5px; color: var(--amber); }
+.similar-task-warning p { margin: 0 0 5px; font-size: .84rem; line-height: 1.45; }
+.similar-task-warning small { color: var(--muted); font-size: .73rem; line-height: 1.45; }
+.similar-task-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 9px; }
+.similar-task-actions button { min-height: 40px; }
+@media (max-width: 760px) {
+  .similar-task-warning { align-items: stretch; flex-direction: column; }
+  .similar-task-actions { flex-wrap: wrap; }
+}
 .form-actions button,
 .stack-form button,
 .inline-form button {

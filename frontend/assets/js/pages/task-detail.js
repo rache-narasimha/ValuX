@@ -153,13 +153,13 @@
     if (!terminal) return;
     const download = element("download-final-docx");
     const artifact = closed ? TaskStore.finalArtifact(task) : TaskStore.latestArtifact(task);
-    const artifactLabel = task.reportGroup === "estimation" || task.institutionCode === "KVB" ? "Excel report" : task.institutionCode === "KB" ? "Valocity report" : "DOCX";
+    const artifactLabel = task.reportGroup === "estimation" ? "estimation report" : task.institutionCode === "KVB" ? "Excel report" : task.institutionCode === "KB" ? "Valocity report" : "DOCX";
     if (artifact?.url) {
       download.hidden = false;
       download.title = `Download final ${artifactLabel}`;
       download.setAttribute("aria-label", `Download final ${artifactLabel}`);
       download.href = artifact.url;
-      download.setAttribute("download", artifact.filename || (task.reportGroup === "estimation" || task.institutionCode === "KVB" ? "final-estimation.xlsx" : task.institutionCode === "KB" ? "final-valocity-report" : "final-report.docx"));
+      download.setAttribute("download", artifact.filename || (task.reportGroup === "estimation" ? "final-estimation-report" : task.institutionCode === "KVB" ? "final-estimation.xlsx" : task.institutionCode === "KB" ? "final-valocity-report" : "final-report.docx"));
       element("final-report-message").textContent = closed
         ? `Final ${artifactLabel} recorded ${WorkflowUI.date(artifact.generatedAt)} and retained at closure.`
         : `Completed ${artifactLabel} recorded ${WorkflowUI.date(artifact.generatedAt)}.`;
@@ -237,6 +237,9 @@
     element("activity-list").innerHTML = task.activity.slice().reverse().map((event) => `<li><span class="activity-dot activity-${WorkflowUI.escape(event.type)}"></span><div><p>${WorkflowUI.escape(event.text)}</p><small>${WorkflowUI.escape(event.author)} · ${WorkflowUI.date(event.createdAt)}</small></div></li>`).join("");
     element("reopen-title").textContent = `Reopen ${task.status.toLowerCase()} task`;
     element("reopen-artifact-message").textContent = `The task returns to In Progress and requires a newly generated or attached ${TaskStore.requiredArtifactLabel(task)} before completion.`;
+    if (task.reportGroup === "estimation" && task.linkedReports?.length) {
+      element("reopen-artifact-message").textContent += " Linked reports will also require correction: " + task.linkedReports.map((item) => `${item.id} (${item.status})`).join(", ") + ". Closed and older linked reports are included; recorded payments are retained.";
+    }
     configurePayment();
     configureFinalReport();
     element("note-form").hidden = !WorkflowAccess.can("addNote", task);

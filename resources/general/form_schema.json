@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "template": "Valuation_Report_Master_Template_Phase2.docx",
   "property_categories": [
     "residential_plot",
@@ -12,8 +12,7 @@
   "construction_statuses": [
     "existing",
     "under_construction",
-    "proposed",
-    "purchase_loan"
+    "proposed"
   ],
   "groups": [
     {
@@ -92,21 +91,14 @@
   "fields": [
     {
       "id": "report.valuation_date",
-      "label": "Date of valuation",
+      "label": "Date of Valuation",
       "group": "Report",
       "type": "date",
       "required": true
     },
     {
-      "id": "property.summary_description",
-      "label": "Property description for cover letter",
-      "group": "Property",
-      "type": "text",
-      "required": true
-    },
-    {
       "id": "valuation.present_market_value",
-      "label": "Present market value",
+      "label": "Present Market Value",
       "group": "Valuation",
       "type": "currency",
       "required": true,
@@ -114,7 +106,7 @@
     },
     {
       "id": "valuation.realizable_value",
-      "label": "Realizable value",
+      "label": "Realizable Value",
       "group": "Valuation",
       "type": "currency",
       "required": true,
@@ -123,7 +115,7 @@
     },
     {
       "id": "valuation.distress_value",
-      "label": "Distress value",
+      "label": "Distress Value",
       "group": "Valuation",
       "type": "currency",
       "required": true,
@@ -132,14 +124,14 @@
     },
     {
       "id": "valuation.government_value",
-      "label": "Government value",
+      "label": "Government Value",
       "group": "Valuation",
       "type": "currency",
       "required": false
     },
     {
       "id": "report.purpose",
-      "label": "Purpose of valuation",
+      "label": "Purpose of Valuation",
       "group": "Report",
       "type": "text",
       "required": true
@@ -153,7 +145,7 @@
     },
     {
       "id": "report.valuation_date_detail",
-      "label": "Date of valuation",
+      "label": "Date of Valuation",
       "group": "Report",
       "type": "date",
       "required": true,
@@ -220,7 +212,7 @@
     },
     {
       "id": "property.description",
-      "label": "Brief description of property",
+      "label": "Property description",
       "group": "Property",
       "type": "text",
       "required": true
@@ -461,10 +453,11 @@
     },
     {
       "id": "property.valuation_extent",
-      "label": "Extent considered for valuation",
+      "label": "Extent considered for Valuation",
       "group": "Land",
       "type": "text",
-      "required": true
+      "required": true,
+      "source": "land.extent_value"
     },
     {
       "id": "property.road_affected_area",
@@ -674,11 +667,12 @@
       "label": "Adopted land rate",
       "group": "Land",
       "type": "currency_rate",
-      "required": true
+      "required": true,
+      "source": "land.adopted_rate_value"
     },
     {
       "id": "land.estimated_value",
-      "label": "Estimated land value",
+      "label": "Estimated Land Value",
       "group": "Land",
       "type": "currency",
       "required": true,
@@ -1041,7 +1035,7 @@
     },
     {
       "id": "building.floors.1.net_value",
-      "label": "Floor 1 net value",
+      "label": "Floor 1 Net Value",
       "group": "Floors",
       "type": "text",
       "required": false,
@@ -1121,7 +1115,7 @@
     },
     {
       "id": "building.floors.2.net_value",
-      "label": "Floor 2 net value",
+      "label": "Floor 2 Net Value",
       "group": "Floors",
       "type": "text",
       "required": false,
@@ -1323,7 +1317,7 @@
     },
     {
       "id": "abstract.land",
-      "label": "Land value",
+      "label": "Land Value",
       "group": "Valuation Abstract",
       "type": "currency",
       "required": false,
@@ -1331,7 +1325,7 @@
     },
     {
       "id": "abstract.building",
-      "label": "Building value",
+      "label": "Building Value",
       "group": "Valuation Abstract",
       "type": "currency",
       "required": false,
@@ -1339,7 +1333,7 @@
     },
     {
       "id": "abstract.extra",
-      "label": "Extra items value",
+      "label": "Extra Items Value",
       "group": "Valuation Abstract",
       "type": "currency",
       "required": false,
@@ -1347,7 +1341,7 @@
     },
     {
       "id": "abstract.amenities",
-      "label": "Amenities value",
+      "label": "Amenities Value",
       "group": "Valuation Abstract",
       "type": "currency",
       "required": false,
@@ -1355,7 +1349,7 @@
     },
     {
       "id": "abstract.miscellaneous",
-      "label": "Miscellaneous value",
+      "label": "Miscellaneous Value",
       "group": "Valuation Abstract",
       "type": "currency",
       "required": false,
@@ -1363,7 +1357,7 @@
     },
     {
       "id": "abstract.services",
-      "label": "Services value",
+      "label": "Services Value",
       "group": "Valuation Abstract",
       "type": "currency",
       "required": false,
@@ -1371,7 +1365,7 @@
     },
     {
       "id": "abstract.machinery",
-      "label": "Machinery value",
+      "label": "Machinery Value",
       "group": "Valuation Abstract",
       "type": "currency",
       "required": false,
@@ -1379,7 +1373,7 @@
     },
     {
       "id": "abstract.total",
-      "label": "Total value",
+      "label": "Total Value",
       "group": "Valuation Abstract",
       "type": "currency",
       "required": false,
@@ -1387,7 +1381,7 @@
     },
     {
       "id": "abstract.present_market_value",
-      "label": "Present market value",
+      "label": "Present Market Value",
       "group": "Valuation Abstract",
       "type": "currency",
       "required": false,

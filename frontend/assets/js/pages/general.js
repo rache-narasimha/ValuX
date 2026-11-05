@@ -13,6 +13,7 @@ const state = {
   documentCount: 1,
   previewReady: false,
   previewId: null,
+  preparationMethod: "",
   generatedChangeAcknowledged: false,
   processing: false,
 };
@@ -23,6 +24,7 @@ const DRAFT_SCOPE = PAGE_PARAMS.get("practice") === "1"
     ? `task-${PAGE_PARAMS.get("task")}`
     : "standalone";
 const STORAGE_KEY = `valuation-report-draft-v3-${DRAFT_SCOPE}`;
+const HAS_PREPARATION_CHOICE = window.RetrospectiveValuation?.supportsChoice("valuation-general") === true;
 const groupId = (s) => s.toLowerCase().replaceAll(" ", "_");
 const {
   applyInstitutionOptions,
@@ -31,6 +33,7 @@ const {
   fieldControl,
   fileData,
   institutionTypeFor,
+  installExampleAssistance,
   isoDate,
   money,
   numeric,
@@ -52,13 +55,16 @@ function linkedTaskValues() {
     "institution.type": task.institutionType,
     "bank.name": task.institutionName,
     "bank.branch": task.branch,
+    "property.description": task.propertyBrief,
+    "owner.details": task.customerName,
   } : {};
 }
 const sectionPlan = [
   { id: "setup", label: "Report Setup", groups: ["report"] },
+  ...(HAS_PREPARATION_CHOICE ? [{ id: "preparation", label: "Preparation Method", groups: [] }] : []),
   {
     id: "property",
-    label: "Documents, Applicant & Property",
+    label: "Documents & Property",
     groups: ["documents", "parties", "property"],
   },
   {
@@ -68,7 +74,7 @@ const sectionPlan = [
   },
   {
     id: "building_floors",
-    label: "Building, Construction & Floors",
+    label: "Building Details",
     groups: ["building", "construction", "floors"],
   },
   {
@@ -78,10 +84,11 @@ const sectionPlan = [
   },
   {
     id: "valuation",
-    label: "Valuation Abstract & Valuation",
+    label: "Valuation",
     groups: ["valuation_abstract", "valuation"],
   },
-  { id: "media", label: "Photos, Map & Generate", groups: [] },
+  { id: "media", label: "Photos & Map", groups: [] },
+  ...(HAS_PREPARATION_CHOICE ? [{ id: "offline", label: "Complete & Upload Report", groups: [] }] : []),
 ];
 const excluded = new Set([
   "report.valuation_date_detail",
@@ -108,10 +115,9 @@ const excluded = new Set([
 function customField(id, label, type = "text", value = "") {
   return fieldControl({ id, label, type }, { [id]: value });
 }
-function readonlyField(id, label) {
+function calculatedField(id, label) {
   const f = customField(id, label);
   f.classList.add("calculated");
-  f.querySelector("input").readOnly = true;
   return f;
 }
 function renderDocuments(saved = {}) {
@@ -122,7 +128,10 @@ function renderDocuments(saved = {}) {
   for (let index = 1; index <= state.documentCount; index++) {
     const card = document.createElement("div");
     card.className = "document-card";
-    card.innerHTML = `<div class="document-head"><h4>Document ${index}</h4>${index > 1 ? `<button type="button" class="remove-document" data-remove-document="${index}">Remove</button>` : ""}</div><div class="grid"></div>`;
+    const isLast = index === state.documentCount;
+    const addIcon = window.AppShell?.icons?.add || "+";
+    const trashIcon = window.AppShell?.icons?.trash || "×";
+    card.innerHTML = `<div class="document-head"><h4>Document ${index}</h4><div class="document-actions">${isLast ? `<button type="button" class="document-icon-button add-document" data-add-document title="Add another document" aria-label="Add another document">${addIcon}</button>` : ""}${index > 1 ? `<button type="button" class="document-icon-button remove-document" data-remove-document="${index}" title="Remove document ${index}" aria-label="Remove document ${index}">${trashIcon}</button>` : ""}</div></div><div class="grid"></div>`;
     const grid = card.querySelector(".grid");
     const typeId = `documents.${index}.type`,
       customId = `documents.${index}.custom_type`,
@@ -132,6 +141,7 @@ function renderDocuments(saved = {}) {
         id: typeId,
         label: "Document type",
         type: "select",
+        required: true,
         options: [
           "Sale Deed",
           "Rectification Deed",
@@ -155,6 +165,7 @@ function renderDocuments(saved = {}) {
         id: detailsId,
         label: "Document details",
         type: "textarea",
+        required: true,
       }),
     );
     host.append(card);
@@ -167,6 +178,9 @@ function renderDocuments(saved = {}) {
       if (!custom.hidden) byId(customId).focus();
     });
   }
+  host
+    .querySelectorAll("[data-add-document]")
+    .forEach((button) => (button.onclick = addDocument));
   host
     .querySelectorAll("[data-remove-document]")
     .forEach(
@@ -205,9 +219,8 @@ function addDocumentSection(panel) {
   const block = document.createElement("section");
   block.className = "subgroup";
   block.innerHTML =
-    '<h3>Documents</h3><p class="hint">One document is shown by default. Add as many document rows as required.</p><div id="general-document-list"></div><button type="button" class="secondary" id="add-general-document">Add another document</button><section class="subgroup"><h4>Sale agreement</h4><div class="grid" id="general-sale-agreement"></div></section>';
+    '<h3>Documents</h3><p class="hint">Use Add in the latest document header to include another document.</p><div id="general-document-list"></div><section class="subgroup"><h4>Sale agreement</h4><div class="grid" id="general-sale-agreement"></div></section>';
   panel.append(block);
-  block.querySelector("#add-general-document").onclick = addDocument;
   const sale = block.querySelector("#general-sale-agreement");
   sale.append(
     fieldControl({
@@ -235,10 +248,29 @@ function addSubgroup(panel, label, fields) {
   if (!fields.length) return;
   const block = document.createElement("section");
   block.className = "subgroup";
-  block.innerHTML = `<h3>${label}</h3><div class="grid"></div>`;
-  fields.forEach((f) =>
-    block.querySelector(".grid").append(fieldControl(f, state.schema.defaults)),
+  const fillablePrefix = ["extra.", "amenity.", "misc.", "service."].find((prefix) =>
+    fields.some((field) => field.id.startsWith(prefix)),
   );
+  block.innerHTML = `<div class="subgroup-heading"><h3>${label}</h3>${fillablePrefix ? '<button type="button" class="secondary fill-included">Fill blank items as Included</button>' : ""}</div><div class="grid"></div>`;
+  fields.forEach((f) => {
+    const control = f.calculated && f.id !== "abstract.machinery"
+      ? calculatedField(f.id, f.label)
+      : fieldControl(f, state.schema.defaults);
+    block.querySelector(".grid").append(control);
+  });
+  block.querySelector(".fill-included")?.addEventListener("click", () => {
+    if (!confirmReportInvalidation()) return;
+    fields.filter((field) => field.id.startsWith(fillablePrefix)).forEach((field) => {
+      const input = byId(field.id);
+      if (input && !input.value.trim()) {
+        input.value = "Included";
+        calculateAll(input.id);
+      }
+    });
+    calculateAll();
+    markDirty();
+    saveDraft();
+  });
   panel.append(block);
 }
 function addLandCalculator(panel) {
@@ -270,10 +302,10 @@ function addLandCalculator(panel) {
     }),
   );
   grid.append(
-    readonlyField("land.converted_extent", "Converted extent in rate unit"),
+    calculatedField("land.converted_extent", "Converted extent in rate unit"),
   );
   grid.append(
-    readonlyField("land.estimated_value_display", "Estimated land value"),
+    calculatedField("land.estimated_value_display", "Estimated Land Value"),
   );
   panel.append(block);
 }
@@ -287,15 +319,17 @@ function collectValues() {
       "#valuation-form input,#valuation-form select,#valuation-form textarea",
     )
     .forEach((i) => {
-      if (!i.name || i.type === "file") return;
+      if (!i.name || i.type === "file" || i.dataset.preparationMethod) return;
       values[i.name] =
         i.type === "checkbox" ? (i.checked ? "Yes" : "No") : i.value;
     });
+  values[window.ValuationCalculations.overridesKey] = calculations?.serialize() || "{}";
   return values;
 }
 function addFloor() {
   if (!confirmReportInvalidation()) return;
   state.floorCount++;
+  calculations?.floorsChanged();
   renderFloors();
   wireInputs();
   calculateAll();
@@ -306,6 +340,7 @@ function removeFloor(index) {
   if (!confirmReportInvalidation()) return;
   const existing = collectValues();
   state.floorCount--;
+  calculations?.shiftFloor(index);
   const shifted = {};
   Object.entries(existing).forEach(([key, value]) => {
     const m = key.match(/^building\.floors\.(\d+)\.(.+)$/);
@@ -353,7 +388,7 @@ function renderFloors(saved = {}) {
     );
     ["total_life", "replacement_cost", "depreciation", "net_value"].forEach(
       (key) =>
-        grid.append(readonlyField(`building.floors.${i}.${key}`, title(key))),
+        grid.append(calculatedField(`building.floors.${i}.${key}`, title(key))),
     );
     host.append(card);
   }
@@ -373,7 +408,7 @@ function addFloorSection(panel) {
 }
 function addMedia(panel) {
   panel.innerHTML +=
-    '<section class="subgroup"><h3>Property photographs</h3><p class="hint">Each page uses one photo per row for 1–4 photos, two per row for 5–6, and three per row for 7–9. Additional photos continue on a new page. Photos are scaled proportionally and never cropped.</p><input id="photo-upload" type="file" accept="image/*" multiple><div id="photo-preview" class="preview-grid"></div></section><section class="subgroup"><h3>Location map</h3><p class="hint">Upload one map screenshot. It will be placed after the photograph pages.</p><input id="map-upload" type="file" accept="image/*"><div id="map-preview" class="map-preview"></div></section>';
+    '<section class="subgroup"><h3>Property photographs</h3><p class="hint">Reports use a 3 × 4 media grid with up to 12 items per page. The map follows the photographs in the next available cell; after an exact batch of 12 photographs it starts the next page. Images retain their full aspect ratio and are never cropped.</p><input id="photo-upload" type="file" accept="image/*" multiple><div id="photo-preview" class="preview-grid three-columns"></div></section><section class="subgroup"><h3>Location map</h3><p class="hint">Upload one map screenshot. It follows the photographs in the 12-item media sequence.</p><input id="map-upload" type="file" accept="image/*"><div id="map-preview" class="map-preview"></div></section>';
   panel.querySelector("#photo-upload").onchange = async (e) => {
     if (!confirmReportInvalidation()) {
       e.target.value = "";
@@ -401,15 +436,22 @@ function addMedia(panel) {
 function renderPreviews() {
   const p = byId("photo-preview");
   if (p) {
-    const pageCount = Math.min(state.photos.length, 9);
-    p.classList.toggle("one-column", pageCount <= 4);
-    p.classList.toggle("three-columns", pageCount >= 7);
-    p.innerHTML = state.photos
-      .map(
-        (photo, index) =>
-          `<div class="photo-tile"><img src="${photo.data}" alt="${photo.name}"><button type="button" data-remove-photo="${index}" aria-label="Remove ${photo.name}">Remove</button></div>`,
-      )
-      .join("");
+    p.classList.remove("one-column");
+    p.classList.add("three-columns");
+    p.replaceChildren(...state.photos.map((photo, index) => {
+      const tile = document.createElement("div");
+      tile.className = "photo-tile";
+      const image = document.createElement("img");
+      image.src = photo.data;
+      image.alt = photo.name || `Property photograph ${index + 1}`;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.dataset.removePhoto = String(index);
+      remove.setAttribute("aria-label", `Remove ${photo.name || `photograph ${index + 1}`}`);
+      remove.textContent = "Remove";
+      tile.append(image, remove);
+      return tile;
+    }));
     p.querySelectorAll("[data-remove-photo]").forEach(
       (button) =>
         (button.onclick = () => {
@@ -440,6 +482,29 @@ function renderPreviews() {
 // Preview state, navigation, persistence, and calculated values.
 function currentTask() {
   return ReportData.taskCode && window.TaskStore ? TaskStore.get(ReportData.taskCode) : null;
+}
+async function setPreparationMethod(method) {
+  if (!HAS_PREPARATION_CHOICE || !["online", "offline"].includes(method)) return false;
+  if (state.preparationMethod === method) return true;
+  const previous = state.preparationMethod;
+  const task = currentTask();
+  if (previous && task?.reportGeneratedAt) {
+    const accepted = window.confirm("Change the preparation method? The retained report attachment will be removed. Your entered form details will be kept.");
+    if (!accepted) return false;
+    try {
+      await BusinessApi.delete(`/api/tasks/${encodeURIComponent(task.id)}/artifacts/latest`);
+      await TaskStore.refresh(task.id);
+    } catch (error) {
+      window.alert(error.message || "The retained report could not be removed. Try again before changing the preparation method.");
+      return false;
+    }
+  }
+  state.preparationMethod = method;
+  markDirty();
+  applyRules();
+  await persistDraftNow();
+  show(sectionPlan.findIndex((section) => section.id === (method === "online" ? "property" : "offline")));
+  return true;
 }
 function confirmReportInvalidation() {
   const task = currentTask();
@@ -545,72 +610,24 @@ function setValues(values) {
     else input.value = input.type === "date" ? isoDate(value) : value;
   });
 }
-function calculateAll() {
-  const extent = numeric(byId("land.extent_value")?.value),
-    from = byId("land.extent_unit")?.value,
-    to = byId("land.rate_unit")?.value,
-    rate = numeric(byId("land.adopted_rate_value")?.value),
-    converted = from && to ? (extent * areaFactors[from]) / areaFactors[to] : 0,
-    land = converted * rate;
-  if (byId("land.converted_extent"))
-    byId("land.converted_extent").value = converted
-      ? converted.toFixed(4).replace(/\.?0+$/, "")
-      : "";
-  if (byId("land.estimated_value_display"))
-    byId("land.estimated_value_display").value = land ? money(land) : "";
-  let building = 0;
-  for (let i = 1; i <= state.floorCount; i++) {
-    const p = `building.floors.${i}.`,
-      area = numeric(byId(p + "plinth_area")?.value),
-      rr = numeric(byId(p + "replacement_rate")?.value),
-      age = Math.max(0, numeric(byId(p + "age")?.value)),
-      type = byId(p + "structure_type")?.value || "",
-      life = { rcc: 60, industrial: 35, temporary: 20 }[type] || 0,
-      ready = area > 0 && rr > 0 && life > 0,
-      replacement = ready ? area * rr : 0,
-      depreciation = ready
-        ? ((replacement * Math.min(age, life)) / life) * 0.9
-        : 0,
-      net = ready ? Math.max(0, replacement - depreciation) : 0;
-    byId(p + "total_life").value = life || "";
-    byId(p + "replacement_cost").value = ready ? money(replacement) : "";
-    byId(p + "depreciation").value = ready ? money(depreciation) : "";
-    byId(p + "net_value").value = ready ? money(net) : "";
-    building += net;
-  }
-  const component = (id) => numeric(byId(id)?.value),
-    total =
-      land +
-      building +
-      component("abstract.extra") +
-      component("abstract.amenities") +
-      component("abstract.miscellaneous") +
-      component("abstract.services") +
-      component("abstract.machinery");
-  const assignments = {
-    "abstract.land": land,
-    "abstract.building": building,
-    "abstract.total": total,
-    "abstract.present_market_value": total,
-    "valuation.present_market_value": total,
-    "valuation.realizable_value": total * 0.9,
-    "valuation.distress_value": total * 0.8,
-  };
-  Object.entries(assignments).forEach(([id, v]) => {
-    if (byId(id)) byId(id).value = v > 0 ? money(v) : "";
-  });
+let calculations;
+function calculateAll(changedId) {
+  calculations?.refresh(changedId);
 }
+
 let saveTimer;
 async function persistDraftNow() {
   clearTimeout(saveTimer);
   saveTimer = null;
   const saved = await ReportData.save(STORAGE_KEY, "valuation-general", {
     values: collectValues(),
+    preparationMethod: state.preparationMethod,
+    uploadType: byId("valuation-upload-type")?.value || "",
     floorCount: state.floorCount,
     documentCount: state.documentCount,
     photos: state.photos,
     map: state.map,
-  }, "3");
+  }, String(state.schema.version || "3"));
   state.photos = Array.isArray(saved.photos) ? saved.photos : [];
   state.map = saved.map || null;
   renderPreviews();
@@ -639,10 +656,22 @@ function applyRules() {
   const category = byId("property.category")?.value || "",
     hasBuilding = category.includes("land_building"),
     index = sectionPlan.findIndex((x) => x.id === "building_floors");
-  state.sections[index].toggleAttribute("hidden", !hasBuilding);
-  document
-    .querySelectorAll(`[data-section-index="${index}"]`)
-    .forEach((x) => x.toggleAttribute("hidden", !hasBuilding));
+  const online = !HAS_PREPARATION_CHOICE || state.preparationMethod === "online";
+  if (HAS_PREPARATION_CHOICE) {
+    document.body.dataset.valuationPreparation = state.preparationMethod;
+    window.dispatchEvent(new CustomEvent("sln:valuation-preparation-changed"));
+  }
+  sectionPlan.forEach((section, sectionIndex) => {
+    const alwaysVisible = section.id === "setup" || section.id === "preparation";
+    const visible = alwaysVisible || (section.id === "offline" ? state.preparationMethod === "offline" : online);
+    const finalVisible = section.id === "building_floors" ? visible && hasBuilding : visible;
+    state.sections[sectionIndex].toggleAttribute("hidden", !finalVisible);
+    document.querySelectorAll(`[data-section-index="${sectionIndex}"]`).forEach((button) => button.toggleAttribute("hidden", !finalVisible));
+    state.sections[sectionIndex].querySelectorAll("input,select,textarea,button").forEach((control) => {
+      if (!control.dataset.preparationMethod) control.disabled = !finalVisible;
+    });
+  });
+  ["preview-report", "generate-docx", "generate-pdf"].forEach((id) => byId(id).toggleAttribute("hidden", !online));
   const showSale = byId("sale_agreement.used")?.checked === true;
   document
     .querySelector('[data-field="sale_agreement.details"]')
@@ -651,6 +680,7 @@ function applyRules() {
     .querySelector('[data-field="sale_agreement.value"]')
     ?.toggleAttribute("hidden", !showSale);
   if (state.current === index && !hasBuilding) show(index + 1);
+  else if (state.sections[state.current]?.hidden) show(sectionPlan.findIndex((section) => section.id === "preparation"));
   else updateSectionNavigation();
 }
 function wireInputs() {
@@ -659,7 +689,7 @@ function wireInputs() {
       "#valuation-form input,#valuation-form select,#valuation-form textarea",
     )
     .forEach((i) => {
-      if (i.type === "file" || i.dataset.wired) return;
+      if (i.type === "file" || i.dataset.preparationMethod || i.dataset.wired) return;
       i.dataset.wired = "1";
       i.addEventListener("focus", () => {
         i.dataset.previousValue = i.value;
@@ -676,7 +706,7 @@ function wireInputs() {
       }
       i.addEventListener("input", () => {
         if (i.id === "institution.type") applyInstitutionOptions();
-        calculateAll();
+        calculateAll(i.id);
         markDirty();
         saveDraft();
       });
@@ -689,13 +719,15 @@ function wireInputs() {
         i.dataset.previousValue = i.value;
         i.dataset.previousChecked = String(i.checked);
         if (i.id === "institution.type") applyInstitutionOptions();
-        calculateAll();
+        calculateAll(i.id);
         applyRules();
         markDirty();
         saveDraft();
       });
     });
 }
+
+window.addEventListener("sln:valuation-upload-type-changed", () => { markDirty(); saveDraft(); });
 
 // Page assembly and report-generation event wiring.
 async function init() {
@@ -706,26 +738,38 @@ async function init() {
     host = byId("groups"),
     draft = await restoreDraft(),
     initialValues = { ...(draft?.values || {}), ...linkedTaskValues() };
+  state.preparationMethod = HAS_PREPARATION_CHOICE
+    ? (draft?.preparationMethod || (currentTask()?.retrospectiveReady ? "offline" : (currentTask()?.reportGeneratedAt || ReportData.preview()?.id ? "online" : "")))
+    : "online";
   state.floorCount = Math.max(1, draft?.floorCount || 1);
   state.documentCount = Math.max(1, draft?.documentCount || 1);
   state.photos = Array.isArray(draft?.photos) ? draft.photos : [];
   state.map = draft?.map || null;
   sectionPlan.forEach((section, index) => {
-    const panel = document.createElement("div");
-    panel.className = "panel";
-    panel.dataset.group = section.id;
-    panel.innerHTML = `<h2>${section.label}</h2>`;
+    let panel;
+    if (section.id === "preparation") {
+      panel = window.RetrospectiveValuation.preparationPanel("valuation-general", state.preparationMethod, setPreparationMethod);
+    } else if (section.id === "offline") {
+      panel = window.RetrospectiveValuation.offlinePanel("valuation-general", draft?.uploadType);
+    } else {
+      panel = document.createElement("div");
+      panel.className = "panel";
+      panel.dataset.group = section.id;
+      panel.innerHTML = `<h2>${section.label}</h2>`;
+    }
     if (section.id === "setup") {
-      addSubgroup(panel, "Report setup", state.schema.setup_fields);
+      addSubgroup(panel, "Property Classification", state.schema.setup_fields.filter((field) => field.id.startsWith("property.")));
+      addSubgroup(panel, "Institution Details", state.schema.setup_fields.filter((field) => !field.id.startsWith("property.")));
       addSubgroup(
         panel,
-        "Report details",
+        "Report Details",
         state.schema.fields.filter(
           (f) => groupId(f.group) === "report" && !excluded.has(f.id),
         ),
       );
-    } else if (section.id === "media") addMedia(panel);
-    else
+    } else if (section.id === "media") {
+      addMedia(panel);
+    } else if (!["preparation", "offline"].includes(section.id))
       section.groups.forEach((g) => {
         if (g === "documents") {
           addDocumentSection(panel);
@@ -737,7 +781,7 @@ async function init() {
             !excluded.has(f.id) &&
             !f.id.startsWith("building.floors."),
         );
-        addSubgroup(panel, labels[g] || title(g), fields);
+        addSubgroup(panel, g === "valuation" ? "Value Conclusions" : (labels[g] || title(g)), fields);
         if (g === "land") addLandCalculator(panel);
         if (g === "floors") addFloorSection(panel);
       });
@@ -752,7 +796,7 @@ async function init() {
     b.onclick = () => show(index);
     byId("nav").append(b);
   });
-  const valuationPanel = state.sections[5],
+  const valuationPanel = state.sections[sectionPlan.findIndex((section) => section.id === "valuation")],
     abstractBlock = valuationPanel.querySelector(".subgroup");
   if (abstractBlock) {
     [
@@ -763,7 +807,7 @@ async function init() {
     ].forEach((id) =>
       abstractBlock
         .querySelector(".grid")
-        .append(readonlyField(id, title(id.split(".").pop()))),
+        .append(calculatedField(id, title(id.split(".").pop()))),
     );
   }
   const blocks = valuationPanel.querySelectorAll(".subgroup"),
@@ -776,9 +820,14 @@ async function init() {
     ].forEach((id) =>
       valBlock
         .querySelector(".grid")
-        .append(readonlyField(id, title(id.split(".").pop()))),
+        .append(calculatedField(id, title(id.split(".").pop()))),
     );
   }
+  calculations = window.ValuationCalculations.create("general", byId("valuation-form"), {
+    floorCount: () => state.floorCount || 1,
+    beforeReset: confirmReportInvalidation,
+    onReset: () => { markDirty(); saveDraft(); },
+  });
   if (Object.keys(initialValues).length) {
     const type =
       initialValues["institution.type"] ||
@@ -791,7 +840,9 @@ async function init() {
     if (draft?.values && Object.values(draft.values).some((value) => String(value ?? "").trim()))
       byId("status").textContent = "Draft restored";
   } else applyInstitutionOptions();
+  calculations.restore(initialValues);
   wireInputs();
+  installExampleAssistance(byId("valuation-form"), "general");
   calculateAll();
   applyRules();
   show(0);

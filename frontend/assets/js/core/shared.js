@@ -21,6 +21,12 @@
   }
 
   function title(value) {
+    const categoryLabels = {
+      residential_land_building: "Residential Land and Building",
+      commercial_land_building: "Commercial Land and Building",
+      industrial_land_building: "Industrial Land and Building",
+    };
+    if (categoryLabels[value]) return categoryLabels[value];
     return String(value)
       .replaceAll("_", " ")
       .replace(/\b\w/g, (character) => character.toUpperCase());
@@ -75,9 +81,6 @@
             ? "date"
             : "text";
       if (field.type === "boolean") wrapper.classList.add("check");
-      if (input.type === "date") {
-        input.max = new Date().toLocaleDateString("en-CA");
-      }
       if (["currency", "currency_rate", "number"].includes(field.type)) {
         input.inputMode = "decimal";
       }
@@ -140,6 +143,72 @@
     });
   }
 
+  const EXAMPLES = {
+    general: {
+      "report.purpose": "Housing loan valuation",
+      "bank.branch": "Adoni Branch",
+      "owner.details": "R. Kumar, 12-3 Main Road, Adoni, 90000 00000",
+      "purchaser.details": "S. Devi, 8-2 Market Road, Adoni, 90000 00001",
+      "property.description": "Residential land and ground-floor building",
+      "property.plot_survey_number": "Plot No. 24, Survey No. 118/B",
+      "property.village": "Example Colony, Adoni",
+      "property.mandal_district": "Adoni Mandal, Kurnool District",
+      "documents.1.details": "Document No. 1234/2025 dated 15-06-2025",
+      "sale_agreement.details": "Agreement No. 18/2025 dated 20-06-2025",
+    },
+    agricultural: {
+      "report.purpose": "Agricultural land loan valuation",
+      "bank.branch": "Adoni Branch",
+      "report.place": "Adoni",
+      "owner.details": "R. Kumar, Example Village, 90000 00000",
+      "purchaser.details": "S. Devi, Example Village, 90000 00001",
+      "property.description": "Dry agricultural land with approach road",
+      "property.survey_number": "Survey No. 118/B",
+      "property.village": "Example Village",
+      "property.mandal_district": "Adoni Mandal, Kurnool District",
+      "documents.1.details": "Document No. 1234/2025 dated 15-06-2025",
+      "sale_agreement.details": "Agreement No. 18/2025 dated 20-06-2025",
+    },
+  };
+
+  function installExampleAssistance(root, reportType) {
+    const examples = EXAMPLES[reportType] || {};
+    const key = `sln.report-examples.${reportType}.visible.v1`;
+    let visible = localStorage.getItem(key) !== "false";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary examples-toggle";
+    const update = () => {
+      button.textContent = visible ? "Hide examples" : "Show examples";
+      button.setAttribute("aria-pressed", String(visible));
+      Object.entries(examples).forEach(([id, example]) => {
+        const input = root.querySelector(`[name="${CSS.escape(id)}"]`);
+        if (!input || input.readOnly || input.disabled || input.type === "file") return;
+        input.dataset.example = example;
+        input.placeholder = visible ? `Example: ${example}` : "";
+      });
+    };
+    button.addEventListener("click", () => {
+      visible = !visible;
+      localStorage.setItem(key, String(visible));
+      update();
+    });
+    root.addEventListener("dblclick", (event) => {
+      const input = event.target.closest("input[data-example], textarea[data-example]");
+      if (!visible || !input || input.value.trim()) return;
+      input.value = input.dataset.example;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const controls = document.createElement("div");
+    controls.className = "example-controls";
+    controls.append(button, Object.assign(document.createElement("small"), {
+      textContent: "Double-click an empty field to use its fictional example.",
+    }));
+    root.closest("main").querySelector("aside").append(controls);
+    update();
+  }
+
   global.ValuationUI = {
     applyInstitutionOptions,
     areaFactors,
@@ -148,6 +217,7 @@
     fieldControl,
     fileData,
     institutionTypeFor,
+    installExampleAssistance,
     isoDate,
     money,
     numeric,

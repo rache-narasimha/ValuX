@@ -11,9 +11,9 @@
   };
   let selectedGroup = "all";
   let selectedWorkloadPeriod = "monthly";
-  let selectedWorkloadReference = new Date();
+  let selectedWorkloadReference = ValuxTime.todayDate();
   let selectedFinancePeriod = "monthly";
-  let selectedFinanceReference = new Date();
+  let selectedFinanceReference = ValuxTime.todayDate();
   let selectedFinanceInstitution = "";
   let selectedFinanceMetric = "all";
 
@@ -44,8 +44,7 @@
   }
 
   function isoDate(value) {
-    const date = value instanceof Date ? value : new Date(value);
-    return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+    return ValuxTime.isoDate(value);
   }
 
   function renderRows(hostId, tasks, emptyMessage) {
@@ -64,7 +63,9 @@
   function renderWorkload(tasks) {
     const entries = InstitutionMetrics.workload(tasks, selectedWorkloadPeriod, selectedWorkloadReference);
     const maximum = Math.max(1, ...entries.map((entry) => entry.count));
-    document.getElementById("institution-workload").innerHTML = chartGroups(entries, (group) => `<div class="horizontal-chart workload-chart">
+    document.getElementById("workload-overall-total").textContent = `Overall total: ${entries.reduce((sum, entry) => sum + entry.count, 0)} reports`;
+    document.getElementById("workload-overall-total").href = buildQuery({ view: "summary", period: selectedWorkloadPeriod });
+    document.getElementById("institution-workload").innerHTML = chartGroups(entries, (group, type) => `<div class="horizontal-chart workload-chart">
       ${group.map((entry) => {
         const width = entry.count ? Math.max(8, Math.round((entry.count / maximum) * 100)) : 0;
         const href = buildQuery({ institution: entry.code, period: selectedWorkloadPeriod });
@@ -74,7 +75,7 @@
           <span class="chart-value">${entry.count}</span>
         </a>`;
       }).join("")}
-    </div><p class="chart-total">Total: <strong>${group.reduce((sum, entry) => sum + entry.count, 0)} reports</strong></p>`);
+    </div><a class="chart-total" href="${buildQuery({ view: "summary", institution: `type:${type}`, period: selectedWorkloadPeriod })}" aria-label="View all ${type === "Bank" ? "bank" : "NBFC"} tasks">Total: <strong>${group.reduce((sum, entry) => sum + entry.count, 0)} reports</strong></a>`);
     setText("workload-period-label", InstitutionMetrics.periodLabel(selectedWorkloadPeriod, selectedWorkloadReference));
   }
 
@@ -156,47 +157,43 @@
     });
   }
 
-  function weekOptions(reference) {
-    const years = [reference.getFullYear() - 1, reference.getFullYear(), reference.getFullYear() + 1];
+  function weekOptions() {
+    const currentMonday = TaskStore.periodBounds("weekly", ValuxTime.todayDate()).start;
     const weeks = [];
-    years.forEach((year) => {
-      const date = new Date(year, 0, 1);
-      date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
-      while (date.getFullYear() <= year || (date.getFullYear() === year + 1 && date.getMonth() === 0)) {
-        const monday = new Date(date);
-        const sunday = new Date(date);
-        sunday.setDate(sunday.getDate() + 6);
-        if (monday.getFullYear() === year || sunday.getFullYear() === year) {
-          weeks.push({ value: isoDate(monday), label: InstitutionMetrics.periodLabel("weekly", monday) });
-        }
-        date.setDate(date.getDate() + 7);
-      }
-    });
+    for (let index = 0; index < 52; index += 1) {
+      const monday = ValuxTime.parseDate(ValuxTime.addDays(currentMonday, -(index * 7)));
+      weeks.push({ value: isoDate(monday), label: InstitutionMetrics.periodLabel("weekly", monday) });
+    }
     return weeks;
   }
 
   function renderPeriodPicker(hostId, period, reference, onChange) {
     const host = document.getElementById(hostId);
     if (!host) return;
+    host.hidden = !period;
+    if (!period) {
+      host.innerHTML = "";
+      return;
+    }
     const inputId = `${hostId}-value`;
     if (period === "daily") {
       host.innerHTML = `<label>Date<input id="${inputId}" type="date" value="${isoDate(reference)}"></label>`;
     } else if (period === "weekly") {
       const selectedMonday = isoDate(TaskStore.periodBounds("weekly", reference).start);
-      host.innerHTML = `<label>Week<select id="${inputId}">${weekOptions(reference).map((week) => `<option value="${week.value}"${week.value === selectedMonday ? " selected" : ""}>${week.label}</option>`).join("")}</select></label>`;
+      host.innerHTML = `<label>Week<select id="${inputId}">${weekOptions().map((week) => `<option value="${week.value}"${week.value === selectedMonday ? " selected" : ""}>${week.label}</option>`).join("")}</select></label>`;
     } else if (period === "monthly") {
       host.innerHTML = `<label>Month<input id="${inputId}" type="month" value="${isoDate(reference).slice(0, 7)}"></label>`;
     } else {
-      const year = reference.getFullYear();
+      const year = reference.getUTCFullYear();
       host.innerHTML = `<label>Year<select id="${inputId}">${Array.from({ length: 7 }, (_, index) => year - 3 + index).map((value) => `<option${value === year ? " selected" : ""}>${value}</option>`).join("")}</select></label>`;
     }
     document.getElementById(inputId).addEventListener("change", (event) => {
       const value = event.target.value;
       const nextReference = period === "monthly"
-        ? new Date(`${value}-01T00:00:00`)
+        ? ValuxTime.parseDate(`${value}-01`)
         : period === "yearly"
-          ? new Date(`${value}-01-01T00:00:00`)
-          : new Date(`${value}T00:00:00`);
+          ? ValuxTime.parseDate(`${value}-01-01`)
+          : ValuxTime.parseDate(value);
       onChange(nextReference);
     });
   }

@@ -328,6 +328,11 @@ def assert_offline_summary_validation():
 
 def main():
     generate = load_generator()
+    identity_book = workbook_from(generate(controlled_industrial_state()))
+    identity_text = "\n".join(str(cell.value or "") for sheet in identity_book for row in sheet for cell in row)
+    assert "Name of the Applicant : Controlled QA, QA Location" in identity_text
+    assert "QA Address" not in identity_text
+    identity_book.close()
     assert_controlled_steel(generate)
     assert_custom_rows_and_items(generate)
     assert_centre_line_and_abstract(generate)

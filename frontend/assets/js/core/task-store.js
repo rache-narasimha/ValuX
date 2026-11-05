@@ -28,39 +28,37 @@
 
   function localDate(value) {
     if (!value) return null;
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? ValuxTime.parseDate(value) : new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
   }
 
   function addDays(value, amount) {
-    const date = localDate(value);
-    if (!date) return "";
-    date.setDate(date.getDate() + Number(amount || 0));
-    return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+    return ValuxTime.addDays(ValuxTime.dateString(value), amount);
   }
 
-  function periodBounds(period, reference = new Date()) {
-    reference = localDate(reference) || new Date();
-    const start = new Date(reference.getFullYear(), reference.getMonth(), reference.getDate());
+  function periodBounds(period, reference = ValuxTime.todayDate()) {
+    reference = localDate(reference) || ValuxTime.todayDate();
+    const start = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), reference.getUTCDate()));
     const end = new Date(start);
     if (period === "daily") {
-      end.setDate(end.getDate() + 1);
+      end.setUTCDate(end.getUTCDate() + 1);
     } else if (period === "weekly") {
-      const mondayOffset = (start.getDay() + 6) % 7;
-      start.setDate(start.getDate() - mondayOffset);
+      const mondayOffset = (start.getUTCDay() + 6) % 7;
+      start.setUTCDate(start.getUTCDate() - mondayOffset);
       end.setTime(start.getTime());
-      end.setDate(end.getDate() + 7);
+      end.setUTCDate(end.getUTCDate() + 7);
     } else if (period === "yearly") {
-      start.setMonth(0, 1);
-      end.setFullYear(start.getFullYear() + 1, 0, 1);
+      start.setUTCMonth(0, 1);
+      end.setUTCFullYear(start.getUTCFullYear() + 1, 0, 1);
     } else {
-      start.setDate(1);
-      end.setMonth(start.getMonth() + 1, 1);
+      start.setUTCDate(1);
+      end.setUTCMonth(start.getUTCMonth() + 1, 1);
     }
     return { start, end };
   }
 
-  function matchesPeriod(task, period = "monthly", field = "assignedDate", reference = new Date()) {
+  function matchesPeriod(task, period = "monthly", field = "assignedDate", reference = ValuxTime.todayDate()) {
+    if (!period) return true;
     const value = localDate(task[field]);
     if (!value) return false;
     const { start, end } = periodBounds(period, reference);
@@ -81,15 +79,14 @@
     return estimated !== null ? { amount: estimated, source: "Estimated fee" } : null;
   }
 
-  function paymentSummary(task, reference = new Date()) {
+  function paymentSummary(task, reference = ValuxTime.todayDate()) {
     const payment = task?.payment || {};
     const basis = billingBasis(payment);
     const received = numericOrNull(payment.received) || 0;
     if (!basis) return { basis: null, basisSource: "", outstanding: null, status: "Not Set", overdue: false, outsideStandard: false };
     const outstanding = Math.max(0, basis.amount - received);
     const due = localDate(payment.dueDate);
-    const current = localDate(reference) || new Date();
-    const today = new Date(current.getFullYear(), current.getMonth(), current.getDate());
+    const today = ValuxTime.parseDate(ValuxTime.dateString(reference));
     const overdue = Boolean(due && today > due && outstanding > 0);
     const status = overdue ? "Overdue" : received <= 0 ? "Pending" : outstanding > 0 ? "Partially Received" : "Received";
     const standardMaximum = task?.completedAt ? localDate(addDays(task.completedAt, 7)) : null;
@@ -161,8 +158,7 @@
   async function fetchTasks(options = {}) {
     const queryValues = { ...options };
     if (queryValues.periodReference instanceof Date) {
-      const value = queryValues.periodReference;
-      queryValues.periodReference = [value.getFullYear(), String(value.getMonth() + 1).padStart(2, "0"), String(value.getDate()).padStart(2, "0")].join("-");
+      queryValues.periodReference = ValuxTime.isoDate(queryValues.periodReference);
     }
     const payload = await BusinessApi.get("/api/tasks", queryValues);
     payload.items.forEach((task) => cacheRemote(task, remoteTasks.get(task.id), true));
@@ -193,25 +189,27 @@
   }
 
   function requiredArtifactLabel(task) {
-    if (task?.reportGroup === "estimation") return "completed Excel report";
+    if (task?.reportGroup === "estimation") return "completed estimation report (XLSX, DOCX or PDF)";
     if (task?.institutionCode === "KVB") return "completed KVB Excel report";
     if (task?.institutionCode === "KB") return "completed Valocity DOCX or PDF report";
     return "DOCX";
   }
 
   function latestArtifact(task) {
+    if (task?.retrospectiveReady) return task?.latestDocx || task?.latestInstitutionArtifact || task?.latestXlsx;
     if (task?.reportGroup === "estimation" || task?.institutionCode === "KVB") return task?.latestXlsx;
     if (task?.institutionCode === "KB") return task?.latestInstitutionArtifact;
     return task?.latestDocx;
   }
 
   function finalArtifact(task) {
+    if (task?.retrospectiveReady) return task?.finalDocx || task?.finalInstitutionArtifact || task?.finalXlsx;
     if (task?.reportGroup === "estimation" || task?.institutionCode === "KVB") return task?.finalXlsx;
     if (task?.institutionCode === "KB") return task?.finalInstitutionArtifact;
     return task?.finalDocx;
   }
 
-  function requiresInstitutionOfflineArtifact(task) { return task?.reportGroup === "valuation" && ["KVB", "KB"].includes(task.institutionCode); }
+  function requiresInstitutionOfflineArtifact(task) { return task?.reportKey === "valuation-general" && ["KVB", "KB"].includes(task.institutionCode); }
 
   function hasFreshRequiredArtifact(task) {
     const artifact = latestArtifact(task);
@@ -222,12 +220,11 @@
 
   function reopenReferenceAt(task) { return task && ["Completed", "Closed"].includes(task.status) ? task.closedAt || task.completedAt || "" : ""; }
   function reopenDeadline(task) { const reference = reopenReferenceAt(task); return reference ? addDays(reference, REOPEN_WINDOW_DAYS) : ""; }
-  function canReopen(task, reference = new Date()) {
+  function canReopen(task, reference = ValuxTime.todayDate()) {
     if (!reopenReferenceAt(task)) return false;
     const deadline = localDate(reopenDeadline(task));
-    const current = localDate(reference);
+    const current = ValuxTime.parseDate(ValuxTime.dateString(reference));
     if (!deadline || !current) return false;
-    deadline.setHours(23, 59, 59, 999);
     return current <= deadline;
   }
 
@@ -249,6 +246,8 @@
       if (options.holdReason && task.holdReason !== options.holdReason) return false;
       if (options.payment && task.payment.status !== options.payment) return false;
       if (options.institution && task.institutionCode !== options.institution) return false;
+      if (options.preparationSource && (task.preparationSource || "unknown") !== options.preparationSource) return false;
+      if (options.institutionType && task.institutionType !== options.institutionType) return false;
       if (options.period && !matchesPeriod(task, options.period, "assignedDate", options.periodReference)) return false;
       if (search) {
         const haystack = [task.id, task.customerName, task.reportName, task.assignee, task.institutionName, task.institutionCode, task.branch, task.propertyBrief, task.status, task.holdReason, task.payment.status].join(" ").toLowerCase();
@@ -272,7 +271,7 @@
 
   function estimationCandidates() {
     return all().filter((task) => task.reportGroup === "estimation" && ["Completed", "Closed"].includes(task.status)
-      && task.latestXlsx?.url && task.estimationSummary?.components?.length);
+      && latestArtifact(task)?.url && task.estimationSummary?.components?.length);
   }
 
   async function progressReportsFor(estimationId) {

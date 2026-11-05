@@ -7,9 +7,7 @@
   }
 
   function date(value) {
-    if (!value) return "—";
-    const source = value.length === 10 ? `${value}T00:00:00` : value;
-    return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(source));
+    return ValuxTime.formatDate(value);
   }
 
   function currency(value) {
@@ -56,6 +54,12 @@
     return "";
   }
 
+  function preparationBadge(task) {
+    const label = {online: "Online", template: "Filled template", retrospective: "Retrospective"}[task.preparationSource] || "Not recorded";
+    const prefix = ["progress", "completion"].includes(task.reportGroup) ? "Estimation: " : "";
+    return `<span class="soft-badge preparation-source">${prefix}${label}</span>`;
+  }
+
   function taskRow(task, options = {}) {
     const hold = task.status === "On Hold" && task.holdReason ? `<span class="task-secondary">${escape(task.holdReason)}</span>` : "";
     const assignee = task.assignee || "Unassigned";
@@ -67,7 +71,7 @@
       return `<article class="task-table-row" data-task-id="${escape(task.id)}">
         <a class="task-row-link" href="${taskUrl(task)}" aria-hidden="true" tabindex="-1"></a>
         <div class="task-table-id"><span class="task-id">${escape(task.id)}</span></div>
-        <div class="task-table-person"><strong>${escape(task.customerName)}</strong><small>${escape(task.reportLabel)}</small></div>
+        <div class="task-table-person"><strong>${escape(task.customerName)}</strong><small>${escape(task.reportLabel)} ${preparationBadge(task)}</small></div>
         <div class="task-table-property"><span>${escape(task.propertyBrief)}</span><small>${escape(task.institutionName)} · ${escape(task.branch)}</small></div>
         <div class="task-table-assignee"><span class="table-avatar">${escape(assignee.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase())}</span><strong>${escape(assignee)}</strong></div>
         <div class="task-table-due"><strong>${date(task.dueDate)}</strong></div>

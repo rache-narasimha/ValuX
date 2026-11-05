@@ -27,8 +27,7 @@
   };
 
   function localToday() {
-    const now = new Date();
-    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    return ValuxTime.today();
   }
 
   function selectedTask() { return state.linkedEstimationId ? TaskStore.get(state.linkedEstimationId) : null; }
@@ -152,7 +151,7 @@
 
   function renderReleases() {
     const releases = state.bank.releases || [];
-    element("release-rows").innerHTML = releases.length ? releases.map((release, index) => `<div class="release-row"><div class="field"><label for="release-date-${index}">Release date</label><input id="release-date-${index}" type="date" max="${TODAY}" value="${escape(release.date || "")}" data-release-date="${index}"></div><div class="field"><label for="release-amount-${index}">Amount (Rs.)</label><input id="release-amount-${index}" type="number" min="0" step="any" value="${escape(release.amount ?? "")}" data-release-amount="${index}"></div><button type="button" class="secondary" data-remove-release="${index}">Remove</button></div>`).join("") : '<p class="hint">No previous loan releases entered.</p>';
+    element("release-rows").innerHTML = releases.length ? releases.map((release, index) => `<div class="release-row"><div class="field"><label for="release-date-${index}">Release date</label><input id="release-date-${index}" type="date" value="${escape(release.date || "")}" data-release-date="${index}"></div><div class="field"><label for="release-amount-${index}">Amount (Rs.)</label><input id="release-amount-${index}" type="number" min="0" step="any" value="${escape(release.amount ?? "")}" data-release-amount="${index}"></div><button type="button" class="secondary" data-remove-release="${index}">Remove</button></div>`).join("") : '<p class="hint">No previous loan releases entered.</p>';
     renderBankCalculations();
   }
 
@@ -197,12 +196,34 @@
     Object.entries(mapping).forEach(([id, [owner, key]]) => { element(id).value = owner[key] ?? ""; });
     document.querySelectorAll('input[name="no-deviation"]').forEach((input) => { input.checked = input.value === state.details.noDeviation; });
     element("deviation-wrap").hidden = state.details.noDeviation !== "no";
-    ["report-date", "visit-date", "balance-as-on", "bank-page-date"].forEach((id) => { element(id).max = TODAY; });
+  }
+
+  function renderEstimationCorrection() {
+    let box = element("estimation-correction-review");
+    if (!box) {
+      box = document.createElement("section"); box.id = "estimation-correction-review"; box.className = "notice";
+      element("component-rows").closest("table").before(box);
+    }
+    const current = currentTask();
+    box.hidden = !current?.estimationCorrectionPending && !current?.estimationReviewRequired;
+    if (box.hidden) return;
+    if (current.estimationCorrectionPending) {
+      box.textContent = "The linked estimation is being revised. Finalize it first, then reload this report to review updated component totals.";
+      return;
+    }
+    const notes = state.components.filter((item) => item.estimationReviewReason).map((item) => `${item.label}: ${item.estimationReviewReason}`);
+    const removed = state.details.estimationRemovedComponents || [];
+    box.innerHTML = `<strong>Review the revised estimation</strong><p>Completion percentages were retained. Completed amounts now use the revised estimates. Review manual amounts and changed components.</p>${notes.length ? `<p>${notes.map(escape).join("; ")}</p>` : ""}${removed.length ? `<p>Removed components: ${removed.map(escape).join(", ")}</p>` : ""}<label><input type="checkbox" id="estimation-revision-reviewed" ${state.details.estimationRevisionReviewed === current.linkedEstimationSnapshotId ? "checked" : ""}> I reviewed the revised component totals and completion amounts.</label>`;
+    element("estimation-revision-reviewed").addEventListener("change", (event) => {
+      state.details.estimationRevisionReviewed = event.target.checked ? current.linkedEstimationSnapshotId : "";
+      markDirty(); scheduleSave();
+    });
   }
 
   function render() {
     renderLinkedEstimate();
     renderComponents();
+    renderEstimationCorrection();
     renderReleases();
     syncInputsFromState();
     element("bank-panel").hidden = !isKarnataka();
@@ -279,14 +300,14 @@
 
   function validate() {
     const issues = [];
+    const current = currentTask();
+    if (current?.estimationCorrectionPending) issues.push("Finalize the revised estimation first, then reload this report.");
+    if (current?.estimationReviewRequired && state.details.estimationRevisionReviewed !== current.linkedEstimationSnapshotId) issues.push("Confirm that you reviewed the revised estimation and completion amounts.");
     const linked = linkedSummary();
     if (!linked || !state.components.length) issues.push("Select a finalized estimation report with component costs.");
     if (!state.photos.length) issues.push("Attach at least one authenticated site photograph.");
     if (!state.details.reportDate) issues.push("Enter the report date.");
     if (!state.details.visitDate) issues.push("Enter the site-visit date.");
-    if (state.details.reportDate > TODAY || state.details.visitDate > TODAY) issues.push("Report and visit dates cannot be later than today.");
-    if (isKarnataka() && [state.bank.balanceAsOn, state.bank.date].some((value) => value && value > TODAY)) issues.push("Bank assessment dates cannot be later than today.");
-    if (isKarnataka() && (state.bank.releases || []).some((release) => release.date && release.date > TODAY)) issues.push("Loan release dates cannot be later than today.");
     if (!String(state.details.place || "").trim()) issues.push("Enter the report place.");
     state.components.forEach((component) => {
       const current = calculation(component);

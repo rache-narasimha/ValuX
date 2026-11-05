@@ -751,7 +751,7 @@ def _add_abstract_direct_row(ws: Worksheet, row: int, serial: int, description: 
 def _report_text(state: Mapping[str, Any]) -> tuple[str, str, str, str]:
     details = state.get("details") or {}
     work = details.get("workDescription") or "[Name of the Work]"
-    applicant = ", ".join(filter(None, (details.get("applicantName"), details.get("applicantAddress")))) or "[Applicant name and address]"
+    applicant = ", ".join(filter(None, (details.get("applicantName"), details.get("projectLocation")))) or "[Applicant name and property location]"
     location = details.get("projectLocation") or "[Project / Location]"
     return f"Name of the Work : {work} at {location}", f"Name of the Applicant : {applicant}", details.get("place") or "[Enter place]", details.get("estimateDate") or "[Enter date]"
 

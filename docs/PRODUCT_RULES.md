@@ -18,6 +18,12 @@ deferred, a separate explicit user request is required before implementation.
   transitions and concurrency. Task-linked report drafts, report revisions,
   local-file metadata and estimation snapshots are durable in PostgreSQL.
   Browser storage remains appropriate only for appearance and practice drafts.
+- ValuX stores timestamps and performs audit/session/internal processing in
+  UTC. Calendar rules and user-facing timestamp display use the tenant's
+  configured IANA time zone. SLN is configured as `Asia/Kolkata`, so SLN users
+  see IST throughout the application. Date-only values such as assigned date,
+  report date and due date remain calendar dates and are not converted through
+  UTC.
 - Existing routes, URL parameters, browser-storage formats, calculations,
   report mappings, preview behavior, and DOCX output must remain compatible
   unless the user explicitly changes them.
@@ -87,7 +93,11 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Resume Work moves an On Hold task directly to In Progress. A work note is
   optional when resuming.
 - A task can become Completed only after successful report generation while it
-  is In Progress. A completion work note is mandatory.
+  is In Progress. A completion work note is mandatory except for the approved
+  offline valuation/estimation upload flow, which reuses its upload work note.
+- Editable calendar fields currently accept past, present and future dates.
+  Assignment priority may suggest a due date, but does not impose a maximum;
+  a due date still cannot be earlier than its assigned date.
 - Completing a report returns the user to the dashboard.
 - Cancellation reasons are Created by Mistake, Wrong Details, and Custom.
   Custom requires a work-note explanation. Cancellation is recorded in
@@ -98,18 +108,26 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   generated DOCX is required before completing an ordinary valuation again.
   Karur Vysya Bank requires a newly attached completed KVB XLSX; Karnataka
   Bank requires a newly attached Valocity DOCX or PDF. An estimation requires
-  a newly generated or attached completed XLSX.
+  a newly generated XLSX or attached completed XLSX, DOCX or PDF.
 - Task lists remain searchable and filterable. Search includes task ID,
   applicant/customer, report, institution, assignee, property details, state,
   hold reason, and payment state where supported.
 - The task-list “Assigned during” filter supports an arbitrary selected day,
-  week, month, or year; it is not limited to the present calendar period.
+  month, or year. Its weekly picker exposes the current tenant-calendar week
+  and the preceding 51 weeks, with no future week ranges. Older work remains
+  accessible through All time, Monthly, Yearly and search.
 - Lists load bounded pages of records and fetch/show more rather than rendering
   an unbounded task collection at once.
 - A non-Cancelled valuation or estimation assignment blocks creation of another
   assignment with the same report type, institution, assigned date, branch,
   applicant/customer, and property description. Cancelling the earlier task
   releases that duplicate restriction.
+- If another valuation or estimation with the same report type, institution
+  and assigned date was created within the preceding 30 minutes and its branch,
+  applicant/customer and property details are all closely similar, creation
+  pauses with a warning and a link to that task. The user may explicitly create
+  it anyway when it is genuinely separate work. Applicant/customer name alone
+  never defines a duplicate.
 - A linked estimation can have multiple Progress assignments only when their
   assigned dates differ. It can have only one non-Cancelled Completion
   assignment. Cancelling either task releases its applicable duplicate
@@ -156,8 +174,8 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - The final downloadable artifact retained on closure is the latest generated
   DOCX for ordinary valuation work. Karur Vysya Bank retains the completed
   uploaded XLSX; Karnataka Bank retains the completed Valocity DOCX or PDF.
-  For estimation work it is the latest completed XLSX, produced by the online
-  form or attached after offline completion. Artifact and report-revision
+  For estimation work it is the latest completed XLSX from the online
+  form or the retained offline XLSX, DOCX or PDF. Artifact and report-revision
   metadata remain registered; superseded development file bytes may be removed
   when they are no longer the immutable final artifact.
 
@@ -178,7 +196,12 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   task details before opening a record, and become compact on smaller screens.
 - Father/CEO institution charts include every configured bank and NBFC, showing
   zero for institutions with no work in the selected period.
-- Institution workload supports daily, weekly, monthly, and yearly views.
+- Institution workload and finance support All time, daily, weekly, monthly
+  and yearly views. All period choices remain visible; All time hides only
+  the supplementary date/week/month/year picker.
+- Workload totals link to the existing task-summary page for Banks, NBFCs or
+  both together, preserving the selected report group and assigned-date
+  period. Aggregate summaries, task tables and exports use the same filters.
 - Institution drill-down retains report-type and task filters and includes a
   route back to the all-institutions view.
 - Father/CEO financial views show earned, received, and outstanding totals for
@@ -225,50 +248,170 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   available to both general and agricultural valuations.
 - Owner details and purchaser details are distinct entries under the relevant
   report field. Use “Purchaser,” not “Applicant,” in that report context.
+- Assignment “Property description” is the canonical description used to
+  prefill the matching report field and both the cover and detailed report.
+  Assignment applicant/customer name prefills owner details and remains
+  editable in the report.
+- General-property status describes physical construction only: Existing,
+  Under Construction or Proposed. “Purchase loan” belongs in Purpose of
+  valuation. The red “(Proposed)” suffix is shown beside Specifications of
+  construction only when Proposed is selected.
+- General-property Extra Items, Amenities, Miscellaneous and Services offer a
+  one-shot action that changes only blank item rows to “Included.” Numeric item
+  entries are totaled into their editable calculated abstract fields; non-numeric text is
+  zero for arithmetic and the present market value includes those totals.
+- General and agricultural report-entry fields, including calculated results,
+  remain editable within the existing report-access and section-visibility rules.
+  Explicit manual calculation overrides persist with the draft and are honoured
+  by preview, DOCX, PDF and amount-in-words. Changing an affecting input refreshes
+  its dependent results and clears their overrides; unrelated edits preserve
+  them. The app shows the calculated baseline and a Use calculated value action
+  for an override. Report labels remain unchanged and no override notes are
+  added to generated documents. Duplicate controls for one amount stay in sync.
+- Automatically calculated final Market, Realizable and Distress Values round
+  to the nearest thousand: a remainder below 500 rounds down, above 500 rounds
+  up, and exactly 500 remains unchanged for manual adjustment. Realizable and
+  Distress Values use the final Market Value and the existing percentages.
+  Intermediate calculations and component totals are not rounded to thousands;
+  manually entered results are not automatically rounded. Calculated zero
+  section/consolidated amounts appear as 0/- rather than blanks or dashes.
+- General and agricultural forms expose fictional examples through a
+  Show/Hide examples preference at the end of the existing report-section
+  navigation, outside the main form. Double-click fills only an empty,
+  editable eligible field; examples never overwrite data and do not use
+  completion-count tracking.
 - Agricultural rate unit labels use “per unit” without repeating “rate per
   unit” in the selected unit label. This agricultural wording must not be
   copied into general valuation unless explicitly requested.
 - Preview and DOCX generation must remain consistent, with intentional page
   breaks, standardized fonts, and no static-template line breaks substituted
   for dynamic logic.
+- Valuation DOCX body typography uses Calibri with only 11, 12 and 13 point
+  sizes. Declaration/signature blocks stay together where physically possible;
+  table column labels may repeat after a page break. General-property section
+  names appear once and do not repeat on continued table pages.
+- General-property reports use uniform left/right margins and professional
+  sentence case, spacing and punctuation. Method of valuation, conclusion,
+  justification, declaration and the valuer's signature occupy one page. The
+  bank manager's undersigned acknowledgment is a separate section on the next
+  page, not part of the valuer's declaration. General and agricultural reports
+  align Place/Date fields left and centre signatures near the 14 cm text-ruler
+  mark, using paragraph alignment/tab stops rather than runs of spaces. The
+  bank manager page retains blank space instead of an acknowledgment heading.
+  The default Valuer name is K. Siva Prasad. The general cover has a blue
+  selected-institution banner with centred bold white text, followed by a black,
+  bold, underlined “Valuation Report”. Its detailed report has a matching blue
+  banner with white “Valuation Report” and black “(Land and Building)”. The
+  agricultural report uses the same banner at its existing heading, with
+  “(Agricultural Land)”, without an additional cover page. Amount-in-words
+  begins on a separate line below the corresponding numeric statement and
+  stays with it. Important value phrases use initial capitals, including
+  Fair Market Value, Present Market Value, Realizable Value and Distress Value.
+  Static wording capitalizes Value, Valuer and Valuation, including Date of
+  Valuation and Method of Valuation. Identifier
+  cells (serial, alphabetical/roman subserial and Part codes) are centred;
+  descriptions and merged section headings remain left aligned. General
+  building reports use “Land and Building”, and the land/building category
+  labels include “and” without changing their stored identifiers.
+  Task-generated valuation downloads include task ID, applicant name, report
+  type and extension; internal storage identifiers remain independent.
+  The general offline template
+  and app-generated DOCX share the same Word compatibility finalization.
+- General cover letters address “Bank Manager”. General and agricultural
+  amount wording capitalizes each word, including “Only”, and hyphenates
+  compound numbers (for example, “Forty-Five”). Correct definite spelling errors while retaining valid
+  spelling variants such as “Saleability”.
+- General and agricultural photographs use three columns with up to 12 photos
+  per page. Their location map is one image in a merged three-column, two-row
+  area: on the same media page for up to nine photos, on a separate page after
+  all photos for ten or more. Images retain aspect ratio and are not cropped.
+  Progress and Completion retain their existing three-column, up-to-12-photo
+  layout.
 - DOCX is the completion-qualifying artifact for ordinary valuation work. A
   generated PDF is an optional direct-download copy and does not independently
   qualify the task for completion or closure.
-- Estimation supports online form entry or a configured offline XLSX workflow.
-  A completed estimation XLSX is required before completion and is retained at
-  closure. Estimation reports do not require photo or map uploads.
-- An online estimation preview remains approved across reloads while the saved
-  workbook inputs, component configuration, schema and template version remain
-  unchanged. Changing a workbook input invalidates the preview and retained
-  completed XLSX; workflow-only changes do not. Changing between online and
-  offline preparation retains entered component data but requires a newly
-  generated or attached completed XLSX.
-- An offline estimation upload is not required to preserve the downloaded
-  workbook's formulas or formatting. Its worksheet topology and component list
-  must match the configured workbook: missing, renamed, duplicated, additional
-  or unrelated worksheets/components are rejected. Every configured component
-  must have a numeric final value; zero is valid.
+- For an eligible standard general or agricultural valuation, both the CEO and
+  the assigned employee choose a preparation method immediately after Report
+  Setup: Fill online, or Complete offline and upload. Online preparation exposes
+  the valuation form, photographs/map, preview and generation steps. Offline
+  preparation exposes the clean DOCX template and accepts either that completed
+  template or an existing completed DOCX/PDF report. Upload requires one
+  substantive work note; completion references that recorded note instead of
+  requiring a duplicate. The task remains In Progress until upload and explicit
+  completion. Removing/replacing the attachment resets completion qualification.
+  Changing preparation method retains entered form details but invalidates and
+  removes the previous completion-qualifying artifact.
+- The standard offline valuation route uses Submit to retain its DOCX/PDF
+  and required upload work note. A retained attachment displays its filename
+  with a green tick and download/remove icons; the same primary button then
+  becomes Mark Completed. Removal restores Submit. Upload and completion
+  remain separate actions. This route has one primary completion action and
+  compact optional Add note/View history controls instead of a second
+  permanently visible work-note composer.
+- Estimation uses Date of Estimation. Its task applicant name comes from the
+  assignment; estimation applicant and Progress/Completion borrower outputs use
+  Name, Property Location. A separate Applicant Address is not required; the
+  detailed construction-site locality/address and signing Place remain separate.
+- Estimation preparation is selected immediately after Report Setup. Fill online
+  exposes configuration, components, measurements, Abstract, preview and XLSX
+  generation. Complete offline and upload exposes attachment first, followed by
+  extracted or manually entered component totals and one substantive upload note.
+  Optional workbook-template configuration remains available without making it
+  mandatory for retrospective uploads. No photographs or map are required.
+- Standard general/agricultural valuation and estimation offline uploads ask for
+  Filled template or Retrospective report. Filled template requires only a prior
+  template download recorded against the task, valid across reloads, devices and
+  handovers; configuration, template version and uploaded contents are not matched.
+  Retrospective uploads require no template download. CEO and assigned employees
+  may use either route under existing report-access rules.
+- Estimation offline uploads accept XLSX, DOCX and PDF. Recognizable XLSX totals
+  may be extracted; every component/floor name and total can be reviewed or entered
+  manually, including numeric zero. Totals include measured work, lump sums and
+  final adjustments; a subtotal must not also duplicate its constituent floors.
+  Submission retains the file, reviewed costs and work note together. Its filename,
+  green tick and download/remove controls replace attachment entry; Submit becomes
+  Mark Completed. Completion reuses the upload note. Removal/replacement or changed
+  report inputs reset completion qualification.
+- An online estimation preview remains approved across reloads while saved workbook
+  inputs, component configuration, schema and template version remain unchanged.
+  Changed report inputs invalidate the preview and retained report; workflow-only
+  changes do not. Switching preparation methods retains entered data but requires
+  a newly generated or attached report.
+- Preparation Method is recorded explicitly as Online, Filled template or
+  Retrospective. Older records without sufficient metadata remain Not recorded;
+  no source is guessed. Previous choices remain in activity/revision history.
+  Only the CEO sees and may apply the Preparation Method task filter, with All as
+  default. It combines with Report section and all other task filters, pagination,
+  counts and filtered exports. Progress/Completion use their linked estimation's
+  current preparation method, including subsequent changes.
 - Karur Vysya Bank general valuations use its supplied Excel format only: the
   application supplies a cleaned bank-template XLSX and the valuer attaches the
   completed XLSX. Karnataka Bank general valuations are completed in Valocity;
   the application supplies no online form or template and retains the Valocity
   DOCX or PDF attached by the valuer. Other valuation institutions retain the
-  standard online DOCX workflow.
+  standard online/offline preparation choice.
 - Every Progress or Completion report is linked to one finalized Estimation
-  task. The linked estimation supplies the applicant, property and immutable
-  component estimated costs; users record only progress-specific details and
-  completion values.
-- Each completed estimation XLSX creates an immutable component-cost snapshot.
-  A new Progress or Completion task is pinned to the selected estimation's
-  latest snapshot at creation and does not silently change when that estimation
-  is later reopened or regenerated.
+  task. Final online or offline estimates create immutable component-cost snapshots.
+  New linked reports use the latest snapshot and assess each component's full final
+  amount, including lump sums and adjustments, without measurement-line duplication.
+- When the CEO reopens an eligible estimation within its normal seven-day window,
+  the confirmation lists affected non-Cancelled linked reports. Completed or Closed
+  dependants reopen as In Progress even if older than seven days; active dependants
+  become outdated. Payments, history and prior documents remain retained. Preparing
+  or completing dependants is blocked until the revised estimation is finalized.
+- Finalizing the revised estimation advances affected existing dependants to its
+  new snapshot. Matching components retain completion percentages and recalculate
+  completed amounts; manually entered completion amounts remain for explicit review.
+  Added/removed components also require review. The user must confirm review and
+  obtain a fresh preview/report before completing a dependant. This correction flow
+  does not release the permanent Completion lock for new assignments.
 - A linked report is classified as Completion only when every component is at
   100 percent and every balance-work amount is nil/zero. Otherwise it is a
   Progress report. The generated DOCX includes a Cost of Balance Work column.
 - Karnataka Bank reports include the bank-specific Format/Reference content
   and Branch Sanction page. Reports for other institutions omit those items.
-- Progress/Completion site photographs use the same upload and document-layout
-  rules as valuation reports. At least one authenticated site photograph is
+- Progress/Completion site photographs retain their existing upload and
+  document-layout rules. At least one authenticated site photograph is
   mandatory for every Progress or Completion report. The final report artifact
   is DOCX.
 - A task-linked Progress/Completion preview remains approved across reloads

@@ -8,6 +8,11 @@
   const DRAFT_KEY = `sln.estimation.form.draft.v3-${draftScope}`;
   const TODAY = localToday();
   const state = { propertyType: "", construction: "", subtype: "", current: 0, details: {}, components: [], editingComponentId: null };
+  const offlineEntry = window.EstimationOffline.create({ state, currentTask, setupComplete: reportSetupComplete, persist: persistDraftNow, save: () => scheduleSave({ reportDirty: false }), render: () => renderAll({sectionKey: "offline"}), dirty: markReportDirty, downloadTemplate: async () => {
+    if (!propertyConfigurationComplete() || !state.components.length) { state.details.templateSetup = true; renderAll({sectionKey: "configuration"}); return; }
+    await downloadWorkbook("offline");
+    if (ReportData.taskCode) await TaskStore.refresh(ReportData.taskCode);
+  }});
   let saveTimer = null;
   let generatedChangeAcknowledged = false;
 
@@ -17,7 +22,7 @@
 
   function currentTask() { return ReportData.taskCode && window.TaskStore ? TaskStore.get(ReportData.taskCode) : null; }
 
-  function confirmReportInvalidation(message = "Changing estimation details will make the retained Excel report outdated. Continue and prepare a new report before completing this task?") {
+  function confirmReportInvalidation(message = "Changing estimation details will make the retained estimation report outdated. Continue and prepare a new report before completing this task?") {
     const task = currentTask();
     const hasCurrentReport = Boolean(task?.reportGeneratedAt || state.details.finalReport);
     if (!hasCurrentReport || task?.reportFresh === false || generatedChangeAcknowledged) return true;
@@ -35,11 +40,9 @@
   }
 
   function localToday() {
-    const now = new Date();
-    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    return ValuxTime.today();
   }
 
-  function isFutureDate(value) { return Boolean(value && value > TODAY); }
   function propertyProfile() { return PROPERTY_TYPES[state.propertyType] || null; }
   function componentDefinition(kind) { return propertyProfile()?.components.find((component) => component.kind === kind) || null; }
   function floorDefinition(key) { return FLOOR_OPTIONS.find((floor) => floor.key === key) || null; }
@@ -154,13 +157,12 @@
 
   function setupPanel() {
     return `<div class="panel" data-key="setup"><h2>Report Setup</h2><section class="subgroup"><h3>Report details</h3><div class="grid">
-      ${inputField("estimate-date", "Estimate date", state.details.estimateDate, { type: "date", max: TODAY, required: true, key: "estimateDate", help: "Future dates are not permitted." })}
+      ${inputField("estimate-date", "Date of Estimation", state.details.estimateDate, { type: "date", required: true, key: "estimateDate" })}
       ${inputField("place", "Place", state.details.place, { required: true, key: "place" })}
-      ${inputField("applicant-name", "Applicant name", state.details.applicantName, { required: true, key: "applicantName" })}
-      ${inputField("applicant-address", "Applicant address", state.details.applicantAddress, { textarea: true, full: true, required: true, key: "applicantAddress" })}
+      ${currentTask() ? `<div class="field"><label>Applicant</label><p>${escapeHtml(currentTask().customerName)}</p></div>` : inputField("applicant-name", "Applicant name", state.details.applicantName, { required: true, key: "applicantName" })}
       ${inputField("project-location", "Project / property location", state.details.projectLocation, { full: true, required: true, key: "projectLocation" })}
       ${inputField("work-description", "Name of the work", state.details.workDescription, { textarea: true, full: true, required: true, key: "workDescription" })}
-    </div></section><section class="notice"><strong>Building configuration:</strong> configure all base and upper floors before choosing future online or offline preparation. Changing a building configuration later retains unchanged sheets but deletes data from removed sheets after confirmation.</section></div>`;
+    </div></section><section class="notice"><strong>Next:</strong> choose Preparation Method. Online entry and an optional workbook template use Property Configuration and Component Selection; retrospective uploads need only the report and reviewed component totals.</section></div>`;
   }
 
   function choiceCard(name, value, label, help, checked, disabled = false) {
@@ -188,25 +190,25 @@
     const options = ready ? profile.components.filter(compatibleComponent) : [];
     return `<div class="panel" data-key="components"><h2>Component Selection</h2><p class="hint">Add only the structures present at the property. The order below becomes the workbook order after the Abstract.</p>
       ${ready ? `<div class="component-toolbar"><div class="field"><label for="component-type">Component</label><select id="component-type"><option value="">Select component</option>${options.map((component) => `<option value="${component.kind}">${escapeHtml(component.label)}</option>`).join("")}</select></div><div class="field"><label for="component-name">Component name <span class="optional-label">Optional</span></label><input id="component-name" placeholder="For example, Production Hall 2"></div><div class="field" id="custom-roof-wrap" hidden><label for="custom-roof-type">Custom component construction</label><select id="custom-roof-type">${customRoofOptions()}</select></div><button type="button" class="primary" id="add-component">Add component</button></div>` : `<div class="empty-state">Complete Property Configuration before adding components.</div>`}
-      <div class="component-list">${state.components.length ? state.components.map(componentCard).join("") : `<div class="empty-state">No components selected yet.</div>`}</div>${state.components.length ? `<div class="component-mode-separator" aria-hidden="true"></div>${reportModePanel()}` : ""}</div>`;
+      <div class="component-list">${state.components.length ? state.components.map(componentCard).join("") : `<div class="empty-state">No components selected yet.</div>`}</div></div>`;
   }
 
   function reportModePanel() {
     const mode = state.details.workMode || "";
-    return `<section class="subgroup report-mode-panel"><h3>How will this estimate be prepared?</h3><p class="hint">Choose after the property configuration and worksheet components are final. Changing it does not remove component configuration; it only changes the next workflow.</p><div class="setup-choice-grid"><label class="choice-card"><input type="radio" name="work-mode" value="online" ${mode === "online" ? "checked" : ""}><span><strong>Fill online</strong><small>Enter measurements here, preview the rendered workbook, then generate the completed Excel report.</small></span></label><label class="choice-card"><input type="radio" name="work-mode" value="offline" ${mode === "offline" ? "checked" : ""}><span><strong>Complete in Excel</strong><small>Download the configured workbook, complete it manually, attach the finished Excel file, then mark it ready.</small></span></label></div></section>`;
+    return `<section class="subgroup report-mode-panel"><h3>Choose preparation method</h3><p class="hint">Choose how the report will be prepared. Your entered component data is retained when changing methods.</p><div class="setup-choice-grid"><label class="choice-card"><input type="radio" name="work-mode" value="online" ${mode === "online" ? "checked" : ""}><span><strong>Fill online</strong><small>Enter measurements here, preview the rendered workbook, then generate the completed Excel report.</small></span></label><label class="choice-card"><input type="radio" name="work-mode" value="offline" ${mode === "offline" ? "checked" : ""}><span><strong>Complete offline and upload</strong><small>Attach a completed template or an existing report, review component totals, then submit it.</small></span></label></div></section>`;
   }
 
   function setWorkMode(mode) {
     if (!['online', 'offline'].includes(mode)) return;
     if (state.details.workMode === mode) return;
-    const label = mode === "online" ? "Fill online" : "Complete in Excel";
-    if (!confirmReportInvalidation(`Change the preparation method to ${label}? Component configuration and measurements will be retained, but any existing completed Excel report will no longer qualify and a new report will be required.`)) {
+    const label = mode === "online" ? "Fill online" : "Complete offline and upload";
+    if (!confirmReportInvalidation(`Change the preparation method to ${label}? Component configuration and measurements will be retained, but any existing completed report will no longer qualify and a new report will be required.`)) {
       renderAll({ sectionKey: "components" });
       return;
     }
     state.details.workMode = mode;
     markReportDirty();
-    renderAll({ sectionKey: mode === "online" ? "components" : "review" });
+    renderAll({ sectionKey: mode === "online" ? "configuration" : "offline" });
     persistDraftNow().then(() => {
       $("status").textContent = `Preparation method changed to ${label}. Existing component data was retained.`;
       updateOutputControls();
@@ -427,46 +429,12 @@
 
   function finalReportRecord() { return state.details.finalReport && typeof state.details.finalReport === "object" ? state.details.finalReport : null; }
 
-  function formatFileSize(value) {
-    const bytes = Number(value);
-    if (!Number.isFinite(bytes) || bytes < 0) return "";
-    if (bytes < 1024) return `${bytes} bytes`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
   function reportOutputPanel() {
     const finalReport = finalReportRecord();
-    const online = state.details.workMode === "online";
-    const offline = state.details.workMode === "offline";
-    const modeSelected = online || offline;
-    const offlineWorkbookIsCurrent = Boolean(state.details.offlineWorkbook && state.details.offlineWorkbook.configurationSignature === configurationSignature());
-    const onlinePreviewReady = Boolean(ReportData.preview()?.id);
-    const ready = Boolean(finalReport);
-    const statusClass = ready ? "is-complete" : "is-pending";
-    const statusTitle = ready ? "Final Excel report recorded" : modeSelected ? "A final Excel report is required" : "Choose how this estimate will be prepared";
-    const statusText = ready
-      ? `${finalReport.source}: ${finalReport.fileName}`
-      : offline ? "Download the current configured workbook, complete it in Excel, then attach that completed .xlsx file."
-        : online ? "Generate the completed Excel report from the online form."
-          : "Select Fill online or Complete in Excel in Component Selection before generating or attaching a report.";
-    const attachmentControl = finalReport?.source === "Uploaded Excel"
-      ? `<div class="attached-file"><span class="attached-file-icon" aria-hidden="true">✓</span><span class="attached-file-copy"><strong>${escapeHtml(finalReport.fileName)}</strong><small>Completed Excel attached${finalReport.size != null ? ` · ${escapeHtml(formatFileSize(finalReport.size))}` : ""}</small></span><button type="button" class="secondary attachment-replace" id="attach-completed-excel">Replace Excel</button></div><input class="file-input" id="completed-report-upload" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">`
-      : `<button type="button" class="secondary attachment-button" id="attach-completed-excel" ${offlineWorkbookIsCurrent ? "" : "disabled"}><span class="attachment-button-icon" aria-hidden="true">⇧</span><span>Attach completed Excel</span></button><input class="file-input" id="completed-report-upload" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">${offlineWorkbookIsCurrent ? "" : `<p class="attachment-help">Download the configured workbook first. This keeps the attached report matched to the current component and floor configuration.</p>`}`;
+    const previewReady = Boolean(ReportData.preview()?.id);
     const retainedDownload = finalReport?.url
-      ? `<a class="secondary" href="${escapeHtml(finalReport.url)}?download=1" download>Download completed Excel</a>`
-      : "";
-    const actions = offline
-      ? `<button type="button" class="primary" id="download-offline-from-review">Download configured workbook</button>${attachmentControl}`
-      : online
-        ? `<button type="button" class="primary" id="generate-from-review" ${onlinePreviewReady ? "" : "disabled"}>Generate completed Excel</button>${onlinePreviewReady ? "" : `<p class="attachment-help">Preview the current workbook before generating the completed Excel report.</p>`}`
-        : `<button type="button" class="primary" data-action="go-to-section" data-section-key="components">Choose preparation method</button>`;
-    const description = offline
-      ? "The downloaded workbook reflects this exact component and floor configuration. If configuration changes later, download a new workbook before attaching the final Excel file."
-      : online
-        ? "Measurement entry and report generation remain in this form. A manual attachment and blank workbook download are intentionally unavailable in the online route."
-        : "Choose whether this estimate will be filled in this form or completed in Excel before report output is available.";
-    return `<section class="output-grid"><div class="output-card"><h3>Report output</h3><p>${description}</p><div class="output-actions">${actions}${retainedDownload}</div><p class="completion-note">No photo or map attachment is required. The final Excel file is retained with the task using the app's current report-file storage.</p></div><div class="output-status ${statusClass}"><strong>${statusTitle}</strong><span>${escapeHtml(statusText)}</span></div></section>`;
+      ? `<a class="secondary" href="${escapeHtml(finalReport.url)}?download=1" download>Download completed Excel</a>` : "";
+    return `<section class="output-grid"><div class="output-card"><h3>Report output</h3><p>Preview the current workbook, then generate the completed Excel report.</p><div class="output-actions"><button type="button" class="primary" id="generate-from-review" ${previewReady ? "" : "disabled"}>Generate completed Excel</button>${retainedDownload}</div><p class="completion-note">No photo or map attachment is required.</p></div><div class="output-status ${finalReport ? "is-complete" : "is-pending"}"><strong>${finalReport ? "Final Excel report recorded" : "A final Excel report is required"}</strong><span>${escapeHtml(finalReport ? `${finalReport.source}: ${finalReport.fileName}` : "Generate the completed Excel report from the online form.")}</span></div></section>`;
   }
 
   function measurementTemplateKey(component, sheet) {
@@ -762,21 +730,21 @@
   }
 
   function reportSetupComplete() {
-    return ["estimateDate", "place", "applicantName", "applicantAddress", "projectLocation", "workDescription"].every((key) => String(state.details[key] || "").trim()) && !isFutureDate(state.details.estimateDate);
+    return ["estimateDate", "place", "applicantName", "projectLocation", "workDescription"].every((key) => String(state.details[key] || "").trim());
   }
 
   function propertyConfigurationComplete() { return Boolean(state.propertyType && state.construction && state.subtype); }
 
   function sectionGate(key) {
-    if (key === "setup" || key === "configuration") return { allowed: true };
+    if (key === "setup" || key === "preparation" || key === "configuration") return { allowed: true };
     if (key === "components") {
-      if (!reportSetupComplete()) return { allowed: false, message: "Complete Report Setup first, including a date that is not in the future.", target: "setup", targetLabel: "Go to Report Setup" };
+      if (!reportSetupComplete()) return { allowed: false, message: "Complete Report Setup first.", target: "setup", targetLabel: "Go to Report Setup" };
       if (!propertyConfigurationComplete()) return { allowed: false, message: "Complete Property Configuration before choosing report components.", target: "configuration", targetLabel: "Go to Property Configuration" };
       return { allowed: true };
     }
     if (key.startsWith("measure-")) {
       if (!state.components.length) return { allowed: false, message: "Choose and configure at least one property component before entering measurements.", target: "components", targetLabel: "Go to Component Selection" };
-      if (state.details.workMode !== "online") return { allowed: false, message: "Choose Fill online in Component Selection to enter measurements in this form.", target: "components", targetLabel: "Go to Component Selection" };
+      if (state.details.workMode !== "online") return { allowed: false, message: "Choose Fill online in Preparation Method to enter measurements in this form.", target: "preparation", targetLabel: "Go to Preparation Method" };
       return { allowed: true };
     }
     if (key === "abstract") {
@@ -794,13 +762,16 @@
   }
 
   function sectionDefinitions() {
-    const setup = [{ key: "setup", label: "Report Setup", html: setupPanel() }, { key: "configuration", label: "Property Configuration", html: configurationPanel() }, { key: "components", label: "Component Selection", html: componentSelectionPanel() }];
-    const online = state.details.workMode === "online";
-    const measurements = online && state.propertyType ? componentMeasurementEntries().map((entry) => ({ key: entry.key, label: entry.label, html: measurementPanel(entry) })) : [];
-    const abstract = online && state.propertyType && state.components.length ? [{ key: "abstract", label: requiresSeparateAbstract() ? "Abstract" : "Compact Abstract", html: abstractPanel() }] : [];
-    return [...setup, ...measurements, ...abstract, { key: "review", label: "Configuration Review", html: reviewPanel() }].map((section) => {
+    const setup = [{key: "setup", label: "Report Setup", html: setupPanel()},
+      {key: "preparation", label: "Preparation Method", html: `<div class="panel" data-key="preparation"><h2>Preparation Method</h2>${reportModePanel()}</div>`}];
+    const configuration = [{key: "configuration", label: "Property Configuration", html: configurationPanel()}, {key: "components", label: "Component Selection", html: componentSelectionPanel()}];
+    if (state.details.workMode === "offline") return [...setup, ...(state.details.templateSetup ? configuration : []), {key: "offline", label: "Complete & Upload Report", html: offlineEntry.panel()}];
+    if (state.details.workMode !== "online") return setup;
+    const measurements = state.propertyType ? componentMeasurementEntries().map((entry) => ({key: entry.key, label: entry.label, html: measurementPanel(entry)})) : [];
+    const abstract = state.propertyType && state.components.length ? [{key: "abstract", label: requiresSeparateAbstract() ? "Abstract" : "Compact Abstract", html: abstractPanel()}] : [];
+    return [...setup, ...configuration, ...measurements, ...abstract, {key: "review", label: "Configuration Review", html: reviewPanel()}].map((section) => {
       const gate = sectionGate(section.key);
-      return gate.allowed ? { ...section, locked: false } : { ...section, locked: true, html: lockedPanel(section.key, section.label, gate) };
+      return gate.allowed ? {...section, locked: false} : {...section, locked: true, html: lockedPanel(section.key, section.label, gate)};
     });
   }
 
@@ -815,6 +786,9 @@
     const nextIndex = sections.findIndex((section) => section.key === desiredKey);
     state.current = nextIndex < 0 ? 0 : nextIndex;
     wireEvents();
+    offlineEntry.wire();
+    document.body.dataset.valuationPreparation = state.details.workMode || "";
+    window.dispatchEvent(new CustomEvent("sln:valuation-preparation-changed"));
     showSection(state.current, { skipAbstractRefresh: options.skipAbstractRefresh });
     updateOutputControls();
     window.scrollTo({ top: scrollPosition, behavior: "auto" });
@@ -840,15 +814,13 @@
 
   function dateError(input) {
     const error = $(`${input.id}-error`);
-    const future = isFutureDate(input.value);
-    input.setCustomValidity(future ? "Future dates are not permitted." : "");
-    if (error) { error.textContent = future ? "Choose today or an earlier date." : ""; error.hidden = !future; }
+    input.setCustomValidity("");
+    if (error) { error.textContent = ""; error.hidden = true; }
   }
 
   function validationIssues() {
     const issues = [];
-    ["estimateDate", "place", "applicantName", "applicantAddress", "projectLocation", "workDescription"].forEach((key) => { if (!String(state.details[key] || "").trim()) issues.push(`Report detail missing: ${key.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}`); });
-    if (isFutureDate(state.details.estimateDate)) issues.push("Estimate date cannot be in the future.");
+    ["estimateDate", "place", "applicantName", "projectLocation", "workDescription"].forEach((key) => { if (!String(state.details[key] || "").trim()) issues.push(`Report detail missing: ${key.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}`); });
     if (!state.propertyType) issues.push("Select the property type.");
     if (!state.construction) issues.push("Select the construction configuration.");
     if (!state.subtype) issues.push("Select the property subtype.");
@@ -871,7 +843,8 @@
     $("generate-xlsx").disabled = !enabled || state.details.workMode !== "online" || !currentPreview;
     $("download-offline").disabled = !enabled || state.details.workMode !== "offline";
     $("generate-xlsx").hidden = state.details.workMode !== "online";
-    $("download-offline").hidden = state.details.workMode !== "offline";
+    $("download-offline").hidden = true;
+    $("review-report").hidden = state.details.workMode !== "online";
   }
 
   function workbookErrorMessage(error) {
@@ -946,9 +919,9 @@
     const selectedMode = synchroniseWorkMode();
     const requiredWorkMode = mode === "completed" ? "online" : "offline";
     if (selectedMode !== requiredWorkMode) {
-      const selected = selectedMode === "online" ? "Fill online" : selectedMode === "offline" ? "Complete in Excel" : "no preparation method";
+      const selected = selectedMode === "online" ? "Fill online" : selectedMode === "offline" ? "Complete offline and upload" : "no preparation method";
       window.alert(requiredWorkMode === "offline"
-        ? `Choose Complete in Excel before downloading the configured workbook. Current selection: ${selected}.`
+        ? `Choose Complete offline and upload before downloading the workbook template. Current selection: ${selected}.`
         : `Choose Fill online before generating a completed report. Current selection: ${selected}.`);
       return;
     }
@@ -995,7 +968,7 @@
       }
       scheduleSave({ reportDirty: false });
       $("status").textContent = mode === "offline" ? "Offline workbook downloaded" : "Completed Excel downloaded";
-      renderAll({ sectionKey: "review" });
+      renderAll({ sectionKey: mode === "offline" ? "offline" : "review" });
     } catch (error) {
       window.alert(workbookErrorMessage(error));
       $("status").textContent = "Workbook preparation failed";
@@ -1004,40 +977,6 @@
     }
   }
 
-  async function attachCompletedWorkbook(file) {
-    if (!file) return;
-    const offline = state.details.offlineWorkbook;
-    if (!offline || offline.configurationSignature !== configurationSignature()) {
-      window.alert("Download the current configured workbook before attaching a manually completed report. If configuration changed, download the latest workbook first.");
-      return;
-    }
-    if (!/\.xlsx$/i.test(file.name)) {
-      window.alert("Attach an Excel .xlsx report only.");
-      return;
-    }
-    const signature = new Uint8Array(await file.slice(0, 4).arrayBuffer());
-    if (signature.length < 4 || signature[0] !== 0x50 || signature[1] !== 0x4b) {
-      window.alert("The selected file is not a valid Excel workbook package.");
-      return;
-    }
-    $("status").textContent = "Saving completed Excel…";
-    try {
-      await persistDraftNow();
-      const response = await fetch("/api/estimation/upload", { method: "POST", headers: await ReportData.requestHeaders({ "Content-Type": file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "X-File-Name": encodeURIComponent(file.name) }), body: file });
-      const record = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(record.error || "Could not save the completed Excel file.");
-      state.details.finalReport = { source: "Uploaded Excel", fileName: record.fileName, size: record.size, storageId: record.savedName, url: record.download, uploadedAt: new Date().toISOString() };
-      generatedChangeAcknowledged = false;
-      window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: "xlsx", download: record.download, filename: record.fileName, source: "Uploaded Excel", estimationSummary: estimationLinkSummary(record.estimationSummary), registered: record.registered === true, task: record.task || null } }));
-    } catch (error) {
-      window.alert(workbookErrorMessage(error));
-      $("status").textContent = "Completed Excel upload failed";
-      return;
-    }
-    scheduleSave({ reportDirty: false });
-    $("status").textContent = "Completed Excel attached";
-    renderAll({ sectionKey: "review" });
-  }
 
   function configurationSignature() {
     return JSON.stringify({
@@ -1103,10 +1042,10 @@
   async function persistDraftNow() {
     window.clearTimeout(saveTimer);
     saveTimer = null;
-    const saved = await ReportData.save(DRAFT_KEY, "estimation", state, "3");
-    Object.assign(state, saved);
-    state.components = (Array.isArray(saved.components) ? saved.components : []).map(normaliseComponent);
-    state.editingComponentId = null;
+    // A save response may arrive after the next input/upload. Estimation has no
+    // server-normalized media, so keep the current browser state rather than
+    // replacing newer edits with the earlier request's payload.
+    await ReportData.save(DRAFT_KEY, "estimation", state, "3");
     $("status").textContent = ReportData.localOnly ? "Saved locally" : "Saved";
     $("status").classList.remove("is-saving");
     $("status").removeAttribute("aria-label");
@@ -1391,11 +1330,6 @@
     $("add-component")?.addEventListener("click", () => { if (confirmReportInvalidation()) addComponent(); });
     $("generate-from-review")?.addEventListener("click", () => downloadWorkbook("completed"));
     $("download-offline-from-review")?.addEventListener("click", () => downloadWorkbook("offline"));
-    $("attach-completed-excel")?.addEventListener("click", () => $("completed-report-upload")?.click());
-    $("completed-report-upload")?.addEventListener("change", async (event) => {
-      await attachCompletedWorkbook(event.target.files?.[0]);
-      event.target.value = "";
-    });
     document.querySelectorAll("[data-building-base], [data-building-upper]").forEach((input) => input.addEventListener("input", () => {
       const componentId = input.dataset.buildingBase || input.dataset.buildingUpper;
       refreshTypicalFloorOptions(componentId);
@@ -1449,5 +1383,6 @@
   $("close-review").addEventListener("click", () => { $("review-modal").hidden = true; });
   $("review-modal").addEventListener("click", (event) => { if (event.target === $("review-modal")) $("review-modal").hidden = true; });
   await restoreDraft();
+  if (currentTask()) state.details.applicantName = currentTask().customerName;
   renderAll({ sectionKey: "setup" });
 })();

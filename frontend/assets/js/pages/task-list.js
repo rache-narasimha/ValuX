@@ -7,6 +7,7 @@
   const loadMore = document.getElementById("load-more");
   const fields = {
     search: document.getElementById("task-search"),
+    preparationSource: document.getElementById("preparation-filter"),
     group: document.getElementById("group-filter"),
     institution: document.getElementById("institution-filter"),
     period: document.getElementById("period-filter"),
@@ -16,8 +17,9 @@
     payment: document.getElementById("payment-filter"),
   };
   let visible = PAGE_SIZE;
-  let periodReference = new Date();
+  let periodReference = ValuxTime.todayDate();
   let directoryMode = false;
+  let summaryMode = false;
   let analyticsLoadPromise = null;
   let renderSequence = 0;
   const GROUP_LABELS = {
@@ -41,6 +43,8 @@
     TaskStore.STATUSES.forEach((item) => fields.status.add(new Option(item, item)));
     fields.assignee.innerHTML = '<option value="">Everyone</option>';
     TaskStore.EMPLOYEES.forEach((employee) => fields.assignee.add(new Option(employee.name, employee.name)));
+    fields.institution.add(new Option("All banks", "type:Bank"));
+    fields.institution.add(new Option("All NBFCs", "type:NBFC"));
     Object.entries(window.INSTITUTIONS).forEach(([type, institutions]) => {
       const group = document.createElement("optgroup");
       group.label = type === "Bank" ? "Banks" : "NBFCs";
@@ -49,8 +53,10 @@
     });
     const initial = new URLSearchParams(window.location.search);
     directoryMode = initial.get("view") === "institutions";
-    if (initial.get("periodReference")) periodReference = new Date(`${initial.get("periodReference")}T00:00:00`);
+    summaryMode = initial.get("view") === "summary";
+    if (initial.get("periodReference")) periodReference = ValuxTime.parseDate(initial.get("periodReference")) || ValuxTime.todayDate();
     fields.group.value = initial.get("group") || "all";
+    fields.preparationSource.value = WorkflowAccess.currentRole() === "father" ? initial.get("preparationSource") || "" : "";
     fields.institution.value = initial.get("institution") || "";
     fields.period.value = initial.get("period") || "";
     fields.status.value = initial.get("status") || "";
@@ -61,26 +67,16 @@
   }
 
   function isoDate(value) {
-    const current = value instanceof Date ? value : new Date(value);
-    return [current.getFullYear(), String(current.getMonth() + 1).padStart(2, "0"), String(current.getDate()).padStart(2, "0")].join("-");
+    return ValuxTime.isoDate(value);
   }
 
-  function weekOptions(reference) {
-    const years = [reference.getFullYear() - 1, reference.getFullYear(), reference.getFullYear() + 1];
+  function weekOptions() {
+    const currentMonday = TaskStore.periodBounds("weekly", ValuxTime.todayDate()).start;
     const weeks = [];
-    years.forEach((year) => {
-      const date = new Date(year, 0, 1);
-      date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
-      while (date.getFullYear() <= year || (date.getFullYear() === year + 1 && date.getMonth() === 0)) {
-        const monday = new Date(date);
-        const sunday = new Date(date);
-        sunday.setDate(sunday.getDate() + 6);
-        if (monday.getFullYear() === year || sunday.getFullYear() === year) {
-          weeks.push({ value: isoDate(monday), label: InstitutionMetrics.periodLabel("weekly", monday) });
-        }
-        date.setDate(date.getDate() + 7);
-      }
-    });
+    for (let index = 0; index < 52; index += 1) {
+      const monday = ValuxTime.parseDate(ValuxTime.addDays(currentMonday, -(index * 7)));
+      weeks.push({ value: isoDate(monday), label: InstitutionMetrics.periodLabel("weekly", monday) });
+    }
     return weeks;
   }
 
@@ -89,7 +85,7 @@
     const picker = document.getElementById("task-period-picker");
     const activePeriod = fields.period.value;
     const options = [
-      ["", "Any time"], ["daily", "Daily"], ["weekly", "Weekly"], ["monthly", "Monthly"], ["yearly", "Yearly"],
+      ["", "All time"], ["daily", "Daily"], ["weekly", "Weekly"], ["monthly", "Monthly"], ["yearly", "Yearly"],
     ];
     switcher.innerHTML = options.map(([value, label]) => `<button type="button" data-task-period="${value}" class="${value === activePeriod ? "active" : ""}" aria-pressed="${value === activePeriod}">${label}</button>`).join("");
     switcher.querySelectorAll("[data-task-period]").forEach((button) => button.addEventListener("click", () => {
@@ -108,21 +104,26 @@
     if (activePeriod === "daily") {
       picker.innerHTML = `<label>Date<input id="${inputId}" type="date" value="${isoDate(periodReference)}" /></label>`;
     } else if (activePeriod === "weekly") {
-      const selectedMonday = isoDate(TaskStore.periodBounds("weekly", periodReference).start);
-      picker.innerHTML = `<label>Week<select id="${inputId}">${weekOptions(periodReference).map((week) => `<option value="${week.value}"${week.value === selectedMonday ? " selected" : ""}>${week.label}</option>`).join("")}</select></label>`;
+      const weeks = weekOptions();
+      let selectedMonday = isoDate(TaskStore.periodBounds("weekly", periodReference).start);
+      if (!weeks.some((week) => week.value === selectedMonday)) {
+        selectedMonday = weeks[0].value;
+        periodReference = ValuxTime.parseDate(selectedMonday);
+      }
+      picker.innerHTML = `<label>Week<select id="${inputId}">${weeks.map((week) => `<option value="${week.value}"${week.value === selectedMonday ? " selected" : ""}>${week.label}</option>`).join("")}</select></label>`;
     } else if (activePeriod === "monthly") {
       picker.innerHTML = `<label>Month<input id="${inputId}" type="month" value="${isoDate(periodReference).slice(0, 7)}" /></label>`;
     } else {
-      const year = periodReference.getFullYear();
+      const year = periodReference.getUTCFullYear();
       picker.innerHTML = `<label>Year<select id="${inputId}">${Array.from({ length: 7 }, (_, index) => year - 3 + index).map((value) => `<option value="${value}"${value === year ? " selected" : ""}>${value}</option>`).join("")}</select></label>`;
     }
     document.getElementById(inputId).addEventListener("change", (event) => {
       const value = event.target.value;
       periodReference = activePeriod === "monthly"
-        ? new Date(`${value}-01T00:00:00`)
+        ? ValuxTime.parseDate(`${value}-01`)
         : activePeriod === "yearly"
-          ? new Date(`${value}-01-01T00:00:00`)
-          : new Date(`${value}T00:00:00`);
+          ? ValuxTime.parseDate(`${value}-01-01`)
+          : ValuxTime.parseDate(value);
       renderPeriodFilter();
       reset();
     });
@@ -130,7 +131,8 @@
 
   function queryOptions(limit = visible) {
     return Object.fromEntries([
-      ["group", fields.group.value], ["institution", fields.institution.value],
+      ["preparationSource", WorkflowAccess.currentRole() === "father" ? fields.preparationSource.value : ""], ["group", fields.group.value], ["institution", selectedInstitutionType() ? "" : fields.institution.value],
+      ["institutionType", selectedInstitutionType()],
       ["period", fields.period.value], ["status", fields.status.value],
       ["assignee", fields.assignee.value], ["holdReason", fields.holdReason.value],
       ["payment", fields.payment.value], ["search", fields.search.value], ["limit", limit],
@@ -146,6 +148,7 @@
     if (fields.status.value) parts.push(`Status: ${fields.status.value}`);
     if (fields.assignee.value) parts.push(`Assigned to: ${fields.assignee.value}`);
     if (fields.holdReason.value) parts.push(`On hold: ${fields.holdReason.value}`);
+    if (fields.preparationSource.value) parts.push(`Preparation: ${fields.preparationSource.selectedOptions[0].textContent}`);
     if (fields.payment.value) parts.push(`Payment: ${fields.payment.value}`);
     if (fields.search.value.trim()) parts.push(`Search: ${fields.search.value.trim()}`);
     return parts.length ? parts.join(" · ") : "All assignments visible to the signed-in user";
@@ -226,24 +229,29 @@
     return InstitutionMetrics.configured().find((institution) => institution.code === fields.institution.value);
   }
 
+  function selectedInstitutionType() {
+    return { "type:Bank": "Bank", "type:NBFC": "NBFC" }[fields.institution.value] || "";
+  }
+
+  function summaryLabel() {
+    return { Bank: "All banks", NBFC: "All NBFCs" }[selectedInstitutionType()] || "All banks and NBFCs";
+  }
+
   // Institution drill-down and all-institutions directory rendering.
   function renderInstitutionDrilldown() {
     const institution = selectedInstitution();
     const host = document.getElementById("institution-drilldown");
-    host.hidden = !institution;
-    if (!institution) return;
-    const tasks = TaskStore.query({
-      group: fields.group.value,
-      institution: institution.code,
-      period: fields.period.value,
-      periodReference,
-      limit: Number.MAX_SAFE_INTEGER,
-    }).items;
+    host.hidden = !institution && !summaryMode && !selectedInstitutionType();
+    if (host.hidden) return;
+    const tasks = TaskStore.query(queryOptions(Number.MAX_SAFE_INTEGER)).items;
     const mix = InstitutionMetrics.workflowMix(tasks);
     const maximum = Math.max(1, ...mix.map((item) => item.count));
-    document.getElementById("institution-drilldown-title").textContent = `${institution.code} · ${institution.name}`;
-    document.getElementById("institution-monogram").textContent = institution.code.slice(0, 4);
-    document.getElementById("institution-monogram").style.setProperty("--institution-color", institution.color);
+    document.getElementById("institution-drilldown-title").textContent = institution ? `${institution.code} · ${institution.name}` : summaryLabel();
+    document.getElementById("institution-monogram").textContent = institution ? institution.code.slice(0, 4) : selectedInstitutionType() === "NBFC" ? "NBFC" : "ALL";
+    document.getElementById("institution-monogram").style.setProperty("--institution-color", institution?.color || "#087ea4");
+    document.querySelectorAll(".institution-summary-cards article:not(:first-child)").forEach((card) => {
+      card.hidden = !institution && WorkflowAccess.currentRole() !== "father";
+    });
     document.getElementById("institution-drilldown-subtitle").textContent = fields.period.value
       ? `${tasks.length} assignments · ${InstitutionMetrics.periodLabel(fields.period.value, periodReference)}`
       : `${tasks.length} assignments · all dates`;
@@ -291,7 +299,7 @@
     const institution = selectedInstitution();
     document.getElementById("task-list-title").textContent = institution
       ? `${label} · ${institution.code} tasks`
-      : `${label} tasks`;
+      : summaryMode || selectedInstitutionType() ? `${label} · ${summaryLabel()}` : `${label} tasks`;
     document.getElementById("task-list-description").textContent = institution
       ? `Showing ${fields.group.value === "all" ? "all report types" : label.toLowerCase()} for ${institution.name}. Change any filter below when required.`
       : `Search and filter ${label.toLowerCase()} assignments.`;
@@ -305,9 +313,10 @@
   function updateUrl() {
     const params = new URLSearchParams();
     if (directoryMode && !selectedInstitution()) params.set("view", "institutions");
+    else if (summaryMode || selectedInstitutionType()) params.set("view", "summary");
     if (fields.group.value !== "all") params.set("group", fields.group.value);
-    if (fields.period.value) params.set("periodReference", periodReference.toISOString().slice(0, 10));
-    ["institution", "period", "status", "assignee", "holdReason", "payment"].forEach((key) => {
+    if (fields.period.value) params.set("periodReference", isoDate(periodReference));
+    ["institution", "period", "status", "assignee", "holdReason", "payment", "preparationSource"].forEach((key) => {
       if (fields[key].value) params.set(key, fields[key].value);
     });
     if (fields.search.value.trim()) params.set("search", fields.search.value.trim());
@@ -315,7 +324,7 @@
   }
 
   function needsFullAnalytics() {
-    return directoryMode || Boolean(selectedInstitution());
+    return directoryMode || summaryMode || Boolean(selectedInstitution()) || Boolean(selectedInstitutionType());
   }
 
   async function ensureFullAnalytics() {
@@ -381,6 +390,10 @@
   }
 
   async function allFilteredTasks() {
+    if (needsFullAnalytics()) {
+      await ensureFullAnalytics();
+      return TaskStore.query(queryOptions(Number.MAX_SAFE_INTEGER)).items;
+    }
     const items = [];
     let offset = 0;
     let hasMore = true;
@@ -409,10 +422,16 @@
     }
   }
 
+  const preparationFilterEnabled = WorkflowAccess.currentRole() === "father";
+  document.getElementById("preparation-filter-wrap").hidden = !preparationFilterEnabled;
+  document.getElementById("task-filters").classList.toggle("has-preparation-filter", preparationFilterEnabled);
   populateFilters();
   renderPeriodFilter();
   Object.entries(fields).forEach(([key, field]) => {
-    if (key !== "period") field.addEventListener(key === "search" ? "input" : "change", reset);
+    if (key !== "period") field.addEventListener(key === "search" ? "input" : "change", () => {
+      if (key === "institution") summaryMode = true;
+      reset();
+    });
   });
   document.getElementById("clear-institution").addEventListener("click", () => { window.location.href = "/tasks?view=institutions"; });
   loadMore.addEventListener("click", () => { visible += PAGE_SIZE; render(); });

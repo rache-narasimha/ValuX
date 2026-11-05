@@ -9,6 +9,8 @@ const state = {
   documentCount: 1,
   previewReady: false,
   previewId: null,
+  preparationMethod: "",
+  sectionPlan: [],
   generatedChangeAcknowledged: false,
   processing: false,
 };
@@ -19,6 +21,7 @@ const DRAFT_SCOPE = PAGE_PARAMS.get("practice") === "1"
     ? `task-${PAGE_PARAMS.get("task")}`
     : "standalone";
 const STORAGE_KEY = `agricultural-valuation-draft-v1-${DRAFT_SCOPE}`;
+const HAS_PREPARATION_CHOICE = window.RetrospectiveValuation?.supportsChoice("valuation-agricultural") === true;
 const {
   applyInstitutionOptions,
   areaFactors,
@@ -27,6 +30,7 @@ const {
   fieldControl: createFieldControl,
   fileData,
   institutionTypeFor,
+  installExampleAssistance,
   money,
   numeric,
   title,
@@ -48,6 +52,8 @@ function linkedTaskValues() {
     "bank.name": task.institutionName,
     "bank.branch": task.branch,
     "report.assignment_date": task.assignedDate,
+    "property.description": task.propertyBrief,
+    "owner.details": task.customerName,
   } : {};
 }
 
@@ -55,10 +61,9 @@ function fieldControl(field) {
   return createFieldControl(field, {}, (value) => areaLabels[value] || value);
 }
 
-function readonlyField(id, label) {
+function calculatedField(id, label) {
   const wrap = fieldControl({ id, label, type: "text" });
   wrap.classList.add("calculated");
-  wrap.querySelector("input").readOnly = true;
   return wrap;
 }
 
@@ -71,7 +76,10 @@ function renderDocuments(saved = {}) {
   for (let index = 1; index <= state.documentCount; index++) {
     const card = document.createElement("div");
     card.className = "document-card";
-    card.innerHTML = `<div class="document-head"><h4>Document ${index}</h4>${index > 1 ? `<button type="button" class="remove-document" data-remove-document="${index}">Remove</button>` : ""}</div><div class="grid"></div>`;
+    const isLast = index === state.documentCount;
+    const addIcon = window.AppShell?.icons?.add || "+";
+    const trashIcon = window.AppShell?.icons?.trash || "×";
+    card.innerHTML = `<div class="document-head"><h4>Document ${index}</h4><div class="document-actions">${isLast ? `<button type="button" class="document-icon-button add-document" data-add-document title="Add another document" aria-label="Add another document">${addIcon}</button>` : ""}${index > 1 ? `<button type="button" class="document-icon-button remove-document" data-remove-document="${index}" title="Remove document ${index}" aria-label="Remove document ${index}">${trashIcon}</button>` : ""}</div></div><div class="grid"></div>`;
     const grid = card.querySelector(".grid");
     const typeId = `documents.${index}.type`,
       customId = `documents.${index}.custom_type`,
@@ -81,6 +89,7 @@ function renderDocuments(saved = {}) {
         id: typeId,
         label: "Document type",
         type: "select",
+        required: true,
         options: ["Sale Deed", "LSR", "Other Documents", "Custom"],
       }),
     );
@@ -95,6 +104,7 @@ function renderDocuments(saved = {}) {
         id: detailsId,
         label: "Document details",
         type: "textarea",
+        required: true,
       }),
     );
     host.append(card);
@@ -107,6 +117,9 @@ function renderDocuments(saved = {}) {
       if (!custom.hidden) byId(customId).focus();
     });
   }
+  host
+    .querySelectorAll("[data-add-document]")
+    .forEach((button) => (button.onclick = addDocument));
   host
     .querySelectorAll("[data-remove-document]")
     .forEach(
@@ -145,9 +158,8 @@ function addDocumentSection(panel) {
   const block = document.createElement("section");
   block.className = "subgroup";
   block.innerHTML =
-    '<h3>Documents</h3><p class="hint">One document is shown by default. Add as many document rows as required.</p><div id="agricultural-document-list"></div><button type="button" class="secondary" id="add-agricultural-document">Add another document</button><section class="subgroup"><h4>Sale agreement</h4><div class="grid" id="agricultural-sale-agreement"></div></section>';
+    '<h3>Documents</h3><p class="hint">Use Add in the latest document header to include another document.</p><div id="agricultural-document-list"></div><section class="subgroup"><h4>Sale agreement</h4><div class="grid" id="agricultural-sale-agreement"></div></section>';
   panel.append(block);
-  block.querySelector("#add-agricultural-document").onclick = addDocument;
   const sale = block.querySelector("#agricultural-sale-agreement");
   sale.append(
     fieldControl({
@@ -179,7 +191,7 @@ function collectValues() {
       "#agricultural-form input,#agricultural-form select,#agricultural-form textarea",
     )
     .forEach((input) => {
-      if (input.name && input.type !== "file")
+      if (input.name && input.type !== "file" && !input.dataset.preparationMethod)
         values[input.name] =
           input.type === "checkbox"
             ? input.checked
@@ -187,6 +199,7 @@ function collectValues() {
               : "No"
             : input.value;
     });
+  values[window.ValuationCalculations.overridesKey] = calculations?.serialize() || "{}";
   return values;
 }
 
@@ -210,30 +223,9 @@ function applySaleAgreementRule() {
     ?.toggleAttribute("hidden", !show);
 }
 
-function calculateAll() {
-  const extent = numeric(byId("valuation.total_extent_value")?.value);
-  const extentUnit = byId("valuation.extent_unit")?.value;
-  const rate = numeric(byId("valuation.adopted_rate_value")?.value);
-  const rateUnit = byId("valuation.adopted_rate_unit")?.value;
-  const ready = extent > 0 && rate > 0 && extentUnit && rateUnit;
-  const converted = ready
-    ? (extent * areaFactors[extentUnit]) / areaFactors[rateUnit]
-    : 0;
-  const estimated = converted * rate;
-  if (byId("valuation.converted_extent_display"))
-    byId("valuation.converted_extent_display").value = ready
-      ? `${converted.toFixed(4).replace(/\.?0+$/, "")} ${areaLabels[rateUnit]}`
-      : "";
-  if (byId("valuation.estimated_value_display"))
-    byId("valuation.estimated_value_display").value = ready
-      ? money(estimated)
-      : "";
-  if (byId("valuation.book_value_display"))
-    byId("valuation.book_value_display").value = ready ? money(estimated) : "";
-  if (byId("valuation.distress_value_display"))
-    byId("valuation.distress_value_display").value = ready
-      ? money(estimated * 0.8)
-      : "";
+let calculations;
+function calculateAll(changedId) {
+  calculations?.refresh(changedId);
 }
 
 function addCalculatedValues(panel) {
@@ -243,20 +235,20 @@ function addCalculatedValues(panel) {
     '<h3>Calculated valuation</h3><p class="hint">The total extent is converted into the adopted rate unit before multiplication. Book value equals the estimated market value; distress value is 80%.</p><div class="grid"></div>';
   const grid = block.querySelector(".grid");
   grid.append(
-    readonlyField(
+    calculatedField(
       "valuation.converted_extent_display",
       "Converted extent in adopted-rate unit",
     ),
   );
   grid.append(
-    readonlyField(
+    calculatedField(
       "valuation.estimated_value_display",
-      "Estimated / present market value",
+      "Estimated / Present Market Value",
     ),
   );
-  grid.append(readonlyField("valuation.book_value_display", "Book value"));
+  grid.append(calculatedField("valuation.book_value_display", "Book Value"));
   grid.append(
-    readonlyField("valuation.distress_value_display", "Distress value (80%)"),
+    calculatedField("valuation.distress_value_display", "Distress Value (80%)"),
   );
   panel.append(block);
 }
@@ -264,7 +256,7 @@ function addCalculatedValues(panel) {
 // Uploaded-media previews and report request state.
 function mediaSection(panel) {
   panel.innerHTML +=
-    '<section class="subgroup"><h3>Property photographs</h3><p class="hint">New selections are added to the photographs already shown. The report uses one photo per row for 1–4 photos, two per row for 5–6, and three per row for 7–9. More than nine continues on the next page. Every image is rotated from its camera metadata, scaled proportionally and never cropped.</p><input id="photo-upload" type="file" accept="image/*" multiple><p class="hint media-save-note">Task-linked photographs are retained with the draft. Practice photographs remain local to this browser.</p><div id="photo-preview" class="preview-grid"></div></section><section class="subgroup"><h3>Route map</h3><p class="hint">Upload one map screenshot. It is placed on its own page after the photographs.</p><input id="map-upload" type="file" accept="image/*"><div id="map-preview" class="map-preview"></div></section>';
+    '<section class="subgroup"><h3>Property photographs</h3><p class="hint">New selections are added to those already shown. Reports use a 3 × 4 media grid with up to 12 items per page. The route map follows the photographs in the next available cell; after an exact batch of 12 photographs it starts the next page. Images retain their full aspect ratio and are never cropped.</p><input id="photo-upload" type="file" accept="image/*" multiple><p class="hint media-save-note">Task-linked photographs are retained with the draft. Practice photographs remain local to this browser.</p><div id="photo-preview" class="preview-grid three-columns"></div></section><section class="subgroup"><h3>Route map</h3><p class="hint">Upload one map screenshot. It follows the photographs in the 12-item media sequence.</p><input id="map-upload" type="file" accept="image/*"><div id="map-preview" class="map-preview"></div></section>';
   panel.querySelector("#photo-upload").onchange = async (event) => {
     if (!confirmReportInvalidation()) {
       event.target.value = "";
@@ -296,15 +288,22 @@ function mediaSection(panel) {
 function renderPreviews() {
   const host = byId("photo-preview");
   if (host) {
-    const currentPageCount = Math.min(state.photos.length, 9);
-    host.classList.toggle("one-column", currentPageCount <= 4);
-    host.classList.toggle("three-columns", currentPageCount >= 7);
-    host.innerHTML = state.photos
-      .map(
-        (photo, index) =>
-          `<div class="photo-tile"><img src="${photo.data}" alt="${photo.name}"><button type="button" data-remove-photo="${index}" aria-label="Remove ${photo.name}">Remove</button></div>`,
-      )
-      .join("");
+    host.classList.remove("one-column");
+    host.classList.add("three-columns");
+    host.replaceChildren(...state.photos.map((photo, index) => {
+      const tile = document.createElement("div");
+      tile.className = "photo-tile";
+      const image = document.createElement("img");
+      image.src = photo.data;
+      image.alt = photo.name || `Property photograph ${index + 1}`;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.dataset.removePhoto = String(index);
+      remove.setAttribute("aria-label", `Remove ${photo.name || `photograph ${index + 1}`}`);
+      remove.textContent = "Remove";
+      tile.append(image, remove);
+      return tile;
+    }));
     host.querySelectorAll("[data-remove-photo]").forEach(
       (button) =>
         (button.onclick = () => {
@@ -334,6 +333,29 @@ function renderPreviews() {
 
 function currentTask() {
   return ReportData.taskCode && window.TaskStore ? TaskStore.get(ReportData.taskCode) : null;
+}
+async function setPreparationMethod(method) {
+  if (!HAS_PREPARATION_CHOICE || !["online", "offline"].includes(method)) return false;
+  if (state.preparationMethod === method) return true;
+  const previous = state.preparationMethod;
+  const task = currentTask();
+  if (previous && task?.reportGeneratedAt) {
+    const accepted = window.confirm("Change the preparation method? The retained report attachment will be removed. Your entered form details will be kept.");
+    if (!accepted) return false;
+    try {
+      await BusinessApi.delete(`/api/tasks/${encodeURIComponent(task.id)}/artifacts/latest`);
+      await TaskStore.refresh(task.id);
+    } catch (error) {
+      window.alert(error.message || "The retained report could not be removed. Try again before changing the preparation method.");
+      return false;
+    }
+  }
+  state.preparationMethod = method;
+  markDirty();
+  applyPreparationMode();
+  await persistDraftNow();
+  show(state.sectionPlan.findIndex((section) => section.id === (method === "online" ? "property" : "offline")));
+  return true;
 }
 function confirmReportInvalidation() {
   const task = currentTask();
@@ -372,10 +394,13 @@ function setProcessing(active, titleText = "", stage = "") {
 }
 
 // Section navigation, local drafts, and input event wiring.
+function visibleSectionIndexes() {
+  return state.sections.map((panel, index) => panel.hidden ? null : index).filter((index) => index !== null);
+}
 function updateNavigation() {
-  state.sections.forEach((panel, index) =>
-    panel.classList.toggle("active", index === state.current),
-  );
+  const visible = visibleSectionIndexes();
+  const position = visible.indexOf(state.current);
+  state.sections.forEach((panel, index) => panel.classList.toggle("active", index === state.current));
   document
     .querySelectorAll("#nav button")
     .forEach((button) =>
@@ -385,14 +410,42 @@ function updateNavigation() {
       ),
     );
   byId("progress").textContent =
-    `Section ${state.current + 1} of ${state.sections.length}`;
-  byId("previous").disabled = state.current === 0;
-  byId("next").disabled = state.current === state.sections.length - 1;
+    `Section ${position + 1} of ${visible.length}`;
+  byId("previous").disabled = position <= 0;
+  byId("next").disabled = position < 0 || position === visible.length - 1;
 }
 function show(index) {
-  state.current = Math.max(0, Math.min(index, state.sections.length - 1));
+  const visible = visibleSectionIndexes();
+  if (!visible.length) return;
+  if (!visible.includes(index)) index = visible.find((item) => item > index) ?? visible[visible.length - 1];
+  state.current = index;
   updateNavigation();
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+function moveSection(offset) {
+  const visible = visibleSectionIndexes();
+  const position = visible.indexOf(state.current);
+  const next = visible[position + offset];
+  if (next !== undefined) show(next);
+}
+function applyPreparationMode() {
+  const online = !HAS_PREPARATION_CHOICE || state.preparationMethod === "online";
+  if (HAS_PREPARATION_CHOICE) {
+    document.body.dataset.valuationPreparation = state.preparationMethod;
+    window.dispatchEvent(new CustomEvent("sln:valuation-preparation-changed"));
+  }
+  state.sectionPlan.forEach((section, index) => {
+    const alwaysVisible = section.id === "report" || section.id === "preparation";
+    const visible = alwaysVisible || (section.id === "offline" ? state.preparationMethod === "offline" : online);
+    state.sections[index].toggleAttribute("hidden", !visible);
+    document.querySelectorAll(`[data-section-index="${index}"]`).forEach((button) => button.toggleAttribute("hidden", !visible));
+    state.sections[index].querySelectorAll("input,select,textarea,button").forEach((control) => {
+      if (!control.dataset.preparationMethod) control.disabled = !visible;
+    });
+  });
+  ["preview-report", "generate-docx", "generate-pdf"].forEach((id) => byId(id).toggleAttribute("hidden", !online));
+  if (state.sections[state.current]?.hidden) show(state.sectionPlan.findIndex((section) => section.id === "preparation"));
+  else updateNavigation();
 }
 function validateRequiredFields(form) {
   if (form.checkValidity()) return true;
@@ -421,10 +474,12 @@ async function persistDraftNow() {
   saveTimer = null;
   const saved = await ReportData.save(STORAGE_KEY, "valuation-agricultural", {
     values: collectValues(),
+    preparationMethod: state.preparationMethod,
+    uploadType: byId("valuation-upload-type")?.value || "",
     documentCount: state.documentCount,
     photos: state.photos,
     map: state.map,
-  }, "1");
+  }, String(state.schema.version || "2"));
   state.photos = Array.isArray(saved.photos) ? saved.photos : [];
   state.map = saved.map || null;
   renderPreviews();
@@ -455,7 +510,7 @@ function wireInputs() {
       "#agricultural-form input,#agricultural-form select,#agricultural-form textarea",
     )
     .forEach((input) => {
-      if (input.type === "file" || input.readOnly || input.dataset.wired)
+      if (input.type === "file" || input.readOnly || input.dataset.preparationMethod || input.dataset.wired)
         return;
       input.dataset.wired = "1";
       input.addEventListener("focus", () => {
@@ -480,7 +535,7 @@ function wireInputs() {
         input.dataset.previousValue = input.value;
         input.dataset.previousChecked = String(input.checked);
         if (input.id === "institution.type") applyInstitutionOptions();
-        calculateAll();
+        calculateAll(input.id);
         applySaleAgreementRule();
         markDirty();
         saveDraft();
@@ -489,6 +544,8 @@ function wireInputs() {
       input.addEventListener("change", changed);
     });
 }
+
+window.addEventListener("sln:valuation-upload-type-changed", () => { markDirty(); saveDraft(); });
 
 // Page assembly and report-generation event wiring.
 async function init() {
@@ -499,17 +556,32 @@ async function init() {
   });
   const draft = await restoreDraft();
   const initialValues = { ...(draft?.values || {}), ...linkedTaskValues() };
+  state.preparationMethod = HAS_PREPARATION_CHOICE
+    ? (draft?.preparationMethod || (currentTask()?.retrospectiveReady ? "offline" : (currentTask()?.reportGeneratedAt || ReportData.preview()?.id ? "online" : "")))
+    : "online";
   state.documentCount = Math.max(1, draft?.documentCount || 1);
   state.photos = Array.isArray(draft?.photos) ? draft.photos : [];
   state.map = draft?.map || null;
   const host = byId("sections");
-  state.schema.sections.forEach((section, index) => {
-    const panel = document.createElement("div");
-    panel.className = "panel";
-    panel.dataset.section = section.id;
-    panel.innerHTML = `<h2>${section.label}</h2>`;
-    if (section.id === "media") mediaSection(panel);
-    else {
+  state.sectionPlan = HAS_PREPARATION_CHOICE
+    ? [state.schema.sections[0], { id: "preparation", label: "Preparation Method" }, ...state.schema.sections.slice(1), { id: "offline", label: "Complete & Upload Report" }]
+    : [...state.schema.sections];
+  state.sectionPlan.forEach((section, index) => {
+    let panel;
+    if (section.id === "preparation") {
+      panel = window.RetrospectiveValuation.preparationPanel("valuation-agricultural", state.preparationMethod, setPreparationMethod);
+    } else if (section.id === "offline") {
+      panel = window.RetrospectiveValuation.offlinePanel("valuation-agricultural", draft?.uploadType);
+    } else {
+      panel = document.createElement("div");
+      panel.className = "panel";
+      panel.dataset.section = section.id;
+      panel.innerHTML = `<h2>${section.label}</h2>`;
+    }
+    if (section.id === "media") {
+      mediaSection(panel);
+    }
+    else if (!["preparation", "offline"].includes(section.id)) {
       if (section.id === "property") addDocumentSection(panel);
       const fields = state.schema.fields.filter(
         (field) => field.section === section.id,
@@ -538,6 +610,11 @@ async function init() {
     button.onclick = () => show(index);
     byId("nav").append(button);
   });
+  calculations = window.ValuationCalculations.create("agricultural", byId("agricultural-form"), {
+    floorCount: () => state.floorCount || 1,
+    beforeReset: confirmReportInvalidation,
+    onReset: () => { markDirty(); saveDraft(); },
+  });
   if (Object.keys(initialValues).length) {
     const type =
       initialValues["institution.type"] ||
@@ -549,9 +626,12 @@ async function init() {
     if (draft?.values && Object.values(draft.values).some((value) => String(value ?? "").trim()))
       byId("status").textContent = "Draft restored";
   } else applyInstitutionOptions();
+  calculations.restore(initialValues);
   wireInputs();
+  installExampleAssistance(byId("agricultural-form"), "agricultural");
   calculateAll();
   applySaleAgreementRule();
+  applyPreparationMode();
   show(0);
   const restoredPreview = ReportData.preview();
   if (restoredPreview?.id) {
@@ -563,8 +643,8 @@ async function init() {
   }
 }
 
-byId("previous").onclick = () => show(state.current - 1);
-byId("next").onclick = () => show(state.current + 1);
+byId("previous").onclick = () => moveSection(-1);
+byId("next").onclick = () => moveSection(1);
 byId("agricultural-form").addEventListener("click", (event) => {
   if (event.target.dataset.format) state.format = event.target.dataset.format;
 });

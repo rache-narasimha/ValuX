@@ -1,12 +1,19 @@
 """Public form-schema assembly for each report type."""
 
 import json
+import hashlib
+import re
 
 from .config import AGRICULTURAL_SCHEMA, AGRICULTURAL_TEMPLATE, SCHEMA, TEMPLATE
+
+
+def _template_version(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
 
 def schema_payload():
     schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
     schema["template"] = TEMPLATE.name
+    schema["template_version"] = _template_version(TEMPLATE)
     schema["defaults"] = {}
     schema["setup_fields"] = [
         {"id": "property.category", "label": "Property category", "type": "select", "required": True, "options": schema["property_categories"]},
@@ -42,5 +49,48 @@ def schema_payload():
 def agricultural_schema_payload():
     schema = json.loads(AGRICULTURAL_SCHEMA.read_text(encoding="utf-8"))
     schema["template"] = AGRICULTURAL_TEMPLATE.name
+    schema["template_version"] = _template_version(AGRICULTURAL_TEMPLATE)
     schema["defaults"] = {}
     return schema
+
+
+def validate_report_values(report_key, values):
+    """Enforce the required valuation fields on the server before generation."""
+    if not isinstance(values, dict):
+        raise ValueError("The report values are missing.")
+    if report_key == "valuation-general":
+        schema = schema_payload()
+        fields = [*schema["setup_fields"], *schema["fields"]]
+        legacy_dynamic = {
+            "documents.deed_type", "documents.deed_details", "documents.approved_plan",
+            "documents.legal_scrutiny", "documents.tax_receipt",
+        }
+        has_building = "land_building" in str(values.get("property.category", ""))
+        fields = [field for field in fields if field.get("id") not in legacy_dynamic]
+    elif report_key == "valuation-agricultural":
+        fields = agricultural_schema_payload()["fields"]
+        has_building = False
+    else:
+        raise ValueError("Unsupported valuation report type.")
+    missing = []
+    for field in fields:
+        if not field.get("required") or field.get("calculated"):
+            continue
+        if field.get("conditional") == "property.has_building" and not has_building:
+            continue
+        # Template aliases are populated from their canonical form control.
+        # They are not separate inputs (for example valuation_date_detail).
+        value_id = field.get("source") or field["id"]
+        if not str(values.get(value_id, "")).strip():
+            missing.append(field.get("label") or field["id"])
+    document_indexes = {1}
+    for field_id in values:
+        match = re.fullmatch(r"documents\.(\d+)\.(?:type|details)", str(field_id))
+        if match:
+            document_indexes.add(int(match.group(1)))
+    for index in sorted(document_indexes):
+        for suffix, label in (("type", "Document type"), ("details", "Document details")):
+            if not str(values.get(f"documents.{index}.{suffix}", "")).strip():
+                missing.append(f"{label} for Document {index}")
+    if missing:
+        raise ValueError(f"Complete the required field: {missing[0]}.")

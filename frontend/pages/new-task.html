@@ -29,7 +29,7 @@
           <div class="form-section-heading"><span>2</span><div><h2>Customer and property</h2><p>This identifies the assignment; it does not alter the report form.</p></div></div>
           <div class="form-grid">
             <div class="field full"><label class="required" for="customer-name">Applicant / customer name</label><input id="customer-name" required autocomplete="name" placeholder="Enter the full name" /></div>
-            <div class="field full"><label class="required" for="property-brief">Property location or short description</label><textarea id="property-brief" required placeholder="A short description that helps identify the property"></textarea></div>
+            <div class="field full"><label class="required" for="property-brief">Property description</label><textarea id="property-brief" required placeholder="Describe the property and its location"></textarea></div>
           </div>
         </section>
         <section class="form-section">
@@ -47,7 +47,19 @@
             <div class="field"><label class="required" for="priority">Priority</label><select id="priority" required><option value="Normal">Normal</option><option value="High">High</option><option value="Urgent">Urgent</option></select></div>
             <div class="field"><label class="required" for="assigned-date">Assigned date</label><input id="assigned-date" type="date" required /></div>
             <div class="field"><label class="required" for="due-date">Due date</label><input id="due-date" type="date" required /><small class="field-help" id="due-date-help"></small></div>
-            <div class="field full"><label for="initial-note">Brief description</label><textarea id="initial-note" placeholder="Optional for an unassigned task; required when routing work to someone"></textarea><small class="field-help" id="initial-note-help">Use “Acknowledged” for self-assignment or briefly explain why the work is being routed to another employee.</small></div>
+            <div class="field full"><label for="initial-note">Initial work note</label><textarea id="initial-note" placeholder="Optional for an unassigned task; required when routing work to someone"></textarea><small class="field-help" id="initial-note-help">Use “Acknowledged” for self-assignment or briefly explain why the work is being routed to another employee.</small></div>
+          </div>
+        </section>
+        <section id="similar-task-warning" class="similar-task-warning" role="alert" hidden>
+          <div>
+            <strong id="similar-task-title">A similar assignment already exists</strong>
+            <p id="similar-task-description"></p>
+            <small id="similar-task-details"></small>
+          </div>
+          <div class="similar-task-actions">
+            <a id="similar-task-open" class="button-link secondary" target="_blank" rel="noopener">Open existing task</a>
+            <button id="similar-task-proceed" class="primary" type="button">Create anyway</button>
+            <button id="similar-task-cancel" class="secondary" type="button">Cancel</button>
           </div>
         </section>
         <div id="task-error" class="form-error" role="alert" hidden></div>
@@ -68,6 +80,7 @@
       </section>
     </div>
     <script src="/assets/js/core/business-api.js"></script>
+    <script src="/assets/js/core/time.js"></script>
     <script src="/assets/js/core/app-shell.js"></script>
     <script src="/assets/js/core/workflow-access.js"></script>
     <script src="/assets/js/core/institutions.js"></script>

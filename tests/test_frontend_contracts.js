@@ -32,6 +32,7 @@ assert.deepEqual(browserStorageUsers.sort(), [
   "frontend/assets/js/core/app-shell.js",
   "frontend/assets/js/core/appearance.js",
   "frontend/assets/js/core/report-data.js",
+  "frontend/assets/js/core/shared.js",
   "frontend/assets/js/pages/auth.js",
 ].sort(), "Browser storage must remain limited to appearance/navigation, practice drafts, and temporary auth recovery codes");
 
@@ -68,8 +69,13 @@ for (const htmlPath of ["index.html", "tasks.html", "task.html", "new-task.html"
   const apiPosition = html.indexOf('src="/assets/js/core/business-api.js"');
   const taskStorePosition = html.indexOf('src="/assets/js/core/task-store.js"');
   const institutionPosition = html.indexOf('src="/assets/js/core/institutions.js"');
+  const timePosition = html.indexOf('src="/assets/js/core/time.js"');
   assert.ok(apiPosition >= 0, `${htmlPath} must load the authenticated business API adapter`);
-  if (taskStorePosition >= 0) assert.ok(apiPosition < taskStorePosition, `${htmlPath} must load BusinessApi before TaskStore`);
+  assert.ok(timePosition >= 0, `${htmlPath} must load tenant-calendar support`);
+  if (taskStorePosition >= 0) {
+    assert.ok(apiPosition < taskStorePosition, `${htmlPath} must load BusinessApi before TaskStore`);
+    assert.ok(timePosition < taskStorePosition, `${htmlPath} must load tenant-calendar support before TaskStore`);
+  }
   if (institutionPosition >= 0) assert.ok(apiPosition < institutionPosition, `${htmlPath} must load BusinessApi before InstitutionStore`);
 }
 
@@ -109,6 +115,29 @@ assert.match(institutionOfflineSource, /offline-artifact-download[\s\S]*?Downloa
 const institutionOfflineCss = fs.readFileSync(path.join(root, "frontend", "assets", "css", "institution-valuation-offline.css"), "utf8");
 assert.match(institutionOfflineCss, /\.institution-offline-valuation \.file-input\s*\{\s*display:\s*none;/, "Institution-specific uploads must hide the native file input");
 
+const valuationPreparationSource = fs.readFileSync(path.join(root, "frontend", "assets", "js", "pages", "retrospective-valuation.js"), "utf8");
+assert.match(valuationPreparationSource, /\["father", "employee"\][\s\S]*supportsChoice/, "CEO and employees must both receive the standard valuation preparation choice");
+assert.match(valuationPreparationSource, /Fill online[\s\S]*Complete offline and upload/, "Valuation preparation must present one online and one offline route");
+assert.match(valuationPreparationSource, /function preparationPanel[\s\S]*function offlinePanel/, "Preparation choice and offline upload must be separate report sections");
+assert.doesNotMatch(valuationPreparationSource, /CEO-only|data-retrospective-mode|Import retrospective report/, "Offline valuation controls must not expose the superseded CEO-only nested route UI");
+
+const generalControllerSource = fs.readFileSync(path.join(root, "frontend", "assets", "js", "pages", "general.js"), "utf8");
+const agriculturalControllerSource = fs.readFileSync(path.join(root, "frontend", "assets", "js", "pages", "agricultural.js"), "utf8");
+for (const [label, source] of [["General", generalControllerSource], ["Agricultural", agriculturalControllerSource]]) {
+  assert.match(source, /preparationMethod[\s\S]*ReportData\.save/, `${label} preparation method must be retained in the durable draft`);
+  assert.match(source, /Preparation Method[\s\S]*Complete & Upload Report/, `${label} must place preparation before the dedicated offline upload section`);
+  assert.doesNotMatch(source, /RetrospectiveValuation\?\.attach|RetrospectiveValuation\.attach/, `${label} must not append offline upload controls to Photos & Map`);
+}
+
+const agriculturalSchema = JSON.parse(fs.readFileSync(path.join(root, "resources", "agricultural", "form_schema.json"), "utf8"));
+assert.deepEqual(agriculturalSchema.sections.map((section) => section.label), ["Report Setup", "Documents & Property", "Site & Land", "Valuation", "Photos & Map"], "Agricultural section names must match the standard valuation terminology");
+
+const reportFoundationCss = fs.readFileSync(path.join(root, "frontend", "assets", "css", "report-form", "foundation.css"), "utf8");
+assert.doesNotMatch(reportFoundationCss, /\.hint\s*\{[^}]*margin:\s*-[^;}]+/s, "Report helper text must not use negative margins that crowd section headings");
+const reportContextCss = fs.readFileSync(path.join(root, "frontend", "assets", "css", "workflow", "report-context.css"), "utf8");
+assert.match(reportContextCss, /\.report-task-context__summary\s*\{[^}]*min-width:\s*0/s, "Long assignment names must be allowed to wrap inside their banner column");
+assert.match(reportContextCss, /\.report-direct-actions button\s*\{[^}]*flex:\s*0 0 auto[^}]*white-space:\s*nowrap/s, "Assignment action buttons must retain stable dimensions beside long names");
+
 for (const pageName of ["general.html", "agricultural.html", "estimation.html", "progress-completion.html"]) {
   const page = fs.readFileSync(path.join(root, "frontend", "pages", pageName), "utf8");
   assert.match(page, /src="\/assets\/js\/core\/report-data\.js"/, `${pageName} must load durable task-report data support`);
@@ -122,7 +151,10 @@ assert.match(tasksPage, /src="\/assets\/js\/core\/workbook-export\.js"/, "Task e
 assert.match(tasksPage, /id="task-period-switch"/, "Assignment lists must use the selectable date-period control");
 assert.match(tasksPage, /id="task-period-picker"/, "Assignment lists must allow a selected day, week, month, or year");
 const taskListSource = fs.readFileSync(path.join(root, "frontend", "assets", "js", "pages", "task-list.js"), "utf8");
-assert.match(taskListSource, /function weekOptions\(reference\)/, "Assignment lists must provide selectable week ranges");
+assert.match(taskListSource, /\["", "All time"\]/, "Assignment lists must label the unbounded date filter as All time");
+assert.match(taskListSource, /function weekOptions\(\)/, "Assignment lists must provide selectable week ranges");
+assert.match(taskListSource, /index < 52/, "Assignment weekly filters must offer the current and preceding 51 weeks");
+assert.match(taskListSource, /ValuxTime\.todayDate\(\)/, "Assignment periods must use the tenant calendar");
 assert.match(taskListSource, /type="month"/, "Assignment lists must provide a month picker beyond the current month");
 
 const newTaskPage = fs.readFileSync(path.join(root, "frontend", "pages", "new-task.html"), "utf8");
@@ -133,6 +165,9 @@ assert.match(newTaskPage, /id="linked-estimation-modal"/, "Progress and Completi
 assert.match(newTaskPage, /id="estimation-picker-search"/, "The eligible-estimation dialog must be searchable");
 assert.match(newTaskPage, /id="estimation-picker-institution"/, "The eligible-estimation dialog must support institution filtering");
 assert.match(newTaskPage, /id="estimation-picker-more"/, "The eligible-estimation dialog must expose bounded pagination");
+assert.match(newTaskPage, /id="similar-task-warning"/, "Assignment creation must show a reviewable similar-task warning");
+assert.match(newTaskSource, /allowSimilarTaskId/, "A user must be able to explicitly create genuinely separate similar work");
+assert.match(newTaskSource, /error\.code === "duplicate"/, "Exact duplicate assignments must remain blocked with the existing task shown");
 
 const institutionStoreSource = fs.readFileSync(path.join(root, "frontend", "assets", "js", "core", "institutions.js"), "utf8");
 assert.doesNotMatch(institutionStoreSource, /localStorage|sessionStorage/, "Institution data must come only from the backend API");
@@ -154,12 +189,12 @@ assert.match(
 );
 assert.match(
   estimationController,
-  /component-mode-separator[\s\S]*?function reportModePanel\(\)[\s\S]*?class="subgroup report-mode-panel"/,
-  "Estimation preparation mode must remain a separate component-selection section",
+  /function sectionDefinitions\(\)[\s\S]*?key: "setup"[\s\S]*?key: "preparation"[\s\S]*?label: "Preparation Method"/,
+  "Estimation preparation method must precede component selection",
 );
 assert.match(
   estimationController,
-  /const online = state\.details\.workMode === "online";[\s\S]*?const offline = state\.details\.workMode === "offline";[\s\S]*?Choose preparation method/,
+  /if \(state\.details\.workMode !== "online"\) return setup;/,
   "A missing preparation mode must not be presented as the online route",
 );
 assert.match(

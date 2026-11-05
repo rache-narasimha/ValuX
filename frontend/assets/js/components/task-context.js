@@ -19,6 +19,7 @@
 
   let task = taskId && window.TaskStore ? TaskStore.get(taskId) : null;
   let pageReportDirty = false;
+  let noteExpanded = false;
   if (!task) return;
   if (!WorkflowAccess.can("openReport", task)) {
     alert("This report can be edited only after the task is assigned to you. Open assignment details to claim or transfer it first.");
@@ -52,6 +53,13 @@
     <section id="report-history" class="report-inline-history" hidden><div class="compact-section-heading"><h3>Task history</h3><span id="report-history-count" class="soft-badge"></span></div><ol id="report-history-list" class="activity-list"></ol></section>
     <div class="report-task-notes__links"><a href="/tasks/detail?id=${encodeURIComponent(task.id)}">Back to assignment details</a><a href="/">Back to work dashboard</a></div>`;
   reportForm.insertAdjacentElement("afterend", bottom);
+  const noteToggle = document.createElement("button");
+  noteToggle.type = "button";
+  noteToggle.className = "secondary";
+  noteToggle.textContent = "Add note";
+  noteToggle.hidden = true;
+  noteToggle.setAttribute("aria-expanded", "false");
+  bottom.querySelector(".report-note-actions").prepend(noteToggle);
 
   const holdModal = document.createElement("div");
   holdModal.className = "workflow-modal";
@@ -80,6 +88,14 @@
   }
 
   function requestWorkNote(message) {
+    if (document.body.dataset.valuationPreparation === "offline") {
+      const output = document.querySelector("[data-offline-status]");
+      if (output) {
+        output.textContent = message;
+        output.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+    }
     noteError.textContent = message;
     noteError.hidden = false;
     bottom.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -87,15 +103,17 @@
   }
 
   function completionBlockReason(current) {
-    const refreshReportMessage = current.reportGroup === "estimation"
-      ? "Generate or attach the latest completed Excel report before marking this task Completed."
-      : "Preview and generate the latest report before marking this task Completed.";
+    const refreshReportMessage = current.retrospectiveReady
+      ? "Remove and attach the completed offline report again before marking this task Completed."
+      : current.reportGroup === "estimation"
+        ? "Generate or attach the latest completed estimation report before marking this task Completed."
+        : "Preview and generate the latest report before marking this task Completed.";
     if (current.status === "On Hold") return "Resume work before marking this task Completed.";
     if (current.status !== "In Progress") return `A ${current.status} task cannot be marked Completed.`;
     if (pageReportDirty) return `The form has changed. ${refreshReportMessage}`;
     if (!current.reportGeneratedAt) return "Generate the report successfully before marking this task Completed.";
     if (current.reportFresh === false) return `The retained report is outdated because the form changed. ${refreshReportMessage}`;
-    if ((current.reportGroup === "estimation" || TaskStore.requiresInstitutionOfflineArtifact(current)) && !TaskStore.hasFreshRequiredArtifact(current)) {
+    if (!current.retrospectiveReady && (current.reportGroup === "estimation" || TaskStore.requiresInstitutionOfflineArtifact(current)) && !TaskStore.hasFreshRequiredArtifact(current)) {
       return `Generate or attach the ${TaskStore.requiredArtifactLabel(current)} before marking this task Completed.`;
     }
     if (current.reopenedAt && !TaskStore.hasFreshRequiredArtifact(current)) {
@@ -118,6 +136,17 @@
       ? task.reportFresh === false ? "Report outdated" : `Generated ${WorkflowUI.date(task.reportGeneratedAt)}`
       : "Report not generated";
     const completionReason = completionBlockReason(task);
+    const offline = document.body.dataset.valuationPreparation === "offline";
+    bottom.classList.toggle("report-offline-notes", offline);
+    bottom.querySelector(".report-completion-heading").hidden = offline;
+    document.getElementById("report-complete-top").hidden = offline;
+    document.getElementById("complete-task").hidden = offline;
+    noteToggle.hidden = !offline;
+    noteToggle.textContent = noteExpanded ? "Hide note" : "Add note";
+    noteToggle.setAttribute("aria-expanded", String(noteExpanded));
+    bottom.querySelectorAll("label[for='report-work-note'], #report-work-note, button[type='submit']").forEach((node) => {
+      node.hidden = offline && !noteExpanded;
+    });
     [document.getElementById("complete-task"), document.getElementById("report-complete-top")].forEach((button) => {
       button.classList.toggle("is-unavailable", Boolean(completionReason));
       button.setAttribute("aria-disabled", String(Boolean(completionReason)));
@@ -135,10 +164,12 @@
       requestWorkNote(completionReason);
       return;
     }
-    if (!workNote.value.trim()) {
+    const current = currentTask();
+    if (!current.retrospectiveReady && !workNote.value.trim()) {
       requestWorkNote("Add the completion work note, then select Mark Completed again.");
       return;
     }
+    if (current.retrospectiveReady && !workNote.value.trim() && !window.confirm("Mark this task Completed using the work note recorded with the offline report upload?")) return;
     try {
       await TaskStore.complete(taskId, workNote.value);
       window.location.replace("/");
@@ -180,8 +211,15 @@
     } catch (error) { requestWorkNote(error.message); }
   });
   document.getElementById("report-add-note").addEventListener("click", () => {
+    noteExpanded = true;
+    render();
     bottom.scrollIntoView({ behavior: "smooth", block: "start" });
     window.setTimeout(() => workNote.focus(), 350);
+  });
+  noteToggle.addEventListener("click", () => {
+    noteExpanded = !noteExpanded;
+    render();
+    if (noteExpanded) workNote.focus();
   });
   document.getElementById("report-note-form").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -189,6 +227,8 @@
     try {
       await TaskStore.addNote(taskId, workNote.value);
       workNote.value = "";
+      noteExpanded = false;
+      render();
     } catch (error) { requestWorkNote(error.message); }
   });
   document.getElementById("complete-task").addEventListener("click", completeTask);
@@ -227,6 +267,14 @@
   window.addEventListener("sln:report-dirty", () => {
     pageReportDirty = true;
     render();
+  });
+  window.addEventListener("sln:valuation-preparation-changed", render);
+  window.addEventListener("sln:complete-offline-valuation", async () => {
+    const button = document.querySelector("[data-offline-upload]");
+    if (!button || button.disabled) return;
+    button.disabled = true;
+    try { await completeTask(); }
+    finally { button.disabled = false; }
   });
   render();
 })();

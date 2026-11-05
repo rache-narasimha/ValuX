@@ -106,10 +106,18 @@ order as a local cleanup. Those changes affect multiple pages at once.
 - `task-context.js`: workflow controls shown around a report form opened from a task.
 - `general.js`: general-property valuation form only.
 - `agricultural.js`: agricultural valuation form only.
-- `estimation.js`: detailed-estimation configuration, measurements, drafts and XLSX workflow.
+- `estimation.js`: preparation choice, detailed-estimation configuration, measurements, drafts and online XLSX workflow.
+- `estimation-offline.js`: attachment-first XLSX/DOCX/PDF entry and reviewed component totals.
+- `retrospective-valuation.js`: standard offline valuation uploads, explicit upload type and task-recorded template downloads.
 - `progress-completion.js`: linked-estimation progress/completion entry, photographs, preview and DOCX generation.
 - `institution-settings.js`: CEO-only institution maintenance.
 - `report-layout.js`: long-form navigation collapse state.
+
+`core/valuation-calculations.js` owns general/agricultural live calculated-result
+dependencies and explicit draft overrides. It mirrors valuation arithmetic from
+`valuation/calculations.py`; it does not change section visibility or workflow
+permissions. Manual results are stored under `calculation.overrides` inside the
+existing report values so draft and artifact freshness include those edits.
 
 ## Backend boundaries
 
@@ -139,12 +147,18 @@ than by HTTP endpoint:
   It owns durable business tables and least-privilege grants but no workflow
   decisions.
 - `workflow/service.py`: authoritative task creation, assignment, transitions,
-  duplicate/concurrency checks, payments, paginated lists and eligible
-  estimation selection. `workflow/routes.py` is its authenticated HTTP adapter.
+  duplicate/concurrency checks, payments, paginated lists, CEO-only preparation
+  filtering, task template-download records and linked-estimation correction cascades.
+  Dependant source tags join the current parent method; immutable cost snapshots
+  advance only through the explicit reopen/finalize/review correction workflow.
+  `workflow/routes.py` is its authenticated HTTP adapter.
 - `reference/service.py`: durable bank/NBFC directory and CEO-only mutations.
 - `reports/service.py`: durable task-linked drafts, task-scoped image files,
   report revisions, generated/uploaded artifacts and immutable estimation
-  snapshots. `reports/routes.py` is the authenticated draft/file adapter.
+  snapshots for online XLSX and offline XLSX/DOCX/PDF. Explicit preparation choices
+  are saved with drafts/artifacts; Filled template registration checks only the
+  task download timestamp. `reports/routes.py` is the authenticated draft/file
+  adapter.
 
 Do not place workflow or reference-data queries in `auth/` merely because all
 three domains use PostgreSQL.

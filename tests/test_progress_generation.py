@@ -69,6 +69,7 @@ def main():
     progress_document = Document(progress_path)
     text = combined_text(progress_document)
     assert progress.report_type == "progress"
+    assert "Sample Borrower, SKD Colony, Adoni" in text
     assert "PROGRESS / COMPLETION REPORT FOR HOUSING LOAN" in text
     assert "Cost of balance work" in text
     assert "BRANCH SANCTION" in text
@@ -114,12 +115,7 @@ def main():
 
     future_bank_date = copy.deepcopy(payload())
     future_bank_date["bank"]["releases"][0]["date"] = "2999-01-01"
-    try:
-        generate(future_bank_date)
-    except ValueError as error:
-        assert "Loan release date 1 cannot be later than today" in str(error)
-    else:
-        raise AssertionError("Future Karnataka Bank release dates must be rejected")
+    assert generate(future_bank_date).report_type == "progress"
     print(f"PASS: {progress_path}")
     print(f"PASS: {completion_path}")
 

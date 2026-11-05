@@ -120,13 +120,17 @@
 .institution-finance-detail dd { margin: 4px 0 0; color: var(--navy); font-size: .92rem; font-weight: 850; }
 .finance-overview .finance-strip { margin-top: 0; }
 .filter-bar-extended { grid-template-columns: minmax(245px, 1.8fr) repeat(7, minmax(125px, 1fr)); }
-.filter-bar-extended .task-period-filter { grid-column: span 2; }
+.filter-bar-extended.task-filter-grid { grid-template-columns: minmax(245px, 1.8fr) repeat(6, minmax(125px, 1fr)); }
+.list-intro-actions { display: flex; align-items: flex-start; justify-content: flex-end; gap: 18px; min-width: min(760px, 58vw); }
+.list-intro-actions .quiet-link { flex: 0 0 auto; margin-top: 4px; white-space: nowrap; }
+.task-period-filter { display: grid; grid-template-columns: minmax(390px, 1fr) minmax(180px, 220px); gap: 7px 12px; width: min(650px, 100%); }
+.task-period-filter > label { grid-column: 1 / -1; color: var(--ink); font-size: .76rem; font-weight: 800; }
 .task-period-filter .period-switch { display: flex; width: 100%; }
 .task-period-filter .period-switch button { flex: 1; padding-inline: 8px; }
-.task-period-filter .period-picker { margin-top: 7px; }
-.task-period-filter .period-picker label { justify-content: space-between; }
+.task-period-filter .period-picker { align-self: stretch; }
+.task-period-filter .period-picker label { justify-content: space-between; height: 100%; }
 .task-period-filter .period-picker input,
-.task-period-filter .period-picker select { min-width: 0; width: min(100%, 205px); }
+.task-period-filter .period-picker select { min-width: 0; width: min(100%, 145px); }
 .institution-drilldown { margin-bottom: 18px; }
 .institution-drilldown .section-heading { margin-bottom: 13px; }
 .quiet-button {
@@ -164,12 +168,6 @@
 .action-strip-form select { min-width: 0; min-height: 36px; padding: 7px 9px; border: 1px solid #abc1c9; border-radius: 7px; background: #fff; color: var(--ink); }
 .action-strip-form button { min-height: 36px; border: 0; border-radius: 7px; padding: 8px 12px; font-weight: 800; cursor: pointer; }
 .action-strip-form small { grid-column: 2 / -1; color: var(--muted); font-size: .68rem; }
-.report-task-context-compact {
-  grid-template-columns: minmax(250px, 1.1fr) auto minmax(390px, 1.7fr) auto;
-  padding-block: 12px;
-}
-.report-task-context__meta { color: var(--muted); font-size: .7rem; }
-.report-task-context__state { display: grid; place-items: center; }
 .report-task-context__action { grid-template-columns: minmax(125px, 1fr) minmax(145px, 1fr) auto auto; }
 .report-task-context__action .report-action-help { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: .68rem; }
 .report-task-context__action button:disabled { opacity: .48; cursor: not-allowed; }
@@ -177,18 +175,17 @@
 
 @media (max-width: 1350px) {
   .filter-bar-extended { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .filter-bar-extended.task-filter-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .filter-bar-extended .search-field { grid-column: span 2; }
-  .filter-bar-extended .task-period-filter { grid-column: span 2; }
-  .report-task-context-compact { grid-template-columns: minmax(220px, 1fr) auto minmax(360px, 1.7fr); }
-  .report-task-context__links { grid-column: 1 / -1; justify-self: end; }
+  .list-intro { display: grid; grid-template-columns: 1fr; }
+  .list-intro-actions { width: 100%; min-width: 0; }
+  .task-period-filter { width: min(720px, 100%); margin-left: auto; }
 }
 
 @media (max-width: 1000px) {
   .institution-chart { grid-template-columns: 1fr; }
   .report-mix-chart { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .report-task-context-compact { grid-template-columns: 1fr auto; }
   .report-task-context__action { grid-column: 1 / -1; }
-  .report-task-context__links { grid-column: 1 / -1; }
 }
 
 @media (max-width: 760px) {
@@ -199,14 +196,23 @@
   .institution-finance-detail dl,
   .report-mix-chart,
   .filter-bar-extended { grid-template-columns: 1fr; }
+  .filter-bar-extended.task-filter-grid { grid-template-columns: 1fr; }
   .filter-bar-extended .search-field { grid-column: auto; }
-  .filter-bar-extended .task-period-filter { grid-column: auto; }
+  .list-intro-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+  .task-period-filter { grid-template-columns: 1fr; width: 100%; margin: 0; }
+  .task-period-filter > label { grid-column: auto; }
+  .task-period-filter .period-switch { overflow-x: auto; }
+  .task-period-filter .period-switch button { min-width: 72px; }
+  .task-period-filter .period-picker label { justify-content: flex-start; }
   .institution-bar-row,
   .finance-chart-row { grid-template-columns: minmax(110px, 1.2fr) minmax(60px, 1fr) auto; }
   .action-strip-form { grid-template-columns: 1fr; }
   .action-strip-form small { grid-column: auto; }
-  .report-task-context-compact,
   .report-task-context__action { grid-template-columns: 1fr; }
-  .report-task-context__state { place-items: start; }
-  .report-task-context__links { justify-self: start; }
 }
+
+.task-filter-grid.has-preparation-filter { grid-template-columns: repeat(4, minmax(170px, 1fr)); }
+@media (max-width: 800px) { .task-filter-grid.has-preparation-filter { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .task-filter-grid.has-preparation-filter { grid-template-columns: 1fr; } }
+
+.task-table-person .preparation-source { margin-top: 3px; white-space: normal; }

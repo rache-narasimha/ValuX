@@ -6,5 +6,6 @@ __pycache__/
 ~$*.xlsx
 outputs/generated_reports/*
 outputs/test_artifacts/*
+outputs/deliverables/
 !outputs/generated_reports/.gitkeep
 !outputs/test_artifacts/.gitkeep

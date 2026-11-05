@@ -7,7 +7,7 @@
   function workflowForTask() {
     const taskId = params.get("task");
     const task = taskId && window.TaskStore ? TaskStore.get(taskId) : null;
-    if (!task || task.reportGroup !== "valuation") return null;
+    if (!task || task.reportKey !== "valuation-general") return null;
     if (task.institutionCode === "KVB") {
       return {
         task,

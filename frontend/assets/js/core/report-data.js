@@ -38,6 +38,7 @@
         revision,
       });
       revision = Number(response.draft.revision);
+      if (response.draft.preparationChanged) await refreshTask();
       return response.draft.payload;
     };
     saveChain = saveChain.catch(() => {}).then(operation);

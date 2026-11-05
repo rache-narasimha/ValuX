@@ -193,26 +193,6 @@
 .compact-action { min-height: 36px; border: 0; border-radius: 7px; padding: 8px 12px; font-weight: 800; cursor: pointer; }
 .assignment-inline-form small { grid-column: 2 / -1; color: var(--muted); font-size: .66rem; }
 
-.report-direct-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-.report-direct-actions button {
-  min-height: 36px;
-  border: 0;
-  border-radius: 7px;
-  padding: 8px 12px;
-  font-weight: 800;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.report-direct-actions button:disabled { opacity: .48; cursor: not-allowed; }
-.report-direct-actions button.is-unavailable,
-.report-note-actions button.is-unavailable { opacity: .52; cursor: not-allowed; }
-.report-task-context-compact { grid-template-columns: minmax(260px, 1.3fr) auto minmax(330px, 1fr) auto; }
 body.report-linked > header { min-height: 54px; padding-block: 8px; }
 body.report-linked > header > div:first-child h1,
 body.report-linked > header > div:first-child p { display: none; }
@@ -332,9 +312,6 @@ html[data-theme="dark"] .finance-chart-row.selected { background: var(--cream); 
 @media (max-width: 1100px) {
   .settings-layout { grid-template-columns: 1fr; }
   .settings-editor { position: static; }
-  .report-task-context-compact { grid-template-columns: minmax(240px, 1fr) auto; }
-  .report-direct-actions { grid-column: 1 / -1; justify-content: flex-start; }
-  .report-task-context__links { grid-column: 2; grid-row: 1; }
 }
 @media (max-width: 760px) {
   .app-shell.sidebar-collapsed { grid-template-columns: 1fr; }
@@ -344,10 +321,6 @@ html[data-theme="dark"] .finance-chart-row.selected { background: var(--cream); 
   .workflow-distribution-chart button { grid-template-columns: 105px minmax(90px, 1fr) 26px; }
   .assignment-inline-form { grid-template-columns: 1fr; width: 100%; }
   .assignment-inline-form small { grid-column: auto; }
-  .report-task-context-compact { grid-template-columns: 1fr; }
-  .report-task-context__links { grid-column: auto; grid-row: auto; }
-  .report-direct-actions { justify-content: stretch; }
-  .report-direct-actions button { flex: 1 1 130px; }
   .period-picker,
   .period-picker label,
   .period-picker input,

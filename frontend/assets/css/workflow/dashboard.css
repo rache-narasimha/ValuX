@@ -147,6 +147,24 @@
 .filter-bar-extended { grid-template-columns: minmax(260px, 2fr) repeat(5, minmax(140px, 1fr)); }
 .optional-label { color: var(--muted); font-size: 0.72rem; font-weight: 500; }
 .hero-actions { display: flex; align-items: flex-start; gap: 9px; }
+.task-hero > div:first-child { flex: 1 1 0; min-width: 0; }
+.task-hero h1 { overflow-wrap: anywhere; }
+.task-hero .hero-actions { flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
+.task-hero .hero-actions > button,
+.task-hero .hero-actions > .button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 42px;
+  white-space: nowrap;
+  text-align: center;
+}
+@media (max-width: 1100px) {
+  .task-hero { flex-wrap: wrap; }
+  .task-hero > div:first-child { flex-basis: 100%; }
+  .task-hero .hero-actions { justify-content: flex-start; }
+}
 .danger-ghost {
   border: 1px solid rgba(255,255,255,.55);
   border-radius: 8px;
@@ -208,7 +226,6 @@ body.modal-open { overflow: hidden; }
 .practice-banner div { display: grid; gap: 3px; }
 .practice-banner span { font-size: .8rem; }
 .practice-banner a { color: #74500a; font-size: .8rem; font-weight: 800; }
-.report-task-context-compact { grid-template-columns: minmax(230px, .9fr) minmax(0, 2fr) auto; }
 .report-completion-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; }
 .report-note-actions { display: flex; flex-wrap: wrap; gap: 9px; }
 .report-note-actions button:disabled { opacity: .5; cursor: not-allowed; }
@@ -231,7 +248,6 @@ body.modal-open { overflow: hidden; }
   .task-row .task-wide { display: none; }
   .task-row-meta { grid-column: 1; grid-row: 2; }
   .task-row .task-row-action { grid-column: 2; grid-row: 1 / span 2; }
-  .report-task-context-compact { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {

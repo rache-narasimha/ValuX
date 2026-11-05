@@ -42,14 +42,14 @@
         </section>
         <section class="father-business" id="father-business">
           <article class="work-card institution-overview">
-            <div class="section-heading chart-heading"><div><h2>Institution workload</h2><p>Every configured bank and NBFC remains visible, including institutions with zero work.</p></div><div class="chart-heading-tools"><span id="workload-period-label" class="soft-badge"></span><div class="period-switch" aria-label="Institution workload period"><button type="button" data-dashboard-period="daily">Daily</button><button type="button" data-dashboard-period="weekly">Weekly</button><button type="button" data-dashboard-period="monthly">Monthly</button><button type="button" data-dashboard-period="yearly">Yearly</button></div><div id="dashboard-period-picker" class="period-picker"></div></div></div>
+            <div class="section-heading chart-heading"><div><h2>Institution workload</h2><p>Every configured bank and NBFC remains visible, including institutions with zero work.</p><a id="workload-overall-total" class="quiet-link" href="/tasks?view=summary">Overall total: 0 reports</a></div><div class="chart-heading-tools"><span id="workload-period-label" class="soft-badge"></span><div class="period-switch" aria-label="Institution workload period"><button type="button" data-dashboard-period="">All time</button><button type="button" data-dashboard-period="daily">Daily</button><button type="button" data-dashboard-period="weekly">Weekly</button><button type="button" data-dashboard-period="monthly">Monthly</button><button type="button" data-dashboard-period="yearly">Yearly</button></div><div id="dashboard-period-picker" class="period-picker"></div></div></div>
             <div id="institution-workload" class="institution-chart"></div>
           </article>
           <article class="work-card finance-overview">
             <div class="section-heading finance-heading">
               <div><h2>Income and payments</h2><p>Current financial position for assignments that entered the selected finance period.</p></div>
               <div class="finance-tools">
-                <label class="compact-control" for="finance-period-select"><span>Period</span><select id="finance-period-select" aria-label="Income and payments period"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
+                <label class="compact-control" for="finance-period-select"><span>Period</span><select id="finance-period-select" aria-label="Income and payments period"><option value="">All time</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
                 <div id="finance-period-picker" class="period-picker"></div>
                 <label class="compact-control" for="finance-metric-select"><span>Payment view</span><select id="finance-metric-select" aria-label="Finance metric"><option value="all">All</option><option value="earned">Earned</option><option value="received">Received</option><option value="outstanding">Outstanding</option></select></label>
                 <span id="finance-period-label" class="soft-badge finance-period-label"></span>
@@ -78,6 +78,7 @@
       </main>
     </div>
     <script src="/assets/js/core/business-api.js"></script>
+    <script src="/assets/js/core/time.js"></script>
     <script src="/assets/js/core/app-shell.js"></script>
     <script src="/assets/js/core/workflow-access.js"></script>
     <script src="/assets/js/core/institutions.js"></script>

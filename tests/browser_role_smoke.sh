@@ -9,7 +9,8 @@ bootstrap_port=4199
 bootstrap_pid=""
 ceo_token=""
 employee_token=""
-qa_task_marker="ValuX Browser QA $(date +%s)-$$"
+qa_task_marker="ValuX Browser QA Long Customer Name For Assignment Banner $(date +%s)-$$"
+qa_task_code=""
 database_user="$(docker compose exec -T postgres printenv POSTGRES_USER | tr -d '\r')"
 database_name="$(docker compose exec -T postgres printenv POSTGRES_DB | tr -d '\r')"
 
@@ -43,8 +44,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-docker compose exec -T -e VALUX_QA_TASK_MARKER="$qa_task_marker" valuation-report \
-  python -m tests.browser_workflow_seed seed >/dev/null
+qa_task_code="$(docker compose exec -T -e VALUX_QA_TASK_MARKER="$qa_task_marker" valuation-report \
+  python -m tests.browser_workflow_seed seed | tr -d '\r')"
+[[ -n "$qa_task_code" ]]
+qa_report_path="/valuation/general?task=$qa_task_code"
 
 set_browser_session() {
   local token="$1"
@@ -82,6 +85,14 @@ capture_mobile_page() {
     >/dev/null 2>>"$qa_dir/chrome.log"
 }
 
+capture_compact_page() {
+  local path="$1"
+  local output="$2"
+  "$chrome_bin" --headless=new --disable-gpu --no-first-run --user-data-dir="$profile_dir" \
+    --window-size=1024,900 --virtual-time-budget=3000 --screenshot="$output" "http://127.0.0.1:$bootstrap_port/?path=$path" \
+    >/dev/null 2>>"$qa_dir/chrome.log"
+}
+
 ceo_token="$(create_session "${VALUX_QA_CEO_ID:-racheshiva01}")"
 set_browser_session "$ceo_token"
 dump_page "/" "$qa_dir/ceo-dashboard.html"
@@ -89,11 +100,14 @@ dump_page "/tasks" "$qa_dir/ceo-tasks.html"
 dump_page "/tasks/new" "$qa_dir/ceo-new-task.html"
 dump_page "/estimation?practice=1" "$qa_dir/ceo-estimation-practice.html"
 dump_page "/progress-completion?practice=1" "$qa_dir/ceo-progress-practice.html"
+dump_page "$qa_report_path" "$qa_dir/ceo-general-valuation.html"
 capture_page "/" "$qa_dir/ceo-dashboard.png"
 capture_page "/tasks" "$qa_dir/ceo-tasks.png"
 capture_page "/tasks/new" "$qa_dir/ceo-new-task.png"
 capture_page "/estimation?practice=1" "$qa_dir/ceo-estimation-practice.png"
 capture_page "/progress-completion?practice=1" "$qa_dir/ceo-progress-practice.png"
+capture_page "$qa_report_path" "$qa_dir/ceo-general-valuation.png"
+capture_compact_page "$qa_report_path" "$qa_dir/ceo-general-valuation-compact.png"
 capture_mobile_page "/" "$qa_dir/ceo-dashboard-mobile.png"
 capture_mobile_page "/tasks" "$qa_dir/ceo-tasks-mobile.png"
 capture_mobile_page "/estimation?practice=1" "$qa_dir/ceo-estimation-practice-mobile.png"
@@ -114,6 +128,9 @@ rg -q '>Report Setup<' "$qa_dir/ceo-estimation-practice.html"
 rg -q 'id="progress-form"' "$qa_dir/ceo-progress-practice.html"
 rg -q 'id="practice-estimation"' "$qa_dir/ceo-progress-practice.html"
 rg -q '>Report setup<' "$qa_dir/ceo-progress-practice.html"
+rg -q '>Preparation Method<' "$qa_dir/ceo-general-valuation.html"
+rg -q '>Fill online<' "$qa_dir/ceo-general-valuation.html"
+rg -q '>Complete offline and upload<' "$qa_dir/ceo-general-valuation.html"
 
 employee_token="$(create_session "${VALUX_QA_EMPLOYEE_ID:-lavk0401}")"
 set_browser_session "$employee_token"
@@ -123,7 +140,10 @@ dump_page "/tasks/new" "$qa_dir/employee-new-task.html"
 employee_task_path="$(rg -o 'href="/tasks/detail\?id=[^"]+' "$qa_dir/employee-tasks.html" | head -1 | cut -d'"' -f2)"
 [[ -n "$employee_task_path" ]]
 dump_page "$employee_task_path" "$qa_dir/employee-task-detail.html"
+dump_page "$qa_report_path" "$qa_dir/employee-general-valuation.html"
 capture_page "/" "$qa_dir/employee-dashboard.png"
+capture_page "$qa_report_path" "$qa_dir/employee-general-valuation.png"
+capture_compact_page "$qa_report_path" "$qa_dir/employee-general-valuation-compact.png"
 capture_mobile_page "/" "$qa_dir/employee-dashboard-mobile.png"
 stop_bootstrap
 
@@ -135,6 +155,9 @@ rg -q 'id="new-task-form"' "$qa_dir/employee-new-task.html"
 rg -q 'id="payment-card"' "$qa_dir/employee-task-detail.html"
 rg -q 'href="/tasks/new"' "$qa_dir/employee-tasks.html"
 rg -q 'task-table-payment' "$qa_dir/employee-tasks.html"
+rg -q '>Preparation Method<' "$qa_dir/employee-general-valuation.html"
+rg -q '>Fill online<' "$qa_dir/employee-general-valuation.html"
+rg -q '>Complete offline and upload<' "$qa_dir/employee-general-valuation.html"
 
 echo "PASS: CEO and employee dashboards render distinct, role-correct interfaces"
 echo "QA artifacts: $qa_dir"
