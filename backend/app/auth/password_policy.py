@@ -49,8 +49,8 @@ def record_password_hash(database, user_id, password_hash: str) -> None:
     """Store a password hash and retain only the configured reuse window."""
     database.execute(
         """
-        INSERT INTO auth.password_history (user_id, password_hash)
-        VALUES (%s, %s)
+        INSERT INTO auth.password_history (user_id, password_hash, created_at)
+        VALUES (%s, %s, clock_timestamp())
         ON CONFLICT (user_id, password_hash) DO NOTHING
         """,
         (user_id, password_hash),

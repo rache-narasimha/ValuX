@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import uuid
 from contextlib import contextmanager
-from datetime import timedelta
+from datetime import UTC, datetime, time, timedelta
 
 import psycopg
 from psycopg.rows import dict_row
@@ -167,6 +167,28 @@ try:
     assert database.execute("SELECT COUNT(*) AS count FROM app.report_draft_files WHERE task_id = %s", (uuid.UUID(valuation["internalId"]),)).fetchone()["count"] == 0
     cleaned_payload = database.execute("SELECT payload FROM app.report_drafts WHERE task_id = %s", (uuid.UUID(valuation["internalId"]),)).fetchone()["payload"]
     assert cleaned_payload["photos"] == [] and cleaned_payload["map"] is None
+    original_code = valuation["id"]
+    original_file = valuation["latestDocx"]["id"]
+    child_input = {**payload("revaluation", f"Revaluation {suffix}"), "linkedValuationId": original_code}
+    assert service.eligible_valuations({"search": suffix})["items"][0]["id"] == original_code
+    child = service.create_task(child_input, father)
+    assert child["reportGroup"] == "revaluation" and child["reportKey"] == "valuation-general"
+    assert child["linkedValuationId"] == original_code and child["linkedValuationArtifactId"] == original_file
+    assert child["preparationSource"] == "online" and not child["revaluationManualEntry"]
+    child_draft = report_service.get_draft(child["id"], father)
+    assert child_draft["payload"]["values"] == changed["payload"]["values"]
+    assert child_draft["payload"]["photos"] == [] and child_draft["payload"]["map"] is None
+    assert child["payment"]["status"] == "Not Set"
+    child = service.cancel(child["id"], {"version": child["version"], "reason": "Created by Mistake"}, father)
+    original_with_history = service.get_task(original_code)
+    assert original_with_history["revaluations"][0]["status"] == "Cancelled"
+    # This fixture shares a transaction, so both events have the same NOW() timestamp.
+    child_events = [
+        item["details"]["revaluationEvent"] for item in original_with_history["activity"]
+        if item["details"].get("revaluationTaskId") == child["id"]
+    ]
+    assert sorted(child_events) == ["cancelled", "created"]
+
     valuation = service.update_payment(
         valuation["id"],
         {"version": valuation["version"], "estimated": 5000, "agreed": 4500, "received": 4500, "dueDate": today.isoformat()},
@@ -175,7 +197,15 @@ try:
     assert valuation["payment"]["status"] == "Received"
     valuation = service.close(valuation["id"], {"version": valuation["version"], "note": "Settled."}, employee)
     assert valuation["status"] == "Closed"
+    def age_closed(days):
+        database.execute("UPDATE app.tasks SET closed_at=%s WHERE id=%s",
+                         (datetime.combine(today - timedelta(days=days), time(12), UTC), uuid.UUID(valuation["internalId"])))
+
+    age_closed(16)
+    expect_error(lambda: service.reopen(valuation["id"], {"version": valuation["version"], "note": "Too late."}, father), "reopen_expired")
+    age_closed(15)
     valuation = service.reopen(valuation["id"], {"version": valuation["version"], "note": "Correction required."}, father)
+    assert report_service.artifact_file(original_code, original_file, father)["path"].is_file()
     assert valuation["status"] == "In Progress"
     assert valuation["reportGeneratedAt"] is None
 
@@ -251,6 +281,26 @@ try:
     assert linked_reports[0]["progressSummary"]["reportType"] == "completion"
     expect_error(lambda: service.progress_reports_for(valuation["id"]), "invalid_request")
     stored_keys = [row["storage_key"] for row in database.execute("SELECT storage_key FROM app.stored_files WHERE created_by_user_id = %s", (father_id,)).fetchall()]
+    progress = service.create_task(payload("progress", f"Estimate {suffix}", linked=estimation["id"]), father)
+    retro_draft = {
+        **completion_state, "preparationMethod": "offline", "photos": [],
+        "components": [{**completion_state["components"][0], "completionPercent": 60}],
+    }
+    report_service.save_draft(
+        progress["id"], {"reportKey": "progress", "schemaVersion": "1", "revision": 0, "payload": retro_draft}, father
+    )
+    progress = report_service.register_artifact(
+        progress["id"], father, content=b"%PDF-1.4 retrospective progress", filename="progress.pdf",
+        artifact_type="progress_pdf", source="uploaded", payload={"retrospective": True}, work_note="Checked the offline report.",
+    )["task"]
+    assert progress["retrospectiveReady"] and progress["ownPreparationSource"] == "retrospective"
+    assert progress["preparationSource"] == "online" and progress["progressSummary"]["worksTotal"] == 60000
+    progress = service.complete(progress["id"], {"version": progress["version"]}, father)
+    database.execute("UPDATE app.tasks SET completed_at=NOW()-INTERVAL '100 days' WHERE id=%s", (uuid.UUID(progress["internalId"]),))
+    expect_error(lambda: service.reopen(progress["id"], {"version": progress["version"], "note": "Review."}, employee), "forbidden")
+    progress = service.reopen(progress["id"], {"version": progress["version"], "note": "Review after 100 days."}, father)
+    assert progress["status"] == "In Progress"
+
     changed_completion_state = {
         **completion_state,
         "details": {**completion_state["details"], "visitDate": (today - timedelta(days=1)).isoformat()},
@@ -266,12 +316,17 @@ try:
         lambda: service.complete(completion["id"], {"version": completion["version"], "note": "Outdated completion report."}, father),
         "stale_report",
     )
+    report_service.save_draft(
+        completion["id"], {"reportKey": "completion", "schemaVersion": "1", "revision": changed_completion_draft["revision"],
+                           "payload": {**changed_completion_state, "preparationMethod": "offline"}}, father,
+    )
     completion = report_service.register_artifact(
-        completion["id"], father, content=b"workflow completion replacement", filename="completion-replacement.docx",
-        artifact_type="completion_docx", source="generated", payload=changed_completion_draft["payload"],
-        summary={"reportType": "completion", "components": changed_completion_state["components"]},
+        completion["id"], father, content=b"%PDF-1.4 retrospective completion", filename="completion.pdf",
+        artifact_type="completion_pdf", source="uploaded", payload={"retrospective": True}, work_note="Verified offline completion.",
     )["task"]
-    completion = service.complete(completion["id"], {"version": completion["version"], "note": "Construction complete."}, father)
+    assert completion["retrospectiveReady"]
+    completion = service.complete(completion["id"], {"version": completion["version"]}, father)
+    stored_keys = [row["storage_key"] for row in database.execute("SELECT storage_key FROM app.stored_files WHERE created_by_user_id = %s", (father_id,)).fetchall()]
     assert database.execute("SELECT COUNT(*) AS count FROM app.report_draft_files WHERE task_id = %s", (uuid.UUID(completion["internalId"]),)).fetchone()["count"] == 0
     cleaned_completion = database.execute("SELECT payload FROM app.report_drafts WHERE task_id = %s", (uuid.UUID(completion["internalId"]),)).fetchone()["payload"]
     assert cleaned_completion["photos"] == []

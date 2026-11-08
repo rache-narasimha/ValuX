@@ -6,7 +6,7 @@ import smtplib
 from http.cookies import SimpleCookie
 from pathlib import Path
 
-from . import mailer, service
+from . import account, mailer, service
 from .config import (
     COOKIE_SECURE,
     CSRF_COOKIE,
@@ -60,7 +60,7 @@ def csrf_context(handler) -> tuple[str, list[tuple[str, str]]]:
     if token and len(token) >= 32:
         return token, []
     token = secrets.token_urlsafe(32)
-    return token, [("Set-Cookie", _cookie_header(CSRF_COOKIE, token, 12 * 60 * 60))]
+    return token, [("Set-Cookie", _cookie_header(CSRF_COOKIE, token, SESSION_ABSOLUTE_HOURS * 60 * 60))]
 
 
 def verify_csrf(handler) -> None:
@@ -70,8 +70,8 @@ def verify_csrf(handler) -> None:
         raise service.AuthError("Your security token expired. Refresh the page and try again.", 403, "csrf")
 
 
-def current_session(handler, required_scope: str | None = None):
-    session = service.session_for_token(cookie_value(handler, SESSION_COOKIE))
+def current_session(handler, required_scope: str | None = None, refresh: bool = True):
+    session = service.session_for_token(cookie_value(handler, SESSION_COOKIE), refresh=refresh)
     if not session:
         if required_scope:
             raise service.AuthError("Your session has expired. Sign in again.", 401, "session_expired")
@@ -81,8 +81,8 @@ def current_session(handler, required_scope: str | None = None):
     return session
 
 
-def require_full_session(handler, role: str | None = None):
-    session = current_session(handler, "full")
+def require_full_session(handler, role: str | None = None, refresh: bool = True):
+    session = current_session(handler, "full", refresh=refresh)
     if session["status"] != "active":
         raise service.AuthError("This account is not active.", 403, "inactive")
     if role and session["role"] != role:
@@ -124,6 +124,10 @@ def _auth_state(session):
 
 
 def handle_get(handler, path: str) -> bool:
+    if path == "/api/auth/profile/photo":
+        content = account.photo(require_full_session(handler, refresh=False))
+        handler.send_file(Path("profile.jpg"), data=content, headers=[("X-Content-Type-Options", "nosniff")])
+        return True
     if path in {"/auth", "/auth/"}:
         handler.send_file(AUTH_PAGE, cache="no-store")
         return True
@@ -151,8 +155,28 @@ def handle_post(handler, path: str) -> bool:
         return False
     try:
         verify_csrf(handler)
-        payload = read_payload(handler)
+        payload = read_payload(handler, 3 * 1024 * 1024 if path == "/api/auth/profile/photo" else 64 * 1024)
         ip, user_agent = _client(handler)
+
+        if path == "/api/auth/activity":
+            require_full_session(handler)
+            handler.send_json({"ok": True})
+            return True
+
+        if path == "/api/auth/profile/photo":
+            user = account.update_photo(require_full_session(handler), payload)
+            handler.send_json({"ok": True, "user": user})
+            return True
+
+        if path == "/api/auth/account/password":
+            token, user = account.change_password(require_full_session(handler), payload, ip, user_agent)
+            delivered = True
+            try:
+                mailer.send_password_changed(user["email"], user["display_name"])
+            except (OSError, TimeoutError, smtplib.SMTPException):
+                delivered = False
+            handler.send_json({"ok": True, "confirmationSent": delivered}, headers=[session_cookie(token)])
+            return True
 
         if path == "/api/auth/login":
             token, next_step, user = service.login(

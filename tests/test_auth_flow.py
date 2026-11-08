@@ -219,7 +219,7 @@ try:
             "SELECT id FROM auth.users WHERE user_id = %s", (employee_id,)
         ).fetchone()
         database.execute(
-            "UPDATE auth.sessions SET last_activity_at = NOW() - INTERVAL '31 minutes' WHERE user_id = %s",
+            "UPDATE auth.sessions SET last_activity_at = NOW() - INTERVAL '61 minutes' WHERE user_id = %s",
             (employee_record["id"],),
         )
     assert employee.get_error("/api/auth/me", 401)["code"] == "session_expired"

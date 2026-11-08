@@ -102,13 +102,23 @@ father credentials beyond controlled testing.
 
 - Sessions use opaque random cookies; only a hash is stored in PostgreSQL.
 - Cookies are `HttpOnly`, `SameSite=Lax`, and become `Secure` under HTTPS.
-- Idle expiry is 30 minutes; absolute expiry is 12 hours.
+- Idle expiry is 60 minutes; absolute expiry is 24 hours.
 - Logout and password reset revoke server-side sessions.
+- Signed-in voluntary password changes require the current password and a fresh
+  authenticator code. They rotate the current session, revoke all others, record
+  an audit event and send a confirmation email. Five failed reauthentication
+  attempts lock that session's security verification for 15 minutes.
+- My Account identity fields are immutable; only the optional profile photo can
+  change. Photo bytes are normalized to a 384px square JPEG in the auth schema
+  and served only to their authenticated owner.
+- Visible-page notification polling and photo requests do not extend inactivity.
+  Trusted keyboard, pointer, input or scroll activity refreshes the session at
+  most once a minute; the 24-hour absolute deadline still requires fresh login.
 - Password-reset links expire after 30 minutes and are single-use.
 - Email-verification links expire after 24 hours and are single-use.
 - Five failed logins in 15 minutes trigger a 15-minute lockout.
 - Passwords must be 12–128 characters with uppercase, lowercase, numeric and
-  symbol characters. The last 24 passwords are retained as hashes and cannot
+  symbol characters. The last 5 passwords are retained as hashes and cannot
   be reused. The history begins when this policy is deployed; passwords that
   were discarded before that time cannot be reconstructed safely.
 - Five incorrect authenticator codes during one fresh-login or activation

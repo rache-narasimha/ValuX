@@ -52,3 +52,11 @@ def send_password_reset(recipient: str, display_name: str, token: str) -> None:
         "This single-use link expires in 30 minutes. Your authenticator is still "
         "required at the next login. If you did not request this, ignore this message.",
     )
+
+
+def send_password_changed(recipient: str, display_name: str) -> None:
+    send_email(
+        recipient, "Your ValuX password was changed",
+        f"Hello {display_name},\n\nYour ValuX password was changed. Other signed-in sessions "
+        "have been signed out. If you did not make this change, contact your account operator immediately.",
+    )

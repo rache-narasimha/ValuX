@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from datetime import date, timedelta
 
 import psycopg
+from psycopg.types.json import Jsonb
 from psycopg.rows import dict_row
 
 from backend.app.auth.config import DATABASE_URL
@@ -188,6 +189,21 @@ try:
         retrospective["id"], {"version": retrospective["version"], "note": ""}, father,
     )
     assert retrospective["status"] == "Completed"
+    retained_inputs = reports.get_draft(retrospective["id"], employee)
+    assert retained_inputs["readOnly"] is True
+    assert retained_inputs["payload"]["values"]["owner.details"] == f"Historical owner {suffix}"
+    assert retained_inputs["payload"]["preparationMethod"] == "offline"
+    assert retained_inputs["preview"] is None
+    expect_report_error(lambda: reports.save_draft(retrospective["id"], {
+        "reportKey": "valuation-general", "revision": 0, "payload": retained_inputs["payload"],
+    }, father), "invalid_transition")
+    expect_report_error(lambda: reports.delete_draft(retrospective["id"], father), "invalid_transition")
+    # A retained view must not read later/unrelated draft contents.
+    database.execute("UPDATE app.report_drafts SET payload=%s WHERE task_id=(SELECT id FROM app.tasks WHERE task_code=%s)",
+                     (Jsonb({"values": {"owner.details": "Unrelated draft"}}), retrospective["id"]))
+    assert reports.get_draft(retrospective["id"], father)["payload"]["values"]["owner.details"] == f"Historical owner {suffix}"
+    database.execute("UPDATE app.tasks SET status='Closed', final_artifact_id=latest_artifact_id WHERE task_code=%s", (retrospective["id"],))
+    assert reports.get_draft(retrospective["id"], employee)["payload"]["values"]["owner.details"] == f"Historical owner {suffix}"
     assert any("Imported from the historical valuation register." in event["text"] for event in retrospective["activity"])
     assert any("offline report upload" in event["text"] for event in retrospective["activity"])
 

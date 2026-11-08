@@ -1,4 +1,4 @@
-"""Regression check for the enforced 24-password reuse window."""
+"""Regression check for the enforced 5-password reuse window."""
 
 import secrets
 import string
@@ -14,7 +14,7 @@ def password(index: int) -> str:
 
 
 user_id = f"history{uuid.uuid4().hex[:12]}"
-passwords = [password(index) for index in range(25)]
+passwords = [password(index) for index in range(6)]
 
 try:
     service.provision_user(user_id, "Password History QA", "employee", passwords[0])
@@ -36,18 +36,18 @@ try:
             "SELECT COUNT(*) AS count FROM auth.password_history WHERE user_id = %s",
             (user["id"],),
         ).fetchone()["count"]
-        assert retained == 24
+        assert retained == 5
 
         try:
             service._assert_password_is_new(database, user, passwords[1])
         except service.AuthError as error:
             assert error.code == "password_reused"
         else:
-            raise AssertionError("A password inside the 24-password window was accepted")
+            raise AssertionError("A password inside the 5-password window was accepted")
 
         service._assert_password_is_new(database, user, passwords[0])
 finally:
     with connection() as database:
         database.execute("DELETE FROM auth.users WHERE user_id = %s", (user_id,))
 
-print("PASS: 24-password reuse window")
+print("PASS: 5-password reuse window")

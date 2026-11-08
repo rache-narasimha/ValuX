@@ -4,6 +4,7 @@
 
   const REPORT_GROUPS = [
     { key: "valuation", label: "Valuation" },
+    { key: "revaluation", label: "Re-Valuation" },
     { key: "estimation", label: "Estimation" },
     { key: "progress", label: "Progress" },
     { key: "completion", label: "Completion" },

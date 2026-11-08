@@ -40,6 +40,8 @@ def public_user(user: dict[str, Any]) -> dict[str, Any]:
         )[:2],
         "email": user.get("email"),
         "emailVerified": bool(user.get("email_verified_at")),
+        "photoUrl": ("/api/auth/profile/photo?v=" + str(user["profile_photo_updated_at"].timestamp())
+                     if user.get("profile_photo_updated_at") and user.get("profile_photo") else None),
     }
 
 

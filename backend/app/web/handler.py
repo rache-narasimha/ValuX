@@ -68,9 +68,11 @@ def estimation_summary(state, extracted=None):
         "construction": str(state.get("construction") or ""),
         "subtype": str(state.get("subtype") or ""),
         "estimateDate": str(details.get("estimateDate") or ""),
+        "identityVersion": 2 if details.get("identityVersion") == 2 or "workAddress" in details else 1,
         "applicantName": str(details.get("applicantName") or ""),
         "applicantAddress": str(details.get("applicantAddress") or ""),
-        "projectLocation": str(details.get("projectLocation") or ""),
+        "workAddress": str(details.get("workAddress") or ""),
+        "projectLocation": str(details.get("workAddress") if "workAddress" in details else details.get("projectLocation") or ""),
         "workDescription": str(details.get("workDescription") or ""),
         "components": components,
         "totalEstimatedCost": extracted.get("totalEstimatedCost", sum(float(item.get("estimatedCost") or 0) for item in components)),
@@ -189,13 +191,16 @@ class Handler(BaseHTTPRequestHandler):
                 kind = "agricultural" if "agricultural" in path else "general"
                 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
                 template_path = OUTPUT_DIR / f"{kind}-offline-template-{time.time_ns()}.docx"
-                generate_offline_template(f"valuation-{kind}", template_path)
                 template_task = (parse_qs(urlparse(self.path).query).get("task") or [""])[-1]
+                report_key = f"valuation-{kind}"
+                template_context = report_service.require_report_key(template_task, session, report_key) if template_task else {}
+                revaluation = template_context.get("report_group") == "revaluation"
+                generate_offline_template(report_key, template_path, revaluation=revaluation)
                 if template_task:
                     workflow_service.record_template_download(template_task, session)
                 self.send_file(
                     template_path,
-                    headers=[("Content-Disposition", f'attachment; filename="{kind.title()}_Valuation_Offline_Template.docx"')],
+                    headers=[("Content-Disposition", f'attachment; filename="{kind.title()}_{"Revaluation" if revaluation else "Valuation"}_Offline_Template.docx"')],
                 )
                 return
             if path == "/templates/kvb-valuation.xlsx":
@@ -214,6 +219,8 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 return
             pages = {
+                "/account": PAGES_DIR / "account.html",
+                "/account/": PAGES_DIR / "account.html",
                 "/": PAGES_DIR / "index.html",
                 "/tasks": PAGES_DIR / "tasks.html",
                 "/tasks/": PAGES_DIR / "tasks.html",
@@ -243,7 +250,7 @@ class Handler(BaseHTTPRequestHandler):
                 b"</head>", auth_routes.authentication_context_script(session) + page_context + b"</head>", 1
             )
             self.send_file(file_path, data=data)
-        except workflow_service.WorkflowError as error:
+        except (workflow_service.WorkflowError, report_service.ReportDataError) as error:
             self.send_json({"ok": False, "error": str(error), "code": error.code}, error.status)
         except AuthError as error:
             if path.startswith("/api/") or path.startswith(("/downloads/", "/previews/", "/templates/")):
@@ -271,8 +278,8 @@ class Handler(BaseHTTPRequestHandler):
         if request_path == "/api/valuation/karnataka/upload":
             self.handle_institution_valuation_upload("karnataka")
             return
-        if request_path == "/api/valuation/retrospective/upload":
-            self.handle_retrospective_valuation_upload()
+        if request_path in {"/api/valuation/retrospective/upload", "/api/progress/retrospective/upload"}:
+            self.handle_retrospective_report_upload(progress=request_path.startswith("/api/progress/"))
             return
         if request_path in {"/api/estimation/workbook", "/api/estimation/preview"}:
             self.handle_estimation_generation(request_path)
@@ -304,8 +311,10 @@ class Handler(BaseHTTPRequestHandler):
             is_preview = request_path.endswith("/preview")
             expected_report_key = "valuation-agricultural" if is_agricultural else "valuation-general"
             validate_report_values(expected_report_key, values)
+            revaluation = False
             if task_code:
-                report_service.require_report_key(task_code, session, expected_report_key)
+                report_task = report_service.require_report_key(task_code, session, expected_report_key)
+                revaluation = report_task["report_group"] == "revaluation"
                 if not is_preview:
                     report_service.require_current_preview(task_code, session, payload.get("preview_id", ""))
             prefix = "agricultural-valuation" if is_agricultural else "valuation"
@@ -324,7 +333,7 @@ class Handler(BaseHTTPRequestHandler):
             if reuse_preview:
                 shutil.copyfile(preview_docx, docx_path)
             else:
-                generator(values, docx_path, payload.get("photos", []), payload.get("map"))
+                generator(values, docx_path, payload.get("photos", []), payload.get("map"), revaluation=revaluation)
             if requested_format == "pdf":
                 pdf_name = f"{base_name}.pdf"
                 pdf_path = OUTPUT_DIR / pdf_name
@@ -612,8 +621,8 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:
             self.send_internal_error(exc, "The completed valuation report could not be attached. Please try again.")
 
-    def handle_retrospective_valuation_upload(self):
-        """Attach an offline-completed general/agricultural report."""
+    def handle_retrospective_report_upload(self, *, progress=False):
+        """Attach an offline-completed valuation or assessment report."""
         try:
             session = auth_routes.require_full_session(self)
             auth_routes.verify_csrf(self)
@@ -621,7 +630,8 @@ class Handler(BaseHTTPRequestHandler):
                 raise report_service.ReportDataError("Your account cannot attach completed valuation reports.", 403, "forbidden")
             task_code = task_code_from(self)
             if not task_code:
-                raise ValueError("Open an active valuation task before attaching a completed report.")
+                task_type = "Progress or Completion" if progress else "valuation"
+                raise ValueError(f"Open an active {task_type} task before attaching a completed report.")
             note = unquote(str(self.headers.get("X-Work-Note", ""))).strip()
             if not note:
                 raise ValueError("Add the work note that explains the completed report.")
@@ -642,14 +652,19 @@ class Handler(BaseHTTPRequestHandler):
                 with ZipFile(BytesIO(content)) as archive:
                     if "word/document.xml" not in archive.namelist():
                         raise ValueError("The selected file is not a valid DOCX report.")
+            group = "valuation"
+            if progress:
+                group = workflow_service.get_task(task_code)["reportGroup"]
+                if group not in {"progress", "completion"}:
+                    raise ValueError("Open an active Progress or Completion task before attaching a report.")
             artifact = report_service.register_artifact(
                 task_code,
                 session,
                 content=content,
                 filename=file_name,
-                artifact_type="valuation_docx" if suffix == ".docx" else "valuation_pdf",
+                artifact_type=f"{group}_{suffix[1:]}",
                 source="uploaded",
-                payload={"retrospective": True, "mode": "offline", "preparationSource": self.headers.get("X-Upload-Type") or "retrospective"},
+                payload={"retrospective": True, "mode": "offline", "preparationSource": "retrospective" if progress else self.headers.get("X-Upload-Type") or "retrospective"},
                 work_note=note,
             )
             self.send_json({
@@ -659,12 +674,12 @@ class Handler(BaseHTTPRequestHandler):
                 "registered": True,
                 "task": artifact["task"],
             }, 201)
-        except (AuthError, report_service.ReportDataError) as exc:
+        except (AuthError, report_service.ReportDataError, workflow_service.WorkflowError) as exc:
             self.send_json({"ok": False, "error": str(exc), "code": exc.code}, exc.status)
         except (BadZipFile, ValueError) as exc:
             self.send_json({"ok": False, "error": str(exc)}, 400)
         except Exception as exc:
-            self.send_internal_error(exc, "The completed valuation report could not be attached. Please try again.")
+            self.send_internal_error(exc, "The completed report could not be attached. Please try again.")
 
     def handle_institution_valuation_removal(self, institution):
         """Remove only a validated institution-upload artifact from the local output store."""

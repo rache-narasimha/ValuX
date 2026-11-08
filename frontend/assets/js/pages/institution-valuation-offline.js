@@ -60,6 +60,7 @@
     const workflow = workflowForTask();
     if (!workflow) return false;
 
+    if (workflow.task.reportGroup === "revaluation") workflow.title = workflow.task.reportLabel;
     document.title = workflow.title;
     document.querySelector("header h1").textContent = workflow.title;
     document.querySelector("header p").textContent = "Prepare the bank-specific report outside the online valuation form, then retain the completed file with this assignment.";
@@ -68,7 +69,7 @@
 
     const workspace = document.querySelector("main .workspace");
     const artifact = activeArtifact(workflow.task);
-    const canManageAttachment = window.WorkflowAccess?.can("openReport", workflow.task);
+    const canManageAttachment = !window.ReportData?.readOnly && window.WorkflowAccess?.can("openReport", workflow.task);
     const artifactMarkup = artifact?.url
       ? `<div class="offline-artifact"><span aria-hidden="true">✓</span><div class="offline-artifact-details"><strong>${escape(artifact.filename)}</strong><small>${escape(artifact.source || "Completed report attached")}</small></div><div class="offline-artifact-actions"><a class="button-link secondary offline-artifact-download" href="${escape(artifact.url)}" title="Download completed report" aria-label="Download completed report"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></a>${canManageAttachment ? '<button class="secondary offline-remove-attachment" id="remove-institution-report" type="button">Remove</button>' : ""}</div></div>`
       : '<p class="offline-artifact-pending">No completed report has been attached yet.</p>';
@@ -86,6 +87,7 @@
       <section class="offline-artifact-card"><h3>Completed report</h3>${artifactMarkup}</section>
     </form>`;
 
+    window.RetrospectiveValuation?.displayRevaluationSource(workspace.querySelector(".offline-valuation-heading > div"), workflow.task);
     const upload = document.getElementById("institution-report-upload");
     const attach = document.getElementById("attach-institution-report");
     const status = document.getElementById("offline-upload-status");

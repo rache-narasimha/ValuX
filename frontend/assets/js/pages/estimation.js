@@ -8,12 +8,15 @@
   const DRAFT_KEY = `sln.estimation.form.draft.v3-${draftScope}`;
   const TODAY = localToday();
   const state = { propertyType: "", construction: "", subtype: "", current: 0, details: {}, components: [], editingComponentId: null };
-  const offlineEntry = window.EstimationOffline.create({ state, currentTask, setupComplete: reportSetupComplete, persist: persistDraftNow, save: () => scheduleSave({ reportDirty: false }), render: () => renderAll({sectionKey: "offline"}), dirty: markReportDirty, downloadTemplate: async () => {
+  const offlineEntry = window.EstimationOffline.create({ state, currentTask, setupComplete: reportSetupComplete, persist: persistDraftNow, save: () => scheduleSave({ reportDirty: false }), render: () => renderAll({sectionKey: "offline"}), dirty: markReportDirty, confirmUploadType: (previous, next) => confirmPreparationChange("upload type", previous, next), preparationChanged, downloadTemplate: async () => {
     if (!propertyConfigurationComplete() || !state.components.length) { state.details.templateSetup = true; renderAll({sectionKey: "configuration"}); return; }
     await downloadWorkbook("offline");
     if (ReportData.taskCode) await TaskStore.refresh(ReportData.taskCode);
   }});
+  const dimensionEdits = new Map();
+  let dimensionSelection = "";
   let saveTimer = null;
+  let editVersion = 0;
   let generatedChangeAcknowledged = false;
 
   const $ = (id) => document.getElementById(id);
@@ -37,6 +40,21 @@
     state.details.offlineWorkbook = null;
     ReportData.setPreview(null);
     if (hadCurrentReport) window.dispatchEvent(new CustomEvent("sln:report-dirty"));
+  }
+
+  function confirmPreparationChange(kind, previous, next) {
+    if (EstimationProcessing.isBusy()) return false;
+    if (!previous && !currentTask()?.reportGeneratedAt && !state.details.finalReport) return true;
+    const labels = {online: "Fill online", offline: "Complete offline and upload", template: "Filled template", retrospective: "Retrospective report"};
+    return window.confirm(`Change ${kind} to ${labels[next] || "no upload type"}? Your entered details, component configuration and measurements will be retained. Any existing report or preview will no longer qualify; generate or submit a fresh report before completing the task. Switching back will also require a fresh report.`);
+  }
+
+  function preparationChanged(previous) {
+    // A return to an earlier method must not revive an earlier report/preview.
+    if (previous || currentTask()?.reportGeneratedAt || state.details.finalReport) state.details.preparationRevision = (Number(state.details.preparationRevision) || 0) + 1;
+    editVersion++;
+    generatedChangeAcknowledged = false;
+    markReportDirty();
   }
 
   function localToday() {
@@ -101,6 +119,12 @@
     };
   }
 
+  function newMeasurementSheet(floor, existing) {
+    const sheet = makeSheetState(floor, existing);
+    if (!existing) sheet.formData.dimensionsRequired = true;
+    return sheet;
+  }
+
   function configurationLabel(configuration) {
     const base = buildingConfiguration(configuration.baseKey).label;
     const count = Number(configuration.upperFloorCount) || 0;
@@ -112,16 +136,12 @@
 
   function componentSheets(component) {
     if (!component.sheets?.length) return [component.name];
-    return component.sheets.slice().sort((left, right) => left.level - right.level).map((sheet) => `${component.name} - ${sheet.label}`);
+    return component.sheets.slice().sort((left, right) => left.level - right.level).map((sheet) => EstimationNaming.label(state, component, sheet));
   }
 
   function allWorksheetNames() { return state.components.flatMap(componentSheets); }
 
-  function residentialUsesCompactAbstract() {
-    if (state.propertyType !== "residential") return false;
-    const sheets = state.components.flatMap((component) => component.sheets || []);
-    return sheets.length > 0 && sheets.every((sheet) => sheet.level <= 3);
-  }
+  function residentialUsesCompactAbstract() { return EstimationNaming.compact(state); }
 
   function requiresSeparateAbstract() { return state.propertyType !== "residential" || !residentialUsesCompactAbstract(); }
 
@@ -148,7 +168,7 @@
   }
 
   function inputField(id, label, value = "", options = {}) {
-    const attributes = [options.required ? "required" : "", options.max ? `max="${escapeHtml(options.max)}"` : "", options.placeholder ? `placeholder="${escapeHtml(options.placeholder)}"` : ""].filter(Boolean).join(" ");
+    const attributes = [options.required ? "required" : "", options.min != null ? `min="${options.min}" step="any"` : "", options.max ? `max="${escapeHtml(options.max)}"` : "", options.placeholder ? `placeholder="${escapeHtml(options.placeholder)}"` : ""].filter(Boolean).join(" ");
     const control = options.textarea
       ? `<textarea id="${id}" data-detail="${escapeHtml(options.key || id)}" ${attributes}>${escapeHtml(value)}</textarea>`
       : `<input id="${id}" data-detail="${escapeHtml(options.key || id)}" type="${options.type || "text"}" value="${escapeHtml(value)}" ${attributes}>`;
@@ -159,9 +179,9 @@
     return `<div class="panel" data-key="setup"><h2>Report Setup</h2><section class="subgroup"><h3>Report details</h3><div class="grid">
       ${inputField("estimate-date", "Date of Estimation", state.details.estimateDate, { type: "date", required: true, key: "estimateDate" })}
       ${inputField("place", "Place", state.details.place, { required: true, key: "place" })}
-      ${currentTask() ? `<div class="field"><label>Applicant</label><p>${escapeHtml(currentTask().customerName)}</p></div>` : inputField("applicant-name", "Applicant name", state.details.applicantName, { required: true, key: "applicantName" })}
-      ${inputField("project-location", "Project / property location", state.details.projectLocation, { full: true, required: true, key: "projectLocation" })}
-      ${inputField("work-description", "Name of the work", state.details.workDescription, { textarea: true, full: true, required: true, key: "workDescription" })}
+      ${inputField("applicant-name", "Name of the Applicant", state.details.applicantName, { required: true, key: "applicantName", help: "Enter the applicant name and place, for example: Customer Name, Adoni." })}
+      ${inputField("work-description", "Name of the Work", state.details.workDescription, { textarea: true, full: true, required: true, key: "workDescription", help: "Enter the overall proposed work without its address. Put the site address in Address of the Work; the report combines them once." })}
+      ${inputField("work-address", "Address of the Work", state.details.workAddress, { textarea: true, full: true, required: true, key: "workAddress" })}
     </div></section><section class="notice"><strong>Next:</strong> choose Preparation Method. Online entry and an optional workbook template use Property Configuration and Component Selection; retrospective uploads need only the report and reviewed component totals.</section></div>`;
   }
 
@@ -198,21 +218,24 @@
     return `<section class="subgroup report-mode-panel"><h3>Choose preparation method</h3><p class="hint">Choose how the report will be prepared. Your entered component data is retained when changing methods.</p><div class="setup-choice-grid"><label class="choice-card"><input type="radio" name="work-mode" value="online" ${mode === "online" ? "checked" : ""}><span><strong>Fill online</strong><small>Enter measurements here, preview the rendered workbook, then generate the completed Excel report.</small></span></label><label class="choice-card"><input type="radio" name="work-mode" value="offline" ${mode === "offline" ? "checked" : ""}><span><strong>Complete offline and upload</strong><small>Attach a completed template or an existing report, review component totals, then submit it.</small></span></label></div></section>`;
   }
 
-  function setWorkMode(mode) {
+  async function setWorkMode(mode) {
     if (!['online', 'offline'].includes(mode)) return;
     if (state.details.workMode === mode) return;
     const label = mode === "online" ? "Fill online" : "Complete offline and upload";
-    if (!confirmReportInvalidation(`Change the preparation method to ${label}? Component configuration and measurements will be retained, but any existing completed report will no longer qualify and a new report will be required.`)) {
-      renderAll({ sectionKey: "components" });
+    if (!confirmPreparationChange("preparation method", state.details.workMode, mode)) {
+      renderAll({ sectionKey: currentKey() });
       return;
     }
+    const previous = state.details.workMode;
     state.details.workMode = mode;
-    markReportDirty();
+    preparationChanged(previous);
     renderAll({ sectionKey: mode === "online" ? "configuration" : "offline" });
-    persistDraftNow().then(() => {
+    try {
+      await persistDraftNow();
+      if (ReportData.taskCode) await ReportData.refreshTask();
       $("status").textContent = `Preparation method changed to ${label}. Existing component data was retained.`;
       updateOutputControls();
-    }).catch((error) => { $("status").textContent = error.message || "Preparation method could not be saved"; });
+    } catch (error) { $("status").textContent = error.message || "Preparation method could not be saved"; }
   }
 
   function selectedWorkModeControl() {
@@ -220,15 +243,13 @@
     return ['online', 'offline'].includes(mode) ? mode : "";
   }
 
-  function synchroniseWorkMode() {
+  async function synchroniseWorkMode() {
     // The rendered radio control is the user's most recent explicit choice.
     // Reconcile it before preview/download actions so a browser-restored form
     // value can never disagree with the in-memory draft state.
     const selected = selectedWorkModeControl();
     if (selected && state.details.workMode !== selected) {
-      state.details.workMode = selected;
-      markReportDirty();
-      persistDraftNow();
+      await setWorkMode(selected);
     }
     return state.details.workMode || "";
   }
@@ -268,10 +289,10 @@
     const matches = state.components.filter((component) => component.kind === definition.kind).length + 1;
     const roofType = definition.roofType === "custom" ? $("custom-roof-type")?.value : definition.roofType;
     const defaultName = `${definition.label}${["rcc_building", "office_amenity", "utility_structure", "residential_building", "custom"].includes(definition.kind) ? ` ${matches}` : ""}`;
-    const component = { id: uid(), kind: definition.kind, name: $("component-name")?.value.trim() || defaultName, roofType, sheets: [], formData: {} };
+    const component = { id: uid(), kind: definition.kind, name: $("component-name")?.value.trim() || defaultName, roofType, sheets: [], formData: { dimensionsRequired: definition.floorMode === "none" } };
     if (definition.floorMode === "building") {
       component.buildingConfig = defaultBuildingConfiguration();
-      component.sheets = sheetPlan(component.buildingConfig).map((floor) => makeSheetState(floor));
+      component.sheets = sheetPlan(component.buildingConfig).map((floor) => newMeasurementSheet(floor));
     }
     return component;
   }
@@ -334,7 +355,10 @@
     }
     entered.forEach((component) => {
       component.formData = {};
-      (component.sheets || []).forEach((sheet) => { sheet.formData = {}; });
+      (component.sheets || []).forEach((sheet) => {
+        dimensionEdits.delete(`measure-${component.id}-${sheet.id}`);
+        sheet.formData = { dimensionsRequired: Boolean(sheet.formData?.dimensionsRequired || sheet.formData?.dimensionSetup) };
+      });
     });
     state.details.measurementMethod = method;
     state.details.finalReport = null;
@@ -415,7 +439,7 @@
     if (impact.removed.length && !window.confirm(`This change removes ${impact.removed.map((sheet) => sheet.label).join(", ")} and all data entered on those sheet${impact.removed.length === 1 ? "" : "s"}. Continue?`)) return;
     const existing = new Map((component.sheets || []).map((sheet) => [sheet.key, sheet]));
     component.buildingConfig = proposal;
-    component.sheets = sheetPlan(proposal).map((floor) => makeSheetState(floor, existing.get(floor.key)));
+    component.sheets = sheetPlan(proposal).map((floor) => newMeasurementSheet(floor, existing.get(floor.key)));
     state.editingComponentId = null;
     renderAll({ sectionKey: "components" });
     scheduleSave();
@@ -431,13 +455,19 @@
 
   function reportOutputPanel() {
     const finalReport = finalReportRecord();
+    const task = currentTask();
+    const retained = task && TaskStore.latestArtifact(task);
+    const outdated = Boolean(task?.reportFresh === false || retained && !finalReport);
+    const ready = Boolean(finalReport && !outdated);
+    const fileName = finalReport?.fileName || retained?.filename || "";
     const previewReady = Boolean(ReportData.preview()?.id);
-    const retainedDownload = finalReport?.url
-      ? `<a class="secondary" href="${escapeHtml(finalReport.url)}?download=1" download>Download completed Excel</a>` : "";
-    return `<section class="output-grid"><div class="output-card"><h3>Report output</h3><p>Preview the current workbook, then generate the completed Excel report.</p><div class="output-actions"><button type="button" class="primary" id="generate-from-review" ${previewReady ? "" : "disabled"}>Generate completed Excel</button>${retainedDownload}</div><p class="completion-note">No photo or map attachment is required.</p></div><div class="output-status ${finalReport ? "is-complete" : "is-pending"}"><strong>${finalReport ? "Final Excel report recorded" : "A final Excel report is required"}</strong><span>${escapeHtml(finalReport ? `${finalReport.source}: ${finalReport.fileName}` : "Generate the completed Excel report from the online form.")}</span></div></section>`;
+    const retainedDownload = ready && finalReport.url
+      ? `<a class="button-link secondary report-file-download" href="${escapeHtml(finalReport.url)}${finalReport.url.includes("?") ? "&" : "?"}download=1" download title="Download Excel report" aria-label="Download Excel report"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4h14v-4"/></svg></a>` : "";
+    return `<section class="output-grid"><div class="output-card ${ready ? "is-complete" : "is-pending"}"><div class="report-output-record"><span class="report-output-icon" aria-hidden="true">${ready ? "✓" : outdated ? "!" : "↓"}</span><div class="report-output-copy"><h3>${ready ? "Excel report ready" : outdated ? "Report outdated—generate again" : "Prepare Excel report"}</h3>${fileName ? `<p class="report-output-filename" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</p>` : ""}<p>${ready ? task?.status === "In Progress" ? "Saved to this report. Mark the task Completed when your review is finished." : "Generated from the current workbook inputs." : "Preview the current workbook, then generate a fresh Excel report."}</p></div><div class="output-actions"><button type="button" class="primary" id="generate-from-review" ${previewReady ? "" : "disabled"}>${ready ? "Generate again" : "Generate Excel"}</button>${retainedDownload}</div></div></div></section>`;
   }
 
   function measurementTemplateKey(component, sheet) {
+    if (component.kind === "storage_shed") return "storage_shed";
     if (component.kind === "heavy_machinery_hall") return "heavy_machinery_hall";
     if (component.kind === "normal_machinery_hall") return "normal_machinery_hall";
     if (state.propertyType === "industrial" && ["rcc_building", "office_amenity", "utility_structure"].includes(component.kind)) {
@@ -468,7 +498,7 @@
     return state.components.flatMap((component) => {
       const definition = componentDefinition(component.kind);
       if (!definition) return [];
-      if (definition.floorMode === "building") return (component.sheets || []).map((sheet) => ({ component, sheet, key: `measure-${component.id}-${sheet.id}`, label: `${component.name} — ${sheet.label}` }));
+      if (definition.floorMode === "building") return (component.sheets || []).map((sheet) => ({ component, sheet, key: `measure-${component.id}-${sheet.id}`, label: EstimationNaming.label(state, component, sheet) }));
       return [{ component, sheet: null, key: `measure-${component.id}`, label: component.name }];
     });
   }
@@ -487,11 +517,14 @@
     const items = [];
     let nextSno = 1;
     schema.items().forEach((base, index) => {
+      if (schema === ESTIMATION_WORKSHEETS.storage_shed && base.rows.every((row) => row.id === "truss-a")) return;
       const itemKey = `standard-${index}`;
-      items.push({ ...base, itemKey, displaySno: base.sno == null ? null : nextSno++ });
+      const storage = schema === ESTIMATION_WORKSHEETS.storage_shed;
+      items.push({ ...base, storage, itemKey, displaySno: base.sno == null ? null : nextSno++ });
       (data.customItems[itemKey] || []).forEach((custom) => {
         items.push({
           ...base,
+          storage,
           itemKey: custom.id,
           parentItemKey: itemKey,
           instanceKey: custom.id,
@@ -510,7 +543,10 @@
     const scopedId = (id) => item.instanceKey ? `${item.instanceKey}:${id}` : id;
     item.rows.forEach((base) => {
       const baseId = scopedId(base.id);
-      rows.push({ ...base, instanceId: baseId, baseId, sourceId: base.sourceId ? scopedId(base.sourceId) : undefined, isCustom: false });
+      const inputs = data.rows[baseId];
+      const changes = EstimationDimensions.rowChanges(base, inputs, item.storage);
+      if (changes.hidden) return;
+      rows.push({ ...base, ...changes, instanceId: baseId, baseId, sourceId: base.sourceId ? scopedId(base.sourceId) : undefined, isCustom: false });
       (data.customRows[baseId] || []).forEach((custom) => rows.push({ ...base, id: custom.id, instanceId: custom.id, baseId, sourceId: base.sourceId ? scopedId(base.sourceId) : undefined, isCustom: true, label: custom.label || `Custom: ${base.label}` }));
     });
     return rows;
@@ -563,11 +599,11 @@
         let quantity = values[entry.instanceId].quantity;
         if (entry.calculation === "derived") {
           const source = values[entry.sourceId]?.quantity;
-          quantity = numberOrBlank(input.quantity) ?? (source == null ? null : source * entry.multiplier);
+          quantity = numberOrBlank(input.quantity) ?? (source == null ? null : source * (numberOrBlank(input.factor) ?? entry.multiplier));
         }
         if (entry.calculation === "derived_expression") {
           const source = values[entry.sourceId]?.quantity;
-          quantity = numberOrBlank(input.quantity) ?? (source == null ? null : source * 0.125 * 80);
+          quantity = numberOrBlank(input.quantity) ?? (source == null ? null : source * (numberOrBlank(input.factor) ?? 10));
         }
         if (entry.calculation === "subtotal") quantity = groupHasValue(entry, entry.sourceGroup) ? groupQuantity(entry, entry.sourceGroup) : null;
         if (entry.calculation === "percentage") {
@@ -614,10 +650,11 @@
     return `<input class="derived-quantity-input" aria-label="${escapeHtml(`${entry.label} calculated quantity; edit to adjust`)}" type="number" step="any" inputmode="decimal" value="${escapeHtml(displayValue ?? "")}" data-measurement-input="1" data-derived-quantity="1" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}" data-field="quantity">`;
   }
 
-  function calculationInfo(entry) {
+  function calculationInfo(entry, data) {
+    const factor = numberOrBlank(data.rows[entry.instanceId]?.factor);
     const message = entry.calculation === "derived"
-      ? `Calculated from the matching RCC concrete quantity × ${entry.multiplier} kg/cum.`
-      : "Calculated from Roof Slab area × 0.125 m × 80 kg/cum.";
+      ? `Calculated from the matching RCC concrete quantity × ${factor ?? entry.multiplier} kg/cum.`
+      : `Calculated from Roof Slab area × ${factor ?? 10} kg/m².`;
     return `<span class="calculation-info"><button type="button" class="info-button" aria-label="How ${escapeHtml(entry.label)} is calculated" aria-expanded="false" data-action="toggle-calculation-info">i</button><span class="calculation-info-popover" hidden>${escapeHtml(message)}</span></span>`;
   }
 
@@ -632,7 +669,7 @@
     const quantityInput = inputs.includes("quantity") ? inputControl(entry, "quantity", data, component, sheet) : "";
     const amountInput = entry.calculation === "lump_sum" ? inputControl(entry, "amount", data, component, sheet) : "";
     const quantity = ["derived", "derived_expression"].includes(entry.calculation)
-      ? `<span class="derived-quantity-wrap">${derivedQuantityControl(entry, value, data, component, sheet)}${calculationInfo(entry)}</span>`
+      ? `<span class="derived-quantity-wrap">${derivedQuantityControl(entry, value, data, component, sheet)}${calculationInfo(entry, data)}</span>`
       : quantityInput || `<span class="calculated-value" data-calculated-value="quantity" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}">${formatNumber(value.quantity)}</span>`;
     const rate = entry.rate ? inputControl(entry, "rate", data, component, sheet) : (entry.calculation === "lump_sum" ? "LS" : "");
     const amount = amountInput || `<span class="calculated-value" data-calculated-value="amount" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}">${formatNumber(value.amount)}</span>`;
@@ -655,13 +692,73 @@
     return `<div class="custom-item-details"><div class="field"><label>Short description (form)</label><input value="${escapeHtml(item.label)}" data-custom-item-short="1" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-item="${item.itemKey}"></div><div class="field full"><label>Detailed description (generated report)</label><textarea data-custom-item-detail="1" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-item="${item.itemKey}" placeholder="Enter the full technical description for the report">${escapeHtml(item.detailedDescription)}</textarea></div></div>`;
   }
 
+  function dimensionEntries() {
+    return componentMeasurementEntries().filter((entry) => measurementTemplateKey(entry.component, entry.sheet));
+  }
+
+  function needsDimensions(entry) {
+    const data = measurementData(entry.component, entry.sheet);
+    return data.dimensionsRequired && !data.dimensionSetup;
+  }
+
+  function dimensionsPanel(entries) {
+    const entry = entries.find((item) => item.key === dimensionSelection)
+      || entries.find(needsDimensions) || entries[0];
+    dimensionSelection = entry.key;
+    const key = measurementTemplateKey(entry.component, entry.sheet);
+    const profile = EstimationDimensions.profile(key, ESTIMATION_WORKSHEETS[key]);
+    const data = measurementData(entry.component, entry.sheet);
+    const values = { ...data.dimensionSetup?.values, ...dimensionEdits.get(entry.key) };
+    const options = entries.map((item) => `<option value="${escapeHtml(item.key)}"${entry.key === item.key ? " selected" : ""}>${escapeHtml(item.label)}${needsDimensions(item) ? " · Setup needed" : ""}</option>`).join("");
+    const groups = profile.groups.map(({ label, fields }, index) => `<details class="dimension-group"${index === 0 ? " open" : ""}><summary>${escapeHtml(label)}</summary><div class="dimension-fields">${fields.map(({ id, label, value, kind }) => `<div class="field"><label for="dimension-${id}">${escapeHtml(label)}${kind?.startsWith("required") ? ' <span aria-hidden="true">*</span>' : ""}</label><input id="dimension-${id}" data-dimension-field="${id}" type="number" min="0" ${kind === "percent" ? 'max="100"' : ""} step="${kind?.endsWith("count") ? "1" : "any"}" value="${escapeHtml(values[id] ?? value)}"${kind?.startsWith("required") ? ' aria-required="true"' : ""}></div>`).join("")}</div></details>`).join("");
+    const note = profile.centre ? "Enter the measured centre-wall runs where they apply. The outside walls supply the perimeter. Enter room-by-room plaster measurements in the worksheet." : profile.storage ? "The perimeter supplies the foundation runs. The brickwork and lintel defaults exclude one long side. Enter an override if the measured runs differ." : "";
+    return `<div class="panel" data-key="dimensions"><h2>Dimensions &amp; Defaults</h2><p class="hint">Review the dimensions for each worksheet. Applying them fills the linked measurement rows and keeps the rates and separate entries you already entered.</p><div class="field dimension-worksheet"><label for="dimension-worksheet">Worksheet</label><select id="dimension-worksheet">${options}</select></div>${note ? `<p class="hint">${escapeHtml(note)}</p>` : ""}<p class="hint">Leave linked overrides blank to use their source dimensions. Fill in any optional shed measurements you want to calculate here.</p>${groups}<p class="dimension-error" role="alert" hidden></p><button type="button" class="primary" data-action="apply-dimensions">Apply dimensions and continue</button></div>`;
+  }
+
+  function applyDimensions() {
+    const entry = dimensionEntries().find((item) => item.key === dimensionSelection);
+    if (!entry || ReportData.readOnly) return;
+    const key = measurementTemplateKey(entry.component, entry.sheet);
+    const data = measurementData(entry.component, entry.sheet);
+    const values = Object.fromEntries([...document.querySelectorAll("[data-dimension-field]")].map((input) => [input.dataset.dimensionField, input.value]));
+    let rows;
+    try {
+      rows = EstimationDimensions.derive(EstimationDimensions.profile(key, ESTIMATION_WORKSHEETS[key]), values);
+    } catch (error) {
+      const message = document.querySelector(".dimension-error");
+      message.textContent = error.message;
+      message.hidden = false;
+      return;
+    }
+    if (!data.dimensionSetup && Object.entries(rows).some(([id, fields]) => Object.keys(fields).some((field) => numberOrBlank(data.rows[id]?.[field]) != null))
+      && !window.confirm("Apply these dimensions to the existing linked measurements? Rates and separate entries will be kept.")) return;
+    if (!confirmReportInvalidation()) return;
+    for (const [id, fields] of Object.entries(data.dimensionSetup?.rows || {})) {
+      for (const [field, applied] of Object.entries(fields)) {
+        if (!(field in (rows[id] || {})) && data.rows[id]?.[field] === applied) delete data.rows[id][field];
+      }
+    }
+    for (const [id, fields] of Object.entries(rows)) {
+      const previous = data.dimensionSetup?.rows?.[id];
+      data.rows[id] ||= {};
+      for (const [field, value] of Object.entries(fields)) {
+        if (!previous || previous[field] !== value) data.rows[id][field] = value;
+      }
+    }
+    data.dimensionSetup = { values, rows };
+    dimensionEdits.delete(entry.key);
+    scheduleSave();
+    renderAll({ sectionKey: entry.key });
+    window.scrollTo(0, 0);
+  }
+
   function measurementPanel(entry) {
     const templateKey = measurementTemplateKey(entry.component, entry.sheet);
     if (!templateKey) return `<div class="panel" data-key="${entry.key}"><h2>${escapeHtml(entry.label)}</h2><div class="notice"><strong>Online measurements are not available for this component yet.</strong> Select a finalized Industrial component or use the future offline workbook route for a custom component.</div></div>`;
     const schema = ESTIMATION_WORKSHEETS[templateKey];
     const data = measurementData(entry.component, entry.sheet);
     const totals = sheetCalculations(schema, data);
-    return `<div class="panel" data-key="${entry.key}"><h2>${escapeHtml(entry.label)}</h2><p class="hint">Enter the white measurement cells. Derived quantities fill automatically and can be adjusted when needed. Quantity and Amount follow the finalized worksheet formulas. Use + for a matching custom subfield or Add custom field for a full numbered item.</p><div class="worksheet-summary"><span>Approved template: <strong>${escapeHtml(schema.label)}</strong></span>${editableFinalAmount(totals.overrideAmount, totals.calculatedAmount, `data-sheet-final-input="1" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, `data-action="reset-sheet-total" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, "Final sheet total", `data-sheet-calculated data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`)}</div><div class="worksheet-item-list">${totals.calculations.map(({ item, calculation }) => {
+    return `<div class="panel" data-key="${entry.key}"><h2>${escapeHtml(entry.label)}</h2><p class="hint">Enter the white measurement cells. Derived quantities fill automatically and can be adjusted when needed. Quantity and Amount follow the finalized worksheet formulas. Use + for a matching custom subfield or Add custom field for a full numbered item.</p><div class="worksheet-summary"><button type="button" class="text-button" data-action="edit-dimensions" data-section-key="${escapeHtml(entry.key)}">Edit dimensions &amp; defaults</button><span>Approved template: <strong>${escapeHtml(schema.label)}</strong></span>${editableFinalAmount(totals.overrideAmount, totals.calculatedAmount, `data-sheet-final-input="1" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, `data-action="reset-sheet-total" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, "Final sheet total", `data-sheet-calculated data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`)}</div><div class="field worksheet-plinth-area"><label for="plinth-${entry.key}">Plinth Area (sft.)</label><input id="plinth-${entry.key}" type="number" min="0" step="any" value="${escapeHtml(data.plinthArea ?? "")}" data-plinth-area data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"><small class="hint">Optional. Enter the area for all floors represented on this sheet. It does not alter measurement or cost calculations.</small></div><div class="worksheet-item-list">${totals.calculations.map(({ item, calculation }) => {
       const heading = `${item.displaySno == null ? "" : `${item.displaySno}. `}${item.label}`;
       const actions = item.isCustomItem
         ? `<button type="button" class="text-button danger-text" data-action="remove-custom-item" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}" data-item="${item.itemKey}">Remove custom field</button>`
@@ -730,19 +827,23 @@
   }
 
   function reportSetupComplete() {
-    return ["estimateDate", "place", "applicantName", "projectLocation", "workDescription"].every((key) => String(state.details[key] || "").trim());
+    return ["estimateDate", "place", "applicantName", "workAddress", "workDescription"].every((key) => String(state.details[key] || "").trim());
   }
 
   function propertyConfigurationComplete() { return Boolean(state.propertyType && state.construction && state.subtype); }
 
   function sectionGate(key) {
+    if (ReportData.readOnly) return {allowed: true};
     if (key === "setup" || key === "preparation" || key === "configuration") return { allowed: true };
     if (key === "components") {
       if (!reportSetupComplete()) return { allowed: false, message: "Complete Report Setup first.", target: "setup", targetLabel: "Go to Report Setup" };
       if (!propertyConfigurationComplete()) return { allowed: false, message: "Complete Property Configuration before choosing report components.", target: "configuration", targetLabel: "Go to Property Configuration" };
       return { allowed: true };
     }
+    if (key === "dimensions") return sectionGate("components");
     if (key.startsWith("measure-")) {
+      const entry = dimensionEntries().find((item) => item.key === key);
+      if (entry && needsDimensions(entry)) return { allowed: false, message: "Apply dimensions and defaults for this worksheet before entering its measurements.", target: "dimensions", targetLabel: "Go to Dimensions & Defaults" };
       if (!state.components.length) return { allowed: false, message: "Choose and configure at least one property component before entering measurements.", target: "components", targetLabel: "Go to Component Selection" };
       if (state.details.workMode !== "online") return { allowed: false, message: "Choose Fill online in Preparation Method to enter measurements in this form.", target: "preparation", targetLabel: "Go to Preparation Method" };
       return { allowed: true };
@@ -767,9 +868,11 @@
     const configuration = [{key: "configuration", label: "Property Configuration", html: configurationPanel()}, {key: "components", label: "Component Selection", html: componentSelectionPanel()}];
     if (state.details.workMode === "offline") return [...setup, ...(state.details.templateSetup ? configuration : []), {key: "offline", label: "Complete & Upload Report", html: offlineEntry.panel()}];
     if (state.details.workMode !== "online") return setup;
+    const dimensionSheets = dimensionEntries();
+    const dimensions = dimensionSheets.length ? [{ key: "dimensions", label: "Dimensions & Defaults", html: dimensionsPanel(dimensionSheets) }] : [];
     const measurements = state.propertyType ? componentMeasurementEntries().map((entry) => ({key: entry.key, label: entry.label, html: measurementPanel(entry)})) : [];
     const abstract = state.propertyType && state.components.length ? [{key: "abstract", label: requiresSeparateAbstract() ? "Abstract" : "Compact Abstract", html: abstractPanel()}] : [];
-    return [...setup, ...configuration, ...measurements, ...abstract, {key: "review", label: "Configuration Review", html: reviewPanel()}].map((section) => {
+    return [...setup, ...configuration, ...dimensions, ...measurements, ...abstract, {key: "review", label: "Configuration Review", html: reviewPanel()}].map((section) => {
       const gate = sectionGate(section.key);
       return gate.allowed ? {...section, locked: false} : {...section, locked: true, html: lockedPanel(section.key, section.label, gate)};
     });
@@ -798,6 +901,11 @@
   function showSection(index, options = {}) {
     const panels = [...document.querySelectorAll(".panel")];
     state.current = Math.max(0, Math.min(index, panels.length - 1));
+    const targetKey = panels[state.current]?.dataset.key;
+    if (panels[state.current]?.classList.contains("locked-panel") && sectionGate(targetKey).allowed) {
+      renderAll({sectionKey: targetKey});
+      return;
+    }
     if (panels[state.current]?.dataset.key === "abstract" && !options.skipAbstractRefresh) {
       // The Abstract is derived from every component panel. Rebuild it when it
       // is opened so it cannot display an earlier, hidden snapshot of a total.
@@ -820,7 +928,7 @@
 
   function validationIssues() {
     const issues = [];
-    ["estimateDate", "place", "applicantName", "projectLocation", "workDescription"].forEach((key) => { if (!String(state.details[key] || "").trim()) issues.push(`Report detail missing: ${key.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}`); });
+    ["estimateDate", "place", "applicantName", "workAddress", "workDescription"].forEach((key) => { if (!String(state.details[key] || "").trim()) issues.push(`Report detail missing: ${key.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}`); });
     if (!state.propertyType) issues.push("Select the property type.");
     if (!state.construction) issues.push("Select the construction configuration.");
     if (!state.subtype) issues.push("Select the property subtype.");
@@ -833,6 +941,7 @@
     const issues = validationIssues();
     componentMeasurementEntries().forEach((entry) => {
       if (!measurementTemplateKey(entry.component, entry.sheet)) issues.push(`${entry.label} does not yet have an approved workbook template.`);
+      else if (state.details.workMode === "online" && needsDimensions(entry)) issues.push(`Apply dimensions and defaults for ${entry.label}.`);
     });
     return issues;
   }
@@ -860,7 +969,7 @@
     snapshot.components.forEach((component) => {
       const liveComponent = state.components.find((entry) => entry.id === component.id);
       if (!liveComponent) return;
-      if (Array.isArray(component.sheets)) {
+      if (component.sheets?.length) {
         component.sheets.forEach((sheet) => {
           const liveSheet = (liveComponent.sheets || []).find((entry) => entry.id === sheet.id);
           if (!liveSheet) return;
@@ -879,9 +988,11 @@
 
   function estimationLinkSummary(extracted = null) {
     const worksheetComponents = componentMeasurementEntries().map((entry, index) => ({
-      id: `worksheet-${index + 1}`,
+      id: entry.key,
+      legacyLabel: entry.sheet ? `${entry.component.name} - ${entry.sheet.label}` : entry.component.name,
       label: entry.label,
       estimatedCost: componentSheetTotals(entry)?.amount || 0,
+      plinthArea: measurementData(entry.component, entry.sheet).plinthArea ?? null,
       source: "component",
     }));
     const customComponents = customAbstractEntries("customComponentEstimates")
@@ -906,9 +1017,11 @@
       construction: state.construction,
       subtype: state.subtype,
       estimateDate: state.details.estimateDate || "",
+      identityVersion: 2,
       applicantName: state.details.applicantName || "",
       applicantAddress: state.details.applicantAddress || "",
-      projectLocation: state.details.projectLocation || "",
+      workAddress: state.details.workAddress || "",
+      projectLocation: state.details.workAddress || "",
       workDescription: state.details.workDescription || "",
       components,
       totalEstimatedCost: extracted?.totalEstimatedCost ?? components.reduce((sum, entry) => sum + (Number(entry.estimatedCost) || 0), 0),
@@ -916,7 +1029,8 @@
   }
 
   async function downloadWorkbook(mode) {
-    const selectedMode = synchroniseWorkMode();
+    if (EstimationProcessing.isBusy()) return;
+    const selectedMode = await synchroniseWorkMode();
     const requiredWorkMode = mode === "completed" ? "online" : "offline";
     if (selectedMode !== requiredWorkMode) {
       const selected = selectedMode === "online" ? "Fill online" : selectedMode === "offline" ? "Complete offline and upload" : "no preparation method";
@@ -938,37 +1052,41 @@
     buttons.forEach((button) => { button.disabled = true; });
     $("status").textContent = mode === "offline" ? "Preparing offline workbook…" : "Generating Excel…";
     try {
-      await persistDraftNow();
-      const response = await fetch("/api/estimation/workbook", {
-        method: "POST",
-        headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(ReportData.requestPayload({ state: workbookState(mode), mode, summary: estimationLinkSummary() })),
+      await EstimationProcessing.run(mode === "offline" ? "Preparing workbook template" : "Generating Excel report", "Saving the current report details…", async (stage) => {
+        await persistDraftNow();
+        stage(mode === "offline" ? "Building the configured workbook template…" : "Building the completed Excel report…");
+        const response = await fetch("/api/estimation/workbook", {
+          method: "POST",
+          headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify(ReportData.requestPayload({ state: workbookState(mode), mode, summary: estimationLinkSummary() })),
+        });
+        if (!response.ok) {
+          const message = await response.json().catch(() => ({}));
+          throw new Error(message.error || "Workbook preparation failed.");
+        }
+        const fileName = (response.headers.get("content-disposition")?.match(/filename="?([^";]+)"?/i)?.[1]) || "Estimation_Report.xlsx";
+        const reportUrl = response.headers.get("x-report-url") || "";
+        const registered = response.headers.get("x-task-registered") === "true";
+        const blob = await response.blob();
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = fileName;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(link.href);
+        const generatedAt = new Date().toISOString();
+        if (mode === "offline") state.details.offlineWorkbook = { fileName, generatedAt, configurationSignature: configurationSignature() };
+        else {
+          if (registered && ReportData.taskCode) await TaskStore.refresh(ReportData.taskCode);
+          state.details.finalReport = { source: "Generated Excel", fileName, generatedAt, url: reportUrl };
+          generatedChangeAcknowledged = false;
+          window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: "xlsx", download: reportUrl, filename: fileName, source: "Generated Excel", estimationSummary: estimationLinkSummary(), registered } }));
+        }
+        scheduleSave({ reportDirty: false });
+        $("status").textContent = mode === "offline" ? "Offline workbook downloaded" : "Completed Excel downloaded";
+        renderAll({ sectionKey: mode === "offline" ? "offline" : "review" });
       });
-      if (!response.ok) {
-        const message = await response.json().catch(() => ({}));
-        throw new Error(message.error || "Workbook preparation failed.");
-      }
-      const fileName = (response.headers.get("content-disposition")?.match(/filename="?([^";]+)"?/i)?.[1]) || "Estimation_Report.xlsx";
-      const reportUrl = response.headers.get("x-report-url") || "";
-      const registered = response.headers.get("x-task-registered") === "true";
-      const blob = await response.blob();
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = fileName;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(link.href);
-      const generatedAt = new Date().toISOString();
-      if (mode === "offline") state.details.offlineWorkbook = { fileName, generatedAt, configurationSignature: configurationSignature() };
-      else {
-        state.details.finalReport = { source: "Generated Excel", fileName, generatedAt, url: reportUrl };
-        generatedChangeAcknowledged = false;
-        window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: "xlsx", download: reportUrl, filename: fileName, source: "Generated Excel", estimationSummary: estimationLinkSummary(), registered } }));
-      }
-      scheduleSave({ reportDirty: false });
-      $("status").textContent = mode === "offline" ? "Offline workbook downloaded" : "Completed Excel downloaded";
-      renderAll({ sectionKey: mode === "offline" ? "offline" : "review" });
     } catch (error) {
       window.alert(workbookErrorMessage(error));
       $("status").textContent = "Workbook preparation failed";
@@ -989,6 +1107,7 @@
   }
 
   async function showReview() {
+    if (EstimationProcessing.isBusy()) return;
     const issues = workbookIssues();
     const previewMode = state.details.workMode === "offline" ? "offline" : "completed";
     const sheets = allWorksheetNames();
@@ -1010,15 +1129,17 @@
     }
     $("status").textContent = "Rendering workbook preview…";
     try {
-      await persistDraftNow();
-      const response = await fetch("/api/estimation/preview", { method: "POST", headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(ReportData.requestPayload({ state: workbookState(previewMode), mode: previewMode })) });
-      const preview = await response.json();
-      if (!response.ok) throw new Error(preview.error || "Workbook preview failed.");
-      $("workbook-preview").innerHTML = `<iframe class="workbook-preview-frame" src="${escapeHtml(preview.preview)}" title="Rendered estimation workbook preview"></iframe>`;
-      ReportData.setPreview({ id: preview.preview_id, url: preview.preview });
-      $("status").textContent = "Workbook preview ready";
-      updateOutputControls();
-      if ($("generate-from-review")) $("generate-from-review").disabled = false;
+      await EstimationProcessing.run("Preparing workbook preview", "Saving report details and rendering the workbook…", async () => {
+        await persistDraftNow();
+        const response = await fetch("/api/estimation/preview", { method: "POST", headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(ReportData.requestPayload({ state: workbookState(previewMode), mode: previewMode })) });
+        const preview = await response.json();
+        if (!response.ok) throw new Error(preview.error || "Workbook preview failed.");
+        $("workbook-preview").innerHTML = `<iframe class="workbook-preview-frame" src="${escapeHtml(preview.preview)}" title="Rendered estimation workbook preview"></iframe>`;
+        ReportData.setPreview({ id: preview.preview_id, url: preview.preview });
+        $("status").textContent = "Workbook preview ready";
+        updateOutputControls();
+        if ($("generate-from-review")) $("generate-from-review").disabled = false;
+      });
     } catch (error) {
       $("workbook-preview").innerHTML = `<div class="notice"><strong>Workbook preview could not be rendered.</strong><br>${escapeHtml(workbookErrorMessage(error))}</div>`;
       $("status").textContent = "Workbook preview failed";
@@ -1026,6 +1147,8 @@
   }
 
   function scheduleSave(options = {}) {
+    if (ReportData.readOnly) return;
+    editVersion++;
     if (options.reportDirty !== false) {
       markReportDirty();
       updateOutputControls();
@@ -1040,12 +1163,18 @@
   }
 
   async function persistDraftNow() {
+    if (ReportData.readOnly) return;
     window.clearTimeout(saveTimer);
     saveTimer = null;
+    const savedVersion = editVersion;
     // A save response may arrive after the next input/upload. Estimation has no
     // server-normalized media, so keep the current browser state rather than
     // replacing newer edits with the earlier request's payload.
-    await ReportData.save(DRAFT_KEY, "estimation", state, "3");
+    state.details.identityVersion = 2;
+    const saved = await ReportData.save(DRAFT_KEY, "estimation", state, "3");
+    if (savedVersion !== editVersion || saveTimer !== null) return;
+    if (saved?.details?.preparationRevision != null) state.details.preparationRevision = saved.details.preparationRevision;
+    else delete state.details.preparationRevision;
     $("status").textContent = ReportData.localOnly ? "Saved locally" : "Saved";
     $("status").classList.remove("is-saving");
     $("status").removeAttribute("aria-label");
@@ -1287,7 +1416,7 @@
         input.dataset.previousValue = input.value;
         input.dataset.previousChecked = String(input.checked);
       });
-      if (input.name === "work-mode") return;
+      if (input.name === "work-mode" || input.id === "estimation-upload-type" || input.id === "dimension-worksheet" || input.dataset.dimensionField) return;
       if (input.type === "checkbox" || input.type === "radio") {
         input.addEventListener("click", (event) => {
           if (!confirmReportInvalidation()) event.preventDefault();
@@ -1309,6 +1438,15 @@
         input.dataset.previousChecked = String(input.checked);
       }, true);
     });
+    $("dimension-worksheet")?.addEventListener("change", (event) => {
+      dimensionSelection = event.target.value;
+      renderAll({ sectionKey: "dimensions" });
+    });
+    document.querySelectorAll("[data-dimension-field]").forEach((input) => input.addEventListener("input", () => {
+      const values = dimensionEdits.get(dimensionSelection) || {};
+      values[input.dataset.dimensionField] = input.value;
+      dimensionEdits.set(dimensionSelection, values);
+    }));
     document.querySelectorAll("#nav button").forEach((button) => button.addEventListener("click", () => showSection(Number(button.dataset.sectionIndex), { scroll: true })));
     document.querySelectorAll('[name="property-type"]').forEach((input) => input.addEventListener("change", () => setPropertyType(input.value)));
     document.querySelectorAll('[name="construction"]').forEach((input) => input.addEventListener("change", () => setConstruction(input.value)));
@@ -1316,6 +1454,11 @@
     document.querySelectorAll('[name="work-mode"]').forEach((input) => input.addEventListener("change", () => setWorkMode(input.value)));
     $("property-subtype")?.addEventListener("change", (event) => { state.subtype = event.target.value; renderAll({ sectionKey: "configuration" }); scheduleSave(); });
     document.querySelectorAll("[data-detail]").forEach((input) => input.addEventListener("input", () => { state.details[input.dataset.detail] = input.value; if (input.type === "date") dateError(input); scheduleSave(); }));
+    document.querySelectorAll("[data-plinth-area]").forEach((input) => input.addEventListener("input", () => {
+      const found = locateMeasurement(input.dataset.component, input.dataset.sheet);
+      if (found) found.data.plinthArea = input.value;
+      scheduleSave();
+    }));
     document.querySelectorAll("[data-measurement-input]").forEach((input) => input.addEventListener("input", () => updateMeasurementInput(input)));
     document.querySelectorAll("[data-row-label]").forEach((input) => input.addEventListener("input", () => updateCustomRowLabel(input)));
     document.querySelectorAll("[data-item-final-input]").forEach((input) => input.addEventListener("change", () => updateItemFinalAmount(input)));
@@ -1343,7 +1486,19 @@
       if (action === "remove-component") removeComponent(component);
       if (action === "add-abstract-custom") addAbstractCustom(button.dataset.abstractCustomType);
       if (action === "remove-abstract-custom") removeAbstractCustom(button.dataset.abstractCustomType, button.dataset.abstractCustomId);
+      if (action === "apply-dimensions") applyDimensions();
+      if (action === "edit-dimensions") {
+        dimensionSelection = button.dataset.sectionKey;
+        renderAll({ sectionKey: "dimensions" });
+        window.scrollTo(0, 0);
+      }
       if (action === "go-to-section") {
+        if (button.dataset.sectionKey === "dimensions" && currentKey().startsWith("measure-")) {
+          dimensionSelection = currentKey();
+          renderAll({ sectionKey: "dimensions" });
+          window.scrollTo(0, 0);
+          return;
+        }
         const target = document.querySelector(`#nav button[data-section-key="${CSS.escape(button.dataset.sectionKey)}"]`);
         target?.click();
       }
@@ -1383,6 +1538,6 @@
   $("close-review").addEventListener("click", () => { $("review-modal").hidden = true; });
   $("review-modal").addEventListener("click", (event) => { if (event.target === $("review-modal")) $("review-modal").hidden = true; });
   await restoreDraft();
-  if (currentTask()) state.details.applicantName = currentTask().customerName;
+  if (currentTask() && !String(state.details.applicantName || "").trim()) state.details.applicantName = currentTask().customerName;
   renderAll({ sectionKey: "setup" });
 })();

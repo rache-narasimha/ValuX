@@ -105,7 +105,7 @@ const manifest = {
       items: value.items(),
     }]),
   ),
-  templates: Object.fromEntries(templates.map(([key, name]) => [key, name])),
+  templates: { ...Object.fromEntries(templates.map(([key, name]) => [key, name])), storage_shed: "T02 Normal Hall" },
   commonExternalWorks: [
     "Water Supply and Sanitary Works",
     "Electrical Works",

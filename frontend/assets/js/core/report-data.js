@@ -8,6 +8,8 @@
   let revision = 0;
   let previewState = null;
   let saveChain = Promise.resolve();
+  let retainedReadOnly = false;
+  const readOnly = () => retainedReadOnly || Boolean(taskCode && ["Completed", "Closed"].includes(window.TaskStore?.get(taskCode)?.status));
 
   function localLoad(key) {
     try { return JSON.parse(localStorage.getItem(key) || "null"); }
@@ -20,12 +22,14 @@
       return localLoad(localKey);
     }
     const response = await BusinessApi.get(`/api/tasks/${encodeURIComponent(taskCode)}/draft`);
+    retainedReadOnly = response.draft?.readOnly === true;
     revision = Number(response.draft?.revision || 0);
     previewState = response.draft?.preview || null;
     return response.draft?.payload || null;
   }
 
   async function save(localKey, reportKey, payload, schemaVersion = "1") {
+    if (readOnly()) throw new Error("This retained report is read-only. Reopen the task to edit it.");
     if (localOnly) {
       localStorage.setItem(localKey, JSON.stringify(payload));
       return payload;
@@ -46,6 +50,7 @@
   }
 
   async function discard(localKey) {
+    if (readOnly()) throw new Error("This retained report is read-only.");
     if (localOnly) {
       localStorage.removeItem(localKey);
       return;
@@ -57,6 +62,7 @@
   }
 
   async function requestHeaders(headers = {}) {
+    if (readOnly()) throw new Error("This retained report is read-only.");
     if (localOnly) return { ...headers };
     return {
       ...headers,
@@ -75,6 +81,7 @@
   }
 
   window.ReportData = {
+    get readOnly() { return readOnly(); },
     taskCode,
     localOnly,
     load,

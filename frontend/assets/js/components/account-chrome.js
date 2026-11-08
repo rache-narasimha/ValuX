@@ -1,0 +1,87 @@
+/** Shared notifications and human-activity session refresh. Polling never extends idle time. */
+(function () {
+  "use strict";
+  function install() {
+    const bell = document.querySelector(".notification-bell");
+    if (!bell || !window.BusinessApi) return;
+    const panel = document.getElementById("notification-panel");
+    const list = panel.querySelector(".notification-list");
+    const more = panel.querySelector(".notification-more");
+    const badge = bell.querySelector(".notification-count");
+    const feedback = panel.querySelector(".notification-feedback");
+    const readAll = panel.querySelector("[data-notifications-read-all]");
+    let items = [], loading = false, unread = 0;
+    const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    function renderBadge() {
+      badge.hidden = !unread;
+      badge.textContent = unread > 99 ? "99+" : String(unread);
+      bell.setAttribute("aria-label", unread ? `Notifications, ${unread} unread` : "Notifications");
+      readAll.disabled = !unread;
+    }
+    function render() {
+      renderBadge();
+      list.innerHTML = items.length ? items.map((item) => {
+        const date = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: window.ValuxTime?.timeZone || "Asia/Kolkata", timeZoneName: "short" }).format(new Date(item.createdAt));
+        return `<article class="notification-item${item.read ? "" : " unread"}"><a href="/tasks/detail?id=${encodeURIComponent(item.taskCode)}" data-notification-id="${escape(item.id)}"><strong>${escape(item.taskCode)} · ${escape(item.customer)}</strong><span>${escape(item.message)}</span><small>${escape(item.actor)} · ${escape(date)}</small></a><button type="button" class="notification-read" data-read-id="${escape(item.id)}" ${item.read ? "hidden" : ""} title="Mark as read" aria-label="Mark notification as read">✓</button></article>`;
+      }).join("") : '<p class="notification-empty">You’re all caught up. New task updates will appear here.</p>';
+    }
+    async function load(append = false, badgeOnly = false) {
+      if (loading) return;
+      loading = true;
+      try {
+        const payload = await BusinessApi.get("/api/notifications", { offset: append ? items.length : 0 });
+        unread = payload.unread;
+        feedback.textContent = "";
+        if (badgeOnly) renderBadge();
+        else {
+          items = append ? [...items, ...payload.items.filter((item) => !items.some((existing) => existing.id === item.id))] : payload.items;
+          more.hidden = !payload.hasMore;
+          render();
+        }
+      } catch (error) {
+        if (error.status === 401) { window.location.assign("/auth"); return; }
+        feedback.textContent = "Notifications are temporarily unavailable. Open this panel to retry.";
+      } finally { loading = false; }
+    }
+    async function mark(id, all = false) {
+      await BusinessApi.post("/api/notifications/read", all ? { all: true } : { id });
+      await load();
+    }
+    bell.addEventListener("click", () => {
+      panel.hidden = !panel.hidden;
+      bell.setAttribute("aria-expanded", String(!panel.hidden));
+      if (!panel.hidden) { document.querySelector(".account-menu")?.removeAttribute("open"); load(); }
+    });
+    const close = () => { panel.hidden = true; bell.setAttribute("aria-expanded", "false"); };
+    document.addEventListener("click", (event) => { if (!event.target.closest(".notification-menu")) close(); });
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !panel.hidden) { close(); bell.focus(); } });
+    panel.addEventListener("click", async (event) => {
+      const read = event.target.closest("[data-read-id]");
+      const link = event.target.closest("[data-notification-id]");
+      try {
+        if (read) { read.disabled = true; await mark(read.dataset.readId); }
+        if (link && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && event.button === 0) {
+          event.preventDefault();
+          try { await mark(link.dataset.notificationId); }
+          finally { window.location.assign(link.href); }
+        }
+      } catch (error) { feedback.textContent = error.message; if (read) read.disabled = false; }
+    });
+    readAll.addEventListener("click", async () => { readAll.disabled = true; try { await mark(null, true); } catch (error) { feedback.textContent = error.message; readAll.disabled = false; } });
+    more.addEventListener("click", () => load(true));
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+    setInterval(() => { if (!document.hidden) load(false, !panel.hidden); }, 30000);
+    load();
+
+    let lastActivity = Date.now();
+    async function active(event) {
+      if (!event.isTrusted || document.hidden || Date.now() - lastActivity < 60000) return;
+      lastActivity = Date.now();
+      try { await BusinessApi.post("/api/auth/activity", {}); }
+      catch (error) { if (error.status === 401) window.location.assign("/auth"); }
+    }
+    ["pointerdown", "keydown", "input", "scroll"].forEach((name) => document.addEventListener(name, active, { passive: true, capture: true }));
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", install);
+  else install();
+})();

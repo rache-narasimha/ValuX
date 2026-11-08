@@ -73,6 +73,7 @@
       components: [
         { kind: "heavy_machinery_hall", label: "Heavy Machinery Hall", roofType: "shed", floorMode: "none" },
         { kind: "normal_machinery_hall", label: "Normal Machinery Hall", roofType: "shed", floorMode: "none" },
+        { kind: "storage_shed", label: "Storage Shed", roofType: "shed", floorMode: "none" },
         { kind: "rcc_building", label: "RCC Building", roofType: "rcc", floorMode: "building" },
         { kind: "office_amenity", label: "Office / Amenity Building", roofType: "rcc", floorMode: "building" },
         { kind: "utility_structure", label: "Utility Structure", roofType: "rcc", floorMode: "building" },
@@ -94,6 +95,7 @@
       components: [
         { kind: "rcc_building", label: "RCC Commercial Building", roofType: "rcc", floorMode: "building" },
         { kind: "shed_hall", label: "Shed Roof Building / Hall", roofType: "shed", floorMode: "none" },
+        { kind: "storage_shed", label: "Storage Shed", roofType: "shed", floorMode: "none" },
         { kind: "custom", label: "Custom Commercial Component", roofType: "custom", floorMode: "custom" },
       ],
     },
@@ -512,7 +514,17 @@
     return rows;
   }
 
+  function storageItems() {
+    return hallItems(false).map((item) => {
+      if (item.sno === 12) return { sno: 12, label: "White washing", rows: [lumpSum("whitewashing", "White washing")] };
+      if (item.sno === 13) return { sno: 13, label: "Colour washing", rows: [lumpSum("colourwashing", "Colour washing")] };
+      if (item.rows.some((row) => row.id === "truss-lean")) return { ...item, sno: 14 };
+      return item;
+    });
+  }
+
   const ESTIMATION_WORKSHEETS = {
+    storage_shed: { label: "Storage Shed", items: storageItems },
     heavy_machinery_hall: { label: "Heavy Machinery Hall", items: () => hallItems(true) },
     normal_machinery_hall: { label: "Normal Machinery Hall", items: () => hallItems(false) },
     rcc_ground: { label: "RCC Building – Ground Floor", items: () => rccItems(false) },

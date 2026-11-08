@@ -21,6 +21,7 @@ from .ooxml import (
     prepare_floor_rows,
     prepare_general_document_rows,
     prepare_general_party_rows,
+    relabel_revaluation,
     replace_plain_tokens,
     replace_sdt_text,
     set_paragraph_text,
@@ -216,16 +217,16 @@ def finalize_agricultural_pagination(docx_path):
             next_element = next_element.getnext()
     document.save(docx_path)
 
-def generate_agricultural_docx(values, output_path, photos=None, map_image=None):
+def generate_agricultural_docx(values, output_path, photos=None, map_image=None, *, revaluation=False):
     values = normalized_document_values(values)
     replacements = agricultural_replacements(values)
-    replace_plain_tokens(AGRICULTURAL_TEMPLATE, output_path, replacements, len(document_indexes(values)))
+    replace_plain_tokens(AGRICULTURAL_TEMPLATE, output_path, replacements, len(document_indexes(values)), revaluation=revaluation)
     normalize_agricultural_typography(output_path)
     insert_uploaded_media(output_path, photos or [], map_image, valuation_map=True)
     finalize_agricultural_pagination(output_path)
 
 
-def generate_offline_template(report_key, output_path):
+def generate_offline_template(report_key, output_path, *, revaluation=False):
     """Produce a fillable blank copy, never expose sample data in the engine master."""
     from .schemas import agricultural_schema_payload, schema_payload
 
@@ -240,9 +241,9 @@ def generate_offline_template(report_key, output_path):
         raise ValueError("Unsupported valuation template.")
     blank_values = {field["id"]: "" for field in fields}
     if report_key == "valuation-general":
-        generator(blank_values, output_path, blank=True)
+        generator(blank_values, output_path, blank=True, revaluation=revaluation)
     else:
-        generator(blank_values, output_path)
+        generator(blank_values, output_path, revaluation=revaluation)
 
     # Offline copies contain editable blank cells, without automation IDs or
     # computed values left inside controls by the normal generator.
@@ -250,12 +251,12 @@ def generate_offline_template(report_key, output_path):
     if report_key == "valuation-general":
         normalize_word_package(output_path)
 
-def generate_docx(values, output_path, photos=None, map_image=None):
-    _generate_general_docx(values, output_path, photos, map_image)
+def generate_docx(values, output_path, photos=None, map_image=None, *, revaluation=False):
+    _generate_general_docx(values, output_path, photos, map_image, revaluation=revaluation)
     normalize_word_package(output_path)
 
 
-def _generate_general_docx(values, output_path, photos=None, map_image=None, *, blank=False):
+def _generate_general_docx(values, output_path, photos=None, map_image=None, *, blank=False, revaluation=False):
     values = normalized_document_values(values)
     replacements, pmv_text, realizable_text, distress_text = calculated_replacements(values)
     replacements.update({
@@ -284,6 +285,8 @@ def _generate_general_docx(values, output_path, photos=None, map_image=None, *, 
                 prepare_general_document_rows(root, values)
                 prepare_general_party_rows(root)
                 prepare_floor_rows(root, values)
+                if revaluation:
+                    relabel_revaluation(root)
                 for sdt in root.xpath(".//w:sdt", namespaces=NS):
                     tags = sdt.xpath("./w:sdtPr/w:tag/@w:val", namespaces=NS)
                     if tags and tags[0] in replacements:

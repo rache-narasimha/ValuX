@@ -225,6 +225,7 @@ function applySaleAgreementRule() {
 
 let calculations;
 function calculateAll(changedId) {
+  if (ReportData.readOnly) return;
   calculations?.refresh(changedId);
 }
 
@@ -470,6 +471,7 @@ function validateRequiredFields(form) {
 
 let saveTimer;
 async function persistDraftNow() {
+  if (ReportData.readOnly) return;
   clearTimeout(saveTimer);
   saveTimer = null;
   const saved = await ReportData.save(STORAGE_KEY, "valuation-agricultural", {
@@ -489,6 +491,7 @@ async function persistDraftNow() {
   if (state.generatedChangeAcknowledged && ReportData.taskCode) await ReportData.refreshTask();
 }
 function saveDraft() {
+  if (ReportData.readOnly) return;
   clearTimeout(saveTimer);
   byId("status").classList.add("is-saving");
   byId("status").setAttribute("aria-label", ReportData.localOnly ? "Saving draft locally" : "Saving draft");
@@ -555,7 +558,17 @@ async function init() {
     return response.json();
   });
   const draft = await restoreDraft();
-  const initialValues = { ...(draft?.values || {}), ...linkedTaskValues() };
+  const initialValues = { ...(draft?.values || {}), ...(ReportData.readOnly ? {} : linkedTaskValues()) };
+  const revaluation = currentTask()?.reportGroup === "revaluation";
+  if (revaluation) {
+    Object.assign(initialValues, draft?.values || {});
+    document.title = currentTask().reportLabel;
+    const title = document.querySelector(".report-shell-title strong, header h1");
+    if (title) title.textContent = currentTask().reportLabel;
+    for (const field of [...(state.schema.setup_fields || []), ...state.schema.fields]) {
+      field.label = RetrospectiveValuation.revaluationLabel(field.label);
+    }
+  }
   state.preparationMethod = HAS_PREPARATION_CHOICE
     ? (draft?.preparationMethod || (currentTask()?.retrospectiveReady ? "offline" : (currentTask()?.reportGeneratedAt || ReportData.preview()?.id ? "online" : "")))
     : "online";
@@ -578,6 +591,7 @@ async function init() {
       panel.dataset.section = section.id;
       panel.innerHTML = `<h2>${section.label}</h2>`;
     }
+    if (revaluation && index === 0) RetrospectiveValuation.displayRevaluationSource(panel, currentTask());
     if (section.id === "media") {
       mediaSection(panel);
     }

@@ -70,7 +70,7 @@ def _configure_runtime_role(database) -> None:
         sql.SQL(
             "GRANT SELECT, INSERT, UPDATE ON "
             "app.institutions, app.tasks, app.task_payments, "
-            "app.stored_files, app.task_artifacts TO {}"
+            "app.stored_files, app.task_artifacts, app.notifications TO {}"
         ).format(role)
     )
     database.execute(

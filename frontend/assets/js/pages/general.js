@@ -612,11 +612,13 @@ function setValues(values) {
 }
 let calculations;
 function calculateAll(changedId) {
+  if (ReportData.readOnly) return;
   calculations?.refresh(changedId);
 }
 
 let saveTimer;
 async function persistDraftNow() {
+  if (ReportData.readOnly) return;
   clearTimeout(saveTimer);
   saveTimer = null;
   const saved = await ReportData.save(STORAGE_KEY, "valuation-general", {
@@ -637,6 +639,7 @@ async function persistDraftNow() {
   if (state.generatedChangeAcknowledged && ReportData.taskCode) await ReportData.refreshTask();
 }
 function saveDraft() {
+  if (ReportData.readOnly) return;
   clearTimeout(saveTimer);
   byId("status").classList.add("is-saving");
   byId("status").setAttribute("aria-label", ReportData.localOnly ? "Saving draft locally" : "Saving draft");
@@ -737,7 +740,17 @@ async function init() {
     ),
     host = byId("groups"),
     draft = await restoreDraft(),
-    initialValues = { ...(draft?.values || {}), ...linkedTaskValues() };
+    initialValues = { ...(draft?.values || {}), ...(ReportData.readOnly ? {} : linkedTaskValues()) };
+  const revaluation = currentTask()?.reportGroup === "revaluation";
+  if (revaluation) {
+    Object.assign(initialValues, draft?.values || {});
+    document.title = currentTask().reportLabel;
+    const title = document.querySelector(".report-shell-title strong, header h1");
+    if (title) title.textContent = currentTask().reportLabel;
+    for (const field of [...(state.schema.setup_fields || []), ...state.schema.fields]) {
+      field.label = RetrospectiveValuation.revaluationLabel(field.label);
+    }
+  }
   state.preparationMethod = HAS_PREPARATION_CHOICE
     ? (draft?.preparationMethod || (currentTask()?.retrospectiveReady ? "offline" : (currentTask()?.reportGeneratedAt || ReportData.preview()?.id ? "online" : "")))
     : "online";
@@ -758,6 +771,7 @@ async function init() {
       panel.innerHTML = `<h2>${section.label}</h2>`;
     }
     if (section.id === "setup") {
+      if (revaluation) RetrospectiveValuation.displayRevaluationSource(panel, currentTask());
       addSubgroup(panel, "Property Classification", state.schema.setup_fields.filter((field) => field.id.startsWith("property.")));
       addSubgroup(panel, "Institution Details", state.schema.setup_fields.filter((field) => !field.id.startsWith("property.")));
       addSubgroup(

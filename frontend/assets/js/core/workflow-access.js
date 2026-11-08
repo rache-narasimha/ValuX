@@ -10,7 +10,7 @@
     initials: authenticated.initials,
     label: authenticated.roleLabel,
     email: authenticated.email,
-    reportGroups: ["valuation", "estimation", "progress", "completion"],
+    reportGroups: ["valuation", "revaluation", "estimation", "progress", "completion"],
   } : null;
 
   function currentRole() {
@@ -38,7 +38,7 @@
       reopenTask: user.role === "father" && Boolean(task && window.TaskStore?.canReopen(task)),
       downloadFinalReport: Boolean(task && task.status === "Closed" && window.TaskStore?.finalArtifact(task)?.url),
       cancelTask: user.role === "father" && Boolean(task && !["Closed", "Cancelled"].includes(task.status)),
-      openReport: Boolean(task && task.assignee && ["In Progress", "On Hold"].includes(task.status) && (user.role === "father" || ownsTask)),
+      openReport: Boolean(task && (["Completed", "Closed"].includes(task.status) || task.assignee && ["In Progress", "On Hold"].includes(task.status) && (user.role === "father" || ownsTask))),
       assignUnassigned: Boolean(task && task.status === "Unassigned"),
       transferTask: Boolean(task && ["In Progress", "On Hold"].includes(task.status)),
       changeWorkflow: Boolean(task && ["In Progress", "On Hold"].includes(task.status) && (user.role === "father" || ownsTask)),
@@ -56,6 +56,7 @@
     document.querySelectorAll("[data-current-user-name]").forEach((node) => { node.textContent = user.name; });
     document.querySelectorAll("[data-current-user-role]").forEach((node) => { node.textContent = user.label; });
     document.querySelectorAll("[data-current-user-initials]").forEach((node) => { node.textContent = user.initials; });
+    if (window.__VALUX_AUTH_CONTEXT__?.user) window.AppShell?.updateUser?.(window.__VALUX_AUTH_CONTEXT__.user);
     document.body.dataset.role = user.role;
     document.querySelectorAll("[data-father-only]").forEach((node) => { node.hidden = user.role !== "father"; });
   }

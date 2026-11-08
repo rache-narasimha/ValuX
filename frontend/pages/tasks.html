@@ -11,14 +11,14 @@
   </head>
   <body class="workflow-page">
     <header class="app-header">
-      <a class="brand" href="/"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
+      <a class="brand" href="/" aria-label="SLN Consultancy &amp; Engineering Services dashboard"><span class="brand-mark" aria-hidden="true">SLN</span><span class="sln-wordmark">Consultancy &amp; <span class="sln-wordmark-accent">Engineering Services</span></span></a>
       <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button><div data-role-switcher></div><a class="button-link primary compact-button" href="/tasks/new">＋ New assignment</a></div>
     </header>
     <main class="page-frame">
       <section class="page-intro list-intro"><div><p class="eyebrow">Work queue</p><h1 id="task-list-title">All work tasks</h1><p id="task-list-description">Search and filter assignments, then open a row for full details.</p></div><div class="list-intro-actions"><div class="field task-period-filter"><label id="period-filter-label" for="period-filter">Assigned during</label><input id="period-filter" type="hidden" value="" /><div id="task-period-switch" class="period-switch" aria-labelledby="period-filter-label"></div><div id="task-period-picker" class="period-picker" hidden></div></div><a class="quiet-link" href="/">← Dashboard</a></div></section>
       <form id="task-filters" class="filter-bar filter-bar-extended task-filter-grid">
         <div class="field search-field"><label for="task-search">Search</label><input id="task-search" type="search" placeholder="Task ID, applicant, report, assignee or institution" /></div>
-        <div class="field"><label for="group-filter">Report section</label><select id="group-filter"><option value="all">All work</option><option value="valuation">Valuation</option><option value="estimation">Estimation</option><option value="progress">Progress</option><option value="completion">Completion</option></select></div>
+        <div class="field"><label for="group-filter">Report section</label><select id="group-filter"><option value="all">All work</option><option value="valuation">Valuation</option><option value="revaluation">Re-Valuation</option><option value="estimation">Estimation</option><option value="progress">Progress</option><option value="completion">Completion</option></select></div>
         <div class="field" id="preparation-filter-wrap" hidden><label for="preparation-filter">Preparation Method</label><select id="preparation-filter"><option value="">All methods</option><option value="online">Online</option><option value="template">Filled template</option><option value="retrospective">Retrospective</option><option value="unknown">Not recorded</option></select></div>
         <div class="field"><label for="institution-filter">Institution</label><select id="institution-filter"><option value="">All banks and NBFCs</option></select></div>
         <div class="field"><label for="status-filter">Status</label><select id="status-filter"><option value="">All statuses</option></select></div>
@@ -41,6 +41,7 @@
     <script src="/assets/js/core/business-api.js"></script>
     <script src="/assets/js/core/time.js"></script>
     <script src="/assets/js/core/app-shell.js"></script>
+    <script src="/assets/js/components/account-chrome.js"></script>
     <script src="/assets/js/core/workflow-access.js"></script>
     <script src="/assets/js/core/institutions.js"></script>
     <script src="/assets/js/core/task-store.js"></script>

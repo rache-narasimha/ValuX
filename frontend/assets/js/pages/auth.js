@@ -91,7 +91,7 @@
     render(`${head("Secure your account", "Replace the one-time activation password before continuing.", "1")}
       <form class="auth-form" id="password-form">
         <span data-form-message></span>
-        <div class="auth-field"><label for="new-password">New password</label><input id="new-password" name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="128" /><small>12–128 characters with uppercase, lowercase, a number and a symbol. Your last 24 passwords cannot be reused.</small></div>
+        <div class="auth-field"><label for="new-password">New password</label><input id="new-password" name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="128" /><small>12–128 characters with uppercase, lowercase, a number and a symbol. Your last 5 passwords cannot be reused.</small></div>
         <div class="auth-field"><label for="confirm-password">Confirm new password</label><input id="confirm-password" name="confirm" type="password" autocomplete="new-password" required /></div>
         <button class="auth-primary" type="submit">Set password and continue</button>
       </form>`);
@@ -227,7 +227,7 @@
     render(`${head("Choose a new password", "Your authenticator will still be required when you sign in.", "↻")}
       <form class="auth-form" id="reset-form">
         <span data-form-message></span>
-        <div class="auth-field"><label for="reset-password">New password</label><input id="reset-password" name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="128" /><small>Your last 24 passwords cannot be reused.</small></div>
+        <div class="auth-field"><label for="reset-password">New password</label><input id="reset-password" name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="128" /><small>Your last 5 passwords cannot be reused.</small></div>
         <div class="auth-field"><label for="reset-confirm">Confirm password</label><input id="reset-confirm" name="confirm" type="password" autocomplete="new-password" required /></div>
         <button class="auth-primary" type="submit">Reset password</button>
       </form>`);

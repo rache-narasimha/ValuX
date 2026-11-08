@@ -51,6 +51,8 @@ Before changing a feature:
 | Change one task's workspace | `frontend/assets/js/pages/task-detail.js` | `components/payment-dialog.js`, `components/employee-picker.js` |
 | Change form workflow context | `frontend/assets/js/components/task-context.js` | general/agricultural page controller |
 | Change global page chrome | `frontend/assets/js/core/app-shell.js` | `workflow.css` imports |
+| Change My Account or its photo/password controls | `backend/app/auth/account.py` | `auth/routes.py`, `pages/account.js`, `workflow/account.css` |
+| Change durable task notifications | `backend/app/workflow/notifications.py` | `workflow/service.py`, `workflow/routes.py`, `components/account-chrome.js` |
 | Change report-form visual primitives | `frontend/assets/css/styles.css` | matching page HTML |
 | Change dashboard/task visual styling | `frontend/assets/css/workflow.css` | matching workflow page |
 
@@ -107,11 +109,15 @@ order as a local cleanup. Those changes affect multiple pages at once.
 - `general.js`: general-property valuation form only.
 - `agricultural.js`: agricultural valuation form only.
 - `estimation.js`: preparation choice, detailed-estimation configuration, measurements, drafts and online XLSX workflow.
+- `estimation-naming.js`: display labels and compact-Abstract rules mirrored by `estimation/presentation.py`.
 - `estimation-offline.js`: attachment-first XLSX/DOCX/PDF entry and reviewed component totals.
 - `retrospective-valuation.js`: standard offline valuation uploads, explicit upload type and task-recorded template downloads.
 - `progress-completion.js`: linked-estimation progress/completion entry, photographs, preview and DOCX generation.
 - `institution-settings.js`: CEO-only institution maintenance.
-- `report-layout.js`: long-form navigation collapse state.
+- `report-layout.js`: long-form navigation collapse state and mounting the shared scratch calculator.
+- `report-calculator.js`: safe Basic/Scientific expression parsing, angle modes, memory and local per-user/task/day scratch history.
+- `estimation-processing.js`: one busy indicator and conflicting-action guard for estimation requests.
+- `report-readonly.js`: locks terminal report inputs/actions while preserving section navigation. `ReportData.readOnly` also guards browser persistence; backend write guards remain authoritative.
 
 `core/valuation-calculations.js` owns general/agricultural live calculated-result
 dependencies and explicit draft overrides. It mirrors valuation arithmetic from
@@ -132,6 +138,7 @@ than by HTTP endpoint:
 - `valuation/media.py`: image normalization and Word media placement. Keep form rules out.
 - `valuation/reports.py`: coordinates schema values, templates, calculations and output.
 - `estimation/generator.py`: copies approved XLSX masters, applies estimation form state and returns completed or offline workbooks.
+- `estimation/presentation.py`: identity-version compatibility, shared work/address composition, stable component labels and compact-Abstract selection.
 - `estimation/summary.py`: extracts the retained component-cost snapshot from an attached completed estimation workbook.
 - `progress/generator.py`: validates linked-estimation progress state and creates bank-aware Progress/Completion DOCX reports.
 - `exports/workbook.py`: validates approved browser-table export payloads and
@@ -167,6 +174,10 @@ three domains use PostgreSQL.
 
 - `styles.css` is the stable report-form entry point. Its ordered files under
   `css/report-form/` separate foundational controls from workspace additions.
+- `workflow/dashboard-overview.css` is loaded only by the dashboard and owns
+  its responsive analysis grid, shared-period controls and distribution charts.
+- `action-controls.css` supplies shared action typography, safe wrapping,
+  payment/picker spacing and retained-report view styling to both entry points.
 - `workflow.css` is the stable application entry point. Its ordered files under
   `css/workflow/` separate the shell, dashboard, institution pages,
   visualizations, and final compatibility adjustments.

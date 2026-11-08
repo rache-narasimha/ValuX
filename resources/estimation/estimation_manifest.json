@@ -104,6 +104,12 @@
           "floorMode": "none"
         },
         {
+          "kind": "storage_shed",
+          "label": "Storage Shed",
+          "roofType": "shed",
+          "floorMode": "none"
+        },
+        {
           "kind": "rcc_building",
           "label": "RCC Building",
           "roofType": "rcc",
@@ -173,6 +179,12 @@
         {
           "kind": "shed_hall",
           "label": "Shed Roof Building / Hall",
+          "roofType": "shed",
+          "floorMode": "none"
+        },
+        {
+          "kind": "storage_shed",
+          "label": "Storage Shed",
           "roofType": "shed",
           "floorMode": "none"
         },
@@ -15664,6 +15676,501 @@
           ]
         }
       ]
+    },
+    "storage_shed": {
+      "label": "Storage Shed",
+      "items": [
+        {
+          "sno": 1,
+          "label": "Earth work excavation",
+          "rows": [
+            {
+              "id": "excavation-long",
+              "label": "Long Walls",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "excavation"
+            },
+            {
+              "id": "excavation-short",
+              "label": "Short Walls",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "excavation"
+            },
+            {
+              "id": "excavation-columns",
+              "label": "Columns",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "excavation"
+            },
+            {
+              "id": "excavation-total",
+              "label": "Total excavation quantity",
+              "calculation": "subtotal",
+              "sourceGroup": "excavation",
+              "rate": true,
+              "customizable": false
+            }
+          ]
+        },
+        {
+          "sno": 2,
+          "label": "Plain cement concrete",
+          "rows": [
+            {
+              "id": "pcc-long",
+              "label": "Long Walls",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "pcc"
+            },
+            {
+              "id": "pcc-short",
+              "label": "Short Walls",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "pcc"
+            },
+            {
+              "id": "pcc-columns",
+              "label": "Columns",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "pcc"
+            },
+            {
+              "id": "pcc-total",
+              "label": "Total PCC quantity",
+              "calculation": "subtotal",
+              "sourceGroup": "pcc",
+              "rate": true,
+              "customizable": false
+            }
+          ]
+        },
+        {
+          "sno": 3,
+          "label": "Foundation and basement masonry",
+          "rows": [
+            {
+              "id": "masonry-foundation-heading",
+              "label": "Foundation",
+              "calculation": "heading",
+              "customizable": false
+            },
+            {
+              "id": "masonry-foundation-long",
+              "label": "Long Walls",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "masonry"
+            },
+            {
+              "id": "masonry-foundation-short",
+              "label": "Short Walls",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "masonry"
+            },
+            {
+              "id": "masonry-basement-heading",
+              "label": "Basement",
+              "calculation": "heading",
+              "customizable": false
+            },
+            {
+              "id": "masonry-basement-long",
+              "label": "Long Walls",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "masonry"
+            },
+            {
+              "id": "masonry-basement-short",
+              "label": "Short Walls",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "masonry"
+            },
+            {
+              "id": "masonry-total",
+              "label": "Total Masonry Quantity",
+              "calculation": "subtotal",
+              "sourceGroup": "masonry",
+              "rate": true,
+              "customizable": false
+            }
+          ]
+        },
+        {
+          "sno": 4,
+          "label": "Sand / gravel filling",
+          "rows": [
+            {
+              "id": "filling-basement",
+              "label": "Basement Filling",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "filling"
+            },
+            {
+              "id": "filling-total",
+              "label": "Total filling quantity",
+              "calculation": "subtotal",
+              "sourceGroup": "filling",
+              "rate": true,
+              "customizable": false
+            }
+          ]
+        },
+        {
+          "sno": 5,
+          "label": "RCC concrete",
+          "rows": [
+            {
+              "id": "concrete-footings",
+              "label": "Column Footings",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "rate": true
+            },
+            {
+              "id": "concrete-pedestals",
+              "label": "Pedestals",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "rate": true
+            },
+            {
+              "id": "concrete-plinth-heading",
+              "label": "Plinth Beams",
+              "calculation": "heading",
+              "customizable": false
+            },
+            {
+              "id": "concrete-plinth-long",
+              "label": "Long Walls",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "concrete-plinth"
+            },
+            {
+              "id": "concrete-plinth-short",
+              "label": "Short Walls",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "concrete-plinth"
+            },
+            {
+              "id": "concrete-plinth",
+              "label": "Plinth Beams total",
+              "calculation": "subtotal",
+              "sourceGroup": "concrete-plinth",
+              "rate": true,
+              "customizable": false
+            },
+            {
+              "id": "concrete-columns",
+              "label": "Columns",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "rate": true
+            },
+            {
+              "id": "concrete-lintel-heading",
+              "label": "Lintels",
+              "calculation": "heading",
+              "customizable": false
+            },
+            {
+              "id": "concrete-lintel-long",
+              "label": "Long Walls",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "concrete-lintel"
+            },
+            {
+              "id": "concrete-lintel-short",
+              "label": "Short Walls",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "concrete-lintel"
+            },
+            {
+              "id": "concrete-lintels",
+              "label": "Lintels total",
+              "calculation": "subtotal",
+              "sourceGroup": "concrete-lintel",
+              "rate": true,
+              "customizable": false
+            },
+            {
+              "id": "concrete-roof-heading",
+              "label": "Roof Beams",
+              "calculation": "heading",
+              "customizable": false
+            },
+            {
+              "id": "concrete-roof-long",
+              "label": "Long Walls",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "concrete-roof"
+            },
+            {
+              "id": "concrete-roof-short",
+              "label": "Short Walls",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "concrete-roof"
+            },
+            {
+              "id": "concrete-roof-beams",
+              "label": "Roof Beams total",
+              "calculation": "subtotal",
+              "sourceGroup": "concrete-roof",
+              "rate": true,
+              "customizable": false
+            }
+          ]
+        },
+        {
+          "sno": 6,
+          "label": "Steel reinforcement",
+          "rows": [
+            {
+              "id": "steel-footings",
+              "label": "Footings",
+              "calculation": "derived",
+              "sourceId": "concrete-footings",
+              "multiplier": 75,
+              "group": "steel",
+              "customizable": false
+            },
+            {
+              "id": "steel-pedestals",
+              "label": "Pedestals",
+              "calculation": "derived",
+              "sourceId": "concrete-pedestals",
+              "multiplier": 125,
+              "group": "steel",
+              "customizable": false
+            },
+            {
+              "id": "steel-columns",
+              "label": "Columns",
+              "calculation": "derived",
+              "sourceId": "concrete-columns",
+              "multiplier": 150,
+              "group": "steel",
+              "customizable": false
+            },
+            {
+              "id": "steel-plinth",
+              "label": "Plinth Beams",
+              "calculation": "derived",
+              "sourceId": "concrete-plinth",
+              "multiplier": 100,
+              "group": "steel",
+              "customizable": false
+            },
+            {
+              "id": "steel-lintels",
+              "label": "Lintels",
+              "calculation": "derived",
+              "sourceId": "concrete-lintels",
+              "multiplier": 75,
+              "group": "steel",
+              "customizable": false
+            },
+            {
+              "id": "steel-roof-beams",
+              "label": "Roof Beams",
+              "calculation": "derived",
+              "sourceId": "concrete-roof-beams",
+              "multiplier": 100,
+              "group": "steel",
+              "customizable": false
+            },
+            {
+              "id": "steel-total",
+              "label": "Total steel quantity",
+              "calculation": "subtotal",
+              "sourceGroup": "steel",
+              "rate": true,
+              "customizable": false
+            }
+          ]
+        },
+        {
+          "sno": 7,
+          "label": "Brick masonry",
+          "rows": [
+            {
+              "id": "brick-long",
+              "label": "Long Walls",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "brick"
+            },
+            {
+              "id": "brick-short",
+              "label": "Short Walls",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "group": "brick"
+            },
+            {
+              "id": "brick-net",
+              "label": "Net with 10% deduction for openings",
+              "calculation": "percentage",
+              "sourceGroup": "brick",
+              "percentage": 0.9,
+              "customizable": false,
+              "rate": true
+            }
+          ]
+        },
+        {
+          "sno": 8,
+          "label": "Wall plastering",
+          "rows": [
+            {
+              "id": "plaster-gross",
+              "label": "Gross plastering area",
+              "calculation": "three_factor_fgi",
+              "customizable": true,
+              "group": "plaster"
+            },
+            {
+              "id": "plaster-net",
+              "label": "Net with 10% deduction for openings",
+              "calculation": "percentage",
+              "sourceGroup": "plaster",
+              "percentage": 0.9,
+              "customizable": false,
+              "rate": true
+            }
+          ]
+        },
+        {
+          "sno": 9,
+          "label": "Flooring",
+          "rows": [
+            {
+              "id": "flooring",
+              "label": "Flooring",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "rate": true
+            }
+          ]
+        },
+        {
+          "sno": 10,
+          "label": "Rolling shutter / doors",
+          "rows": [
+            {
+              "id": "doors",
+              "label": "Rolling shutters / doors",
+              "calculation": "count_rate",
+              "customizable": true,
+              "rate": true
+            }
+          ]
+        },
+        {
+          "sno": 11,
+          "label": "Windows",
+          "rows": [
+            {
+              "id": "windows",
+              "label": "Windows",
+              "calculation": "count_rate",
+              "customizable": true,
+              "rate": true
+            }
+          ]
+        },
+        {
+          "sno": 12,
+          "label": "White washing",
+          "rows": [
+            {
+              "id": "whitewashing",
+              "label": "White washing",
+              "calculation": "lump_sum",
+              "customizable": true
+            }
+          ]
+        },
+        {
+          "sno": 13,
+          "label": "Colour washing",
+          "rows": [
+            {
+              "id": "colourwashing",
+              "label": "Colour washing",
+              "calculation": "lump_sum",
+              "customizable": true
+            }
+          ]
+        },
+        {
+          "sno": 14,
+          "label": "Angular trusses – A type",
+          "rows": [
+            {
+              "id": "truss-a",
+              "label": "Angular trusses – A type",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "rate": true
+            }
+          ]
+        },
+        {
+          "sno": 14,
+          "label": "Angular trusses – lean-to type",
+          "rows": [
+            {
+              "id": "truss-lean",
+              "label": "Angular trusses – lean-to type",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "rate": true
+            }
+          ]
+        },
+        {
+          "sno": 15,
+          "label": "RSJ columns",
+          "rows": [
+            {
+              "id": "rsj-columns",
+              "label": "RSJ columns",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "rate": true
+            }
+          ]
+        },
+        {
+          "sno": 16,
+          "label": "Galvalume roofing",
+          "rows": [
+            {
+              "id": "galvalume-roofing",
+              "label": "Galvalume roofing",
+              "calculation": "standard_4_factor",
+              "customizable": true,
+              "rate": true
+            }
+          ]
+        }
+      ]
     }
   },
   "templates": {
@@ -15689,7 +16196,8 @@
     "residential_cellar_centre_line": "T20 Res CL Cellar",
     "residential_stilt_centre_line": "T21 Res CL Stilt",
     "residential_ground_centre_line": "T22 Res CL Ground",
-    "residential_upper_centre_line": "T23 Res CL Upper"
+    "residential_upper_centre_line": "T23 Res CL Upper",
+    "storage_shed": "T02 Normal Hall"
   },
   "commonExternalWorks": [
     "Water Supply and Sanitary Works",

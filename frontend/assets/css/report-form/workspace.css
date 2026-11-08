@@ -185,6 +185,7 @@ html[data-theme="dark"] .offline-report-panel .offline-artifact small { color: #
   .subgroup-heading { align-items: flex-start; flex-wrap: wrap; }
 }
 
-.offline-component-row { grid-template-columns: minmax(200px, 1fr) minmax(150px, .6fr) auto; align-items: end; margin-bottom: 12px; }
+.offline-component-row { grid-template-columns: minmax(180px, 1fr) minmax(130px, .6fr) minmax(120px, .5fr) auto; align-items: end; margin-bottom: 12px; }
 .offline-component-row .document-icon-button { margin-bottom: 2px; }
+.worksheet-plinth-area { max-width: 440px; margin: 16px 0 22px; }
 @media (max-width: 650px) { .offline-component-row { grid-template-columns: minmax(0, 1fr) auto; } .offline-component-row .field:first-child { grid-column: 1 / -1; } }

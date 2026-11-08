@@ -6,6 +6,7 @@ const path = require("node:path");
 
 const root = path.join(__dirname, "..");
 const pairs = [
+  ["frontend/pages/account.html", "frontend/assets/js/pages/account.js"],
   ["frontend/pages/index.html", "frontend/assets/js/pages/home.js"],
   ["frontend/pages/tasks.html", "frontend/assets/js/pages/task-list.js"],
   ["frontend/pages/task.html", "frontend/assets/js/pages/task-detail.js"],
@@ -28,13 +29,14 @@ const browserStorageUsers = filesUnder(javascriptRoot)
   .filter((file) => file.endsWith(".js") && /(?:local|session)Storage/.test(fs.readFileSync(file, "utf8")))
   .map((file) => path.relative(root, file).replaceAll(path.sep, "/"));
 assert.deepEqual(browserStorageUsers.sort(), [
+  "frontend/assets/js/components/report-calculator.js",
   "frontend/assets/js/components/report-layout.js",
   "frontend/assets/js/core/app-shell.js",
   "frontend/assets/js/core/appearance.js",
   "frontend/assets/js/core/report-data.js",
   "frontend/assets/js/core/shared.js",
   "frontend/assets/js/pages/auth.js",
-].sort(), "Browser storage must remain limited to appearance/navigation, practice drafts, and temporary auth recovery codes");
+].sort(), "Browser storage must remain limited to appearance/navigation, practice drafts, task-scoped daily calculator history, and temporary auth recovery codes");
 
 for (const [htmlPath, scriptPath] of pairs) {
   const html = fs.readFileSync(path.join(root, htmlPath), "utf8");
@@ -204,12 +206,12 @@ assert.match(
 );
 assert.match(
   estimationController,
-  /async function downloadWorkbook\(mode\)\s*\{[\s\S]*?const selectedMode = synchroniseWorkMode\(\);[\s\S]*?const requiredWorkMode = mode === "completed" \? "online" : "offline";[\s\S]*?selectedMode !== requiredWorkMode/,
+  /async function downloadWorkbook\(mode\)\s*\{[\s\S]*?const selectedMode = await synchroniseWorkMode\(\);[\s\S]*?const requiredWorkMode = mode === "completed" \? "online" : "offline";[\s\S]*?selectedMode !== requiredWorkMode/,
   "Completed Excel generation must map to the Fill online preparation mode before validating it",
 );
 assert.match(
   estimationController,
-  /confirmReportInvalidation[\s\S]*?Change the preparation method to[\s\S]*?Existing component data was retained/,
+  /confirmPreparationChange[\s\S]*?confirmPreparationChange\("preparation method", state\.details\.workMode, mode\)[\s\S]*?Existing component data was retained/,
   "Changing estimation preparation mode must warn about output invalidation while retaining component data",
 );
 assert.match(

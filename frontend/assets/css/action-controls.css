@@ -1,0 +1,71 @@
+/* Consistent action sizing, independent of link/button browser defaults. */
+body button { font-family: inherit; }
+body .button-link,
+body button.primary,
+body button.secondary,
+body button.preview-button,
+body .dialog-actions > button,
+body .new-assignment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 2.5rem;
+  padding: .65rem .95rem;
+  font-family: inherit;
+  font-size: .875rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-sizing: border-box;
+}
+body .button-link svg, body button svg { flex-shrink: 0; }
+body .task-table-row button,
+body .task-row-payment button,
+body .compact-button,
+body .quiet-button,
+body .small-button,
+body .danger-button,
+body .text-button {
+  font-family: inherit;
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+body .task-table-row button, body .compact-button { min-height: 2rem; padding: .4rem .65rem; }
+body .modal-x, body .modal-close { display: inline-grid; place-items: center; flex: 0 0 2.25rem; width: 2.25rem; height: 2.25rem; min-height: 0; padding: 0; line-height: 1; }
+body .dialog-actions { align-items: flex-start; }
+body .dialog-actions .disabled-action { min-width: 0; max-width: 100%; }
+body .dialog-actions .disabled-action > small { max-width: 17rem; }
+body .dashboard-heading { flex-wrap: wrap; }
+body .dashboard-heading > div:first-child { min-width: 0; flex: 1 1 22rem; }
+body .dashboard-heading-actions { flex: 0 1 auto; max-width: 100%; flex-wrap: wrap; justify-content: flex-end; }
+body .dashboard-heading-actions .new-assignment { flex: 0 1 auto; }
+body .task-hero .hero-actions { max-width: 100%; }
+body .task-hero .hero-actions > button,
+body .task-hero .hero-actions > .button-link { flex-shrink: 1; white-space: normal; }
+body .estimation-selection-dialog { width: min(88rem, calc(100vw - 2rem)); }
+body .estimation-picker-row { grid-template-columns: minmax(11rem, 1.1fr) minmax(12rem, 1.6fr) minmax(12rem, 1.1fr) auto; gap: .85rem; font-size: .875rem; line-height: 1.4; }
+body .estimation-picker-row > span { min-width: 0; overflow-wrap: anywhere; }
+body .estimation-picker-row .picker-dates { gap: .2rem; }
+body .estimation-picker-row .picker-dates small { font-size: .75rem; }
+.report-readonly-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.5rem; }
+.report-readonly-banner p { margin: .4rem 0 0; }
+.report-readonly-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+.report-readonly main form input[readonly], .report-readonly main form textarea[readonly] { cursor: text; }
+.report-readonly main form :disabled { opacity: .7; }
+.report-readonly .example-controls,
+.report-readonly #estimation-template-download,
+.report-readonly #estimation-remove-report,
+.report-readonly [data-offline-upload] { display: none; }
+@media (max-width: 760px) {
+  body .estimation-picker-row { grid-template-columns: minmax(0, 1fr) auto; }
+  body .estimation-picker-row > span { grid-column: 1; }
+  body .estimation-picker-row > em { grid-column: 2; grid-row: 1 / span 3; }
+}

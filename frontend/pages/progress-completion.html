@@ -37,9 +37,13 @@
               <div class="field"><label for="reference-number">Reference number <span class="optional-label">Karnataka Bank only</span></label><input id="reference-number" /></div>
               <div class="field"><label class="required" for="report-date">Report date</label><input id="report-date" type="date" required /></div>
               <div class="field"><label class="required" for="visit-date">Site-visit date</label><input id="visit-date" type="date" required /></div>
-              <div class="field"><label for="official-name">Accompanying bank official</label><input id="official-name" /></div>
-              <div class="field"><label for="official-designation">Official designation</label><input id="official-designation" /></div>
+              <div class="field"><label for="official-name">Name of the Accompanying Bank Official</label><input id="official-name" /></div>
+              <div class="field"><label for="official-designation">Designation</label><input id="official-designation" /></div>
               <div class="field"><label class="required" for="report-place">Place</label><input id="report-place" required value="Adoni" /></div>
+            </div>
+            <div class="row-actions" id="progress-preparation" hidden>
+              <button type="button" class="secondary" id="progress-preparation-switch">Upload retrospective report</button>
+              <span id="progress-preparation-label" aria-live="polite"></span>
             </div>
           </section>
 
@@ -79,6 +83,7 @@
             <div class="bank-calculation-grid" id="bank-calculations"></div>
           </section>
 
+          <section class="panel" data-section="offline" id="progress-offline"></section>
           <section class="panel" data-section="photos">
             <h2>Photographs and report generation</h2>
             <section class="subgroup">
@@ -109,11 +114,15 @@
     <script src="/assets/js/core/report-data.js"></script>
     <script src="/assets/js/core/time.js"></script>
     <script src="/assets/js/core/app-shell.js"></script>
+    <script src="/assets/js/components/account-chrome.js"></script>
     <script src="/assets/js/core/workflow-access.js"></script>
     <script src="/assets/js/core/task-store.js"></script>
+    <script src="/assets/js/components/report-readonly.js"></script>
     <script src="/assets/js/components/workflow-ui.js"></script>
+    <script src="/assets/js/pages/retrospective-valuation.js"></script>
     <script src="/assets/js/pages/progress-completion.js"></script>
     <script src="/assets/js/components/task-context.js"></script>
+    <script src="/assets/js/components/report-calculator.js"></script>
     <script src="/assets/js/components/report-layout.js"></script>
   </body>
 </html>

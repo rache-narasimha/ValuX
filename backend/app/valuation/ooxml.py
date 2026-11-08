@@ -209,7 +209,25 @@ def prepare_floor_rows(root, values):
             first_text[0].text = str(index)
         parent.insert(parent.index(template_row) + index - 2, clone)
 
-def replace_plain_tokens(template_path, output_path, replacements, document_count=1):
+def relabel_revaluation(root):
+    """Update the template wording before filling any report fields."""
+    for paragraph in root.xpath(".//w:p", namespaces=NS):
+        nodes = paragraph.xpath(".//w:t", namespaces=NS)
+        joined = "".join(node.text or "" for node in nodes)
+        for match in reversed(list(re.finditer(r"\bvaluation\b", joined, re.IGNORECASE))):
+            offset = match.start()
+            for node in nodes:
+                value = node.text or ""
+                if offset < len(value):
+                    word = match.group()
+                    prefix = "RE" if word.isupper() else "Re" if word[0].isupper() else "re"
+                    first = value[offset].lower() if not word.isupper() else value[offset]
+                    node.text = value[:offset] + prefix + first + value[offset + 1:]
+                    break
+                offset -= len(value)
+
+
+def replace_plain_tokens(template_path, output_path, replacements, document_count=1, *, revaluation=False):
     token_map = {f"{{{{{key}}}}}": str(value or "") for key, value in replacements.items()}
     with ZipFile(template_path) as zin, ZipFile(output_path, "w", ZIP_DEFLATED) as zout:
         for item in zin.infolist():
@@ -218,6 +236,8 @@ def replace_plain_tokens(template_path, output_path, replacements, document_coun
                 root = etree.fromstring(data)
                 prepare_agricultural_document_rows(root, document_count)
                 prepare_agricultural_party_rows(root)
+                if revaluation:
+                    relabel_revaluation(root)
                 for text_node in root.xpath(".//w:t", namespaces=NS):
                     text = text_node.text or ""
                     for token, value in token_map.items():

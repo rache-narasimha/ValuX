@@ -71,11 +71,32 @@ def main():
     assert progress.report_type == "progress"
     assert "Sample Borrower, SKD Colony, Adoni" in text
     assert "PROGRESS / COMPLETION REPORT FOR HOUSING LOAN" in text
-    assert "Cost of balance work" in text
+    assert "Cost of balance work" not in text
+    assert "Total estimated cost (As submitted in the proposal) (Rs)" in text
+    assert "Details of works completed/ stage of construction/ % of work completed" in text
+    assert "Construction of residential building in Stilt, GF, FF and SF" in text
+    assert "Sample Official, Branch Manager" in text
     assert "BRANCH SANCTION" in text
     assert "95,72,000" in text
     assert len(progress_document.inline_shapes) == 4
     assert progress.summary["totalValue"] == 9572000
+
+    shared_identity = copy.deepcopy(payload())
+    shared_identity["linkedEstimation"].update({
+        "identityVersion": 2,
+        "applicantName": "Reviewed Borrower, Adoni",
+        "workAddress": "Plot No. 52, Mandigiri, Adoni",
+        "projectLocation": "Legacy location must not be appended",
+    })
+    shared_path = OUTPUT_DIR / "progress_shared_identity_test.docx"
+    generate(shared_identity, shared_path)
+    shared_document = Document(shared_path)
+    project_rows = {row.cells[0].text: row.cells[1].text for table in shared_document.tables for row in table.rows if len(row.cells) >= 2}
+    assert project_rows["2. Name & address of the borrower"] == "Reviewed Borrower, Adoni"
+    assert project_rows["3. Locality and address of the construction site"] == "Construction of residential building in Stilt, GF, FF and SF, Plot No. 52, Mandigiri, Adoni"
+    shared_text = combined_text(shared_document)
+    assert "at Plot No. 52, Mandigiri, Adoni" in shared_text
+    assert "Legacy location must not be appended" not in shared_text
 
     completion_payload = copy.deepcopy(payload())
     completion_payload["requestedReportType"] = "completion"
@@ -93,7 +114,8 @@ def main():
     assert "BRANCH SANCTION" not in completion_text
     assert "Ref:" not in completion_text
     assert "FORMAT" not in completion_text
-    assert "Nil" in completion_text
+    assert "Cost of balance work" not in completion_text
+    assert completion.summary["reportType"] == "completion"
 
     missing_photos = copy.deepcopy(completion_payload)
     missing_photos["photos"] = []

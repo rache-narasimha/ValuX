@@ -21,12 +21,13 @@
     const panel = document.createElement("div");
     panel.className = "panel preparation-method-panel";
     panel.dataset.group = "preparation";
+    const reportLabel = taskFor(reportKey)?.reportGroup === "revaluation" ? "revaluation" : "valuation";
     panel.innerHTML = `<h2>Preparation Method</h2>
-      <p class="section-intro">Choose how this valuation report will be prepared. The remaining steps will adapt to this selection.</p>
+      <p class="section-intro">Choose how this ${reportLabel} report will be prepared. The remaining steps will adapt to this selection.</p>
       <div class="preparation-choice-grid" role="radiogroup" aria-label="Report preparation method">
         <label class="preparation-choice-card">
           <input type="radio" name="${MODE_NAME}" value="online" data-preparation-method ${selectedMode === "online" ? "checked" : ""}>
-          <span><strong>Fill online</strong><small>Complete the valuation form, add photographs and map, preview the report, then generate the DOCX.</small></span>
+          <span><strong>Fill online</strong><small>Complete the ${reportLabel} form, add photographs and map, preview the report, then generate the DOCX.</small></span>
         </label>
         <label class="preparation-choice-card">
           <input type="radio" name="${MODE_NAME}" value="offline" data-preparation-method ${selectedMode === "offline" ? "checked" : ""}>
@@ -52,7 +53,8 @@
     return panel;
   }
 
-  function offlinePanel(reportKey, savedUploadType = "") {
+  function offlinePanel(reportKey, savedUploadType = "", prepareUpload = null) {
+    const progress = reportKey === "progress" || reportKey === "completion";
     const taskCode = global.ReportData?.taskCode;
     const task = taskFor(reportKey);
     if (!task) return null;
@@ -88,7 +90,13 @@
     const attachment = panel.querySelector("[data-offline-artifact]");
 
     const uploadType = panel.querySelector("#valuation-upload-type");
-    uploadType.value = savedUploadType || (["template", "retrospective"].includes(task.preparationSource) ? task.preparationSource : "");
+    if (progress) {
+      panel.querySelector(".section-intro").textContent = "Review the work assessment, then attach the completed DOCX or PDF with a work note.";
+      panel.querySelector(".offline-template-step").hidden = true;
+      uploadType.closest(".field").hidden = true;
+      panel.querySelector(".offline-upload-step h3").textContent = "Attach the retrospective report";
+    }
+    uploadType.value = progress ? "retrospective" : savedUploadType || (["template", "retrospective"].includes(task.preparationSource) ? task.preparationSource : "");
     uploadType.addEventListener("change", () => global.dispatchEvent(new CustomEvent("sln:valuation-upload-type-changed")));
     panel.querySelector("[data-template-download]").addEventListener("click", async (event) => {
       event.preventDefault();
@@ -96,27 +104,31 @@
         const response = await fetch(event.currentTarget.href);
         if (!response.ok) throw new Error("The template could not be downloaded.");
         const url = URL.createObjectURL(await response.blob());
-        const link = document.createElement("a"); link.href = url; link.download = reportKey === "valuation-general" ? "General_Valuation_Offline_Template.docx" : "Agricultural_Valuation_Offline_Template.docx";
+        const link = document.createElement("a"); link.href = url; link.download = `${reportKey === "valuation-general" ? "General" : "Agricultural"}_${task.reportGroup === "revaluation" ? "Revaluation" : "Valuation"}_Offline_Template.docx`;
         link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
         await global.TaskStore.refresh(taskCode);
       } catch (error) { status.textContent = error.message; }
     });
 
     function render(current = global.TaskStore.get(taskCode)) {
-      const artifact = current?.retrospectiveReady && current.reportFresh !== false ? global.TaskStore.latestArtifact(current) : null;
+      const artifact = global.ReportData.readOnly
+        ? current?.status === "Closed" ? global.TaskStore.finalArtifact(current) : global.TaskStore.latestArtifact(current)
+        : current?.retrospectiveReady && current.reportFresh !== false ? global.TaskStore.latestArtifact(current) : null;
       const ready = Boolean(artifact?.url);
       entry.hidden = ready;
       attachment.hidden = !ready;
       upload.textContent = ready ? "Mark Completed" : "Submit";
       panel.querySelector("[data-offline-filename]").textContent = artifact?.filename || "Completed valuation report";
       panel.querySelector("[data-offline-filename]").title = artifact?.filename || "Completed valuation report";
-      remove.hidden = !ready;
+      remove.hidden = !ready || global.ReportData.readOnly;
+      upload.hidden = Boolean(global.ReportData.readOnly);
       download.hidden = !artifact?.url;
       if (artifact?.url) {
         download.href = artifact.url;
         download.download = artifact.filename || "completed-valuation-report";
       }
-      status.textContent = ready
+      status.textContent = global.ReportData.readOnly && ready ? "Retained report — read-only."
+        : ready
         ? "Report submitted. Mark Completed to finish using the recorded upload work note."
         : "No completed report attached.";
     }
@@ -143,7 +155,11 @@
       upload.disabled = true;
       status.textContent = "Attaching report…";
       try {
-        const response = await fetch("/api/valuation/retrospective/upload", {
+        if (prepareUpload && !(await prepareUpload())) {
+          status.textContent = "Review the work assessment before submitting.";
+          return;
+        }
+        const response = await fetch(progress ? "/api/progress/retrospective/upload" : "/api/valuation/retrospective/upload", {
           method: "POST",
           credentials: "same-origin",
           headers: {
@@ -196,5 +212,29 @@
     return panel;
   }
 
-  global.RetrospectiveValuation = { supportsChoice, preparationPanel, offlinePanel };
+  function revaluationLabel(label) {
+    return String(label || "").replace(/\bvaluation\b/gi, (word) =>
+      word === word.toUpperCase() ? "RE-VALUATION" : word[0] === "V" ? "Re-Valuation" : "re-valuation");
+  }
+
+  function displayRevaluationSource(host, task) {
+    if (task?.reportGroup !== "revaluation" || !task.linkedValuationId) return;
+    const source = task.linkedValuationId;
+    const notice = document.createElement("p");
+    notice.className = "hint";
+    const link = document.createElement("a");
+    link.href = `/tasks/detail?id=${encodeURIComponent(source)}`;
+    link.textContent = source;
+    notice.append("Original valuation: ", link);
+    if (task.linkedValuationArtifactId) {
+      const download = document.createElement("a");
+      download.href = `/api/tasks/${encodeURIComponent(source)}/artifacts/${encodeURIComponent(task.linkedValuationArtifactId)}/download`;
+      download.textContent = "Download source report";
+      notice.append(" · ", download);
+    }
+    if (task.revaluationManualEntry) notice.append(" · Manual entry required for details available only in the source report.");
+    host.append(notice);
+  }
+
+  global.RetrospectiveValuation = { supportsChoice, preparationPanel, offlinePanel, revaluationLabel, displayRevaluationSource };
 })(window);

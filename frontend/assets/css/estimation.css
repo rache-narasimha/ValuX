@@ -104,11 +104,23 @@
 .worksheet-order { margin: 14px 0 0 20px; padding: 0; }
 .worksheet-order li { margin: 8px 0; }
 .manual-upload { padding: 20px; border: 1px dashed #cfaa98; border-radius: 12px; background: #fffaf6; }
-.output-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(240px, .7fr); gap: 16px; margin-top: 20px; }
+.output-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 20px; }
 .output-card { padding: 17px; border: 1px solid #e6cdbf; border-radius: 11px; background: #fffaf6; }
 .output-card h3, .output-card p { margin: 0; }
 .output-card p { margin-top: 7px; color: #61757e; line-height: 1.45; }
 .output-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 15px; }
+.report-output-record { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.report-output-icon { display: grid; place-items: center; flex: 0 0 38px; width: 38px; height: 38px; border-radius: 50%; background: #fff0d8; color: #895315; font-size: 22px; font-weight: 750; }
+.output-card.is-complete .report-output-icon { background: #dcf1e4; color: #256b47; }
+.report-output-copy { flex: 1 1 280px; min-width: 0; }
+.report-output-copy h3 { font-size: 17px; }
+.report-output-copy p { font-size: 13px; }
+.report-output-copy .report-output-filename { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink, #4b2016); font-weight: 650; }
+.report-output-record .output-actions { flex: 0 0 auto; margin: 0; }
+.output-actions .report-file-download { display: grid; place-items: center; width: 40px; height: 40px; min-height: 40px; padding: 8px; }
+.report-file-download svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.estimation-processing { z-index: 2100; }
+@media (max-width: 850px) { .report-output-record { flex-wrap: wrap; } .report-output-copy { flex-basis: calc(100% - 60px); } .report-output-record .output-actions { margin-left: 54px; } }
 .output-status { display: grid; align-content: center; gap: 6px; padding: 17px; border: 1px solid #c7ded1; border-radius: 11px; background: #f2faf5; color: #2f6247; }
 .output-status strong { color: #24553c; }
 .output-status.is-pending { border-color: #ead2bd; background: #fff8f2; color: #80502f; }
@@ -299,4 +311,41 @@ html[data-theme="dark"] .file-input { display: none; }
   .locked-panel { min-height: 340px; padding: 18px; }
   footer { flex-wrap: wrap; }
   footer span { width: 100%; order: -1; }
+}
+
+.dimension-worksheet {
+  max-width: 28rem;
+  margin: 1rem 0;
+}
+
+.dimension-group {
+  border: 1px solid var(--wf-border, #ddc2b4);
+  border-radius: 0.6rem;
+  margin-bottom: 0.75rem;
+  padding: 0.85rem 1rem;
+}
+
+.dimension-group summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.dimension-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 0.8rem 1rem;
+  margin-top: 0.85rem;
+}
+
+/* Share label and control rows so a wrapped label never shifts its input. */
+.dimension-fields > .field,
+.building-config-editor .component-meta > .field {
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
+  row-gap: .4rem;
+}
+
+.dimension-error {
+  color: var(--wf-danger, #a63c20);
 }

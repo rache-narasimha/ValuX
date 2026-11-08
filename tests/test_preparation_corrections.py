@@ -135,7 +135,7 @@ try:
     values=draft["payload"]; values["details"]["uploadType"]="retrospective"
     reports.save_draft(parent["id"],{"reportKey":"estimation","revision":draft["revision"],"payload":values},father)
     assert all(latest(child)["preparationSource"]=="retrospective" for child in children)
-    revised={**summary,"components":[{"id":"ground","label":"Ground Floor","estimatedCost":2000},{"id":"first","label":"First Floor","estimatedCost":4000}],"totalEstimatedCost":6000}
+    revised={**summary,"identityVersion":2,"applicantName":"QA Applicant, Adoni","workDescription":"Proposed construction of an Office Building","workAddress":"Plot No. 52, Adoni","components":[{"id":"ground","label":"Office Building GF","estimatedCost":2000},{"id":"first","label":"First Floor","estimatedCost":4000}],"totalEstimatedCost":6000}
     upload("retrospective",revised)
     parent=workflow.complete(parent["id"],{"version":version(parent),"note":""},father)
     for child in children:
@@ -143,6 +143,10 @@ try:
         loaded=reports.get_draft(child["id"],father)
         form=loaded["payload"]; ground=form["components"][0]
         assert ground["estimatedCost"]==2000
+        assert ground["label"]=="Office Building GF"
+        assert "Ground Floor" not in form["details"]["estimationRemovedComponents"]
+        assert fresh["estimationSummary"]["identityVersion"]==2
+        assert fresh["estimationSummary"]["workAddress"]=="Plot No. 52, Adoni"
         if child["reportKey"]=="progress": assert ground["completionPercent"]==50 and ground["completedCost"]==1000
         else: assert ground["manualCompleted"] and ground["completedCost"]==1000 and ground["estimationReviewReason"]
         assert form["components"][1]["completionPercent"]==""
@@ -163,7 +167,31 @@ try:
     reports.save_draft(unknown["id"], {"reportKey":"valuation-general","revision":saved["revision"],"payload":valuation_form}, father)
     assert not latest(unknown)["reportFresh"], "Changing upload type must require a new retained attachment"
     fails(lambda:workflow.complete(unknown["id"],{"version":version(unknown)},father),"stale_report")
-    print("PASS: preparation sources, download gate, CEO filters and linked correction cascade")
+    valuation_form["uploadType"] = "retrospective"
+    current_draft = reports.get_draft(unknown["id"], father)
+    reports.save_draft(unknown["id"], {"reportKey":"valuation-general","revision":current_draft["revision"],"payload":valuation_form}, father)
+    original = workflow.complete(unknown["id"], {"version":version(unknown)}, father)
+    revaluation = workflow.create_task({**task_payload("revaluation", f"File-only revaluation {suffix}"),
+                                        "linkedValuationId":original["id"]}, father)
+    assert revaluation["revaluationManualEntry"]
+    copy = reports.get_draft(revaluation["id"], father)["payload"]
+    assert copy["values"] == {} and copy["photos"] == [] and copy["map"] is None
+    assert copy["preparationMethod"] == "offline" and copy["uploadType"] == "retrospective"
+    assert reports.artifact_file(original["id"], revaluation["linkedValuationArtifactId"], father)["path"].is_file()
+    switch_task = workflow.create_task(task_payload("estimation", f"Distinct format roundtrip {suffix}"), father)
+    original_state = {"details":{"workMode":"online"},"components":[]}
+    switched = reports.save_draft(switch_task["id"], {"reportKey":"estimation","revision":0,"payload":original_state}, father)
+    reports.register_artifact(switch_task["id"], father, content=b"test xlsx", filename="switch.xlsx", artifact_type="estimation_xlsx", source="generated", payload=switched["payload"], summary={"components":[{"id":"ground","label":"Ground Floor","estimatedCost":1000}],"totalEstimatedCost":1000})
+    assert latest(switch_task)["reportFresh"]
+    switched = reports.save_draft(switch_task["id"], {"reportKey":"estimation","revision":switched["revision"],"payload":{"details":{"workMode":"offline","uploadType":"retrospective"},"components":[]}}, father)
+    assert not latest(switch_task)["reportFresh"]
+    # Restoring the original payload must not restore its old qualification.
+    switched = reports.save_draft(switch_task["id"], {"reportKey":"estimation","revision":switched["revision"],"payload":original_state}, father)
+    assert switched["payload"]["details"]["preparationRevision"] == 2
+    assert not latest(switch_task)["reportFresh"]
+    reports.register_artifact(switch_task["id"], father, content=b"fresh xlsx", filename="fresh.xlsx", artifact_type="estimation_xlsx", source="generated", payload=switched["payload"], summary={"components":[{"id":"ground","label":"Ground Floor","estimatedCost":1000}],"totalEstimatedCost":1000})
+    assert latest(switch_task)["reportFresh"]
+    print("PASS: preparation sources, download gate, CEO filters, linked corrections and method round-trip freshness")
 finally:
     stored_keys=[row["storage_key"] for row in database.execute("SELECT storage_key FROM app.stored_files WHERE created_by_user_id=%s",(father_id,)).fetchall()]
     database.rollback();database.close()

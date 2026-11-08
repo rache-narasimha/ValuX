@@ -61,5 +61,13 @@ assert.equal(employee.can("updatePayment", completed), true);
 assert.equal(employee.can("updatePayment", closed), false);
 assert.equal(employee.can("cancelTask", assigned), false);
 assert.equal(employee.can("reopenTask", closed), false);
+for (const terminal of [completed, closed, {...completed, assignee: "K. Sivaprasad"}]) {
+  assert.equal(employee.can("openReport", terminal), true);
+  assert.equal(executive.can("openReport", terminal), true);
+  assert.equal(employee.can("changeWorkflow", terminal), false);
+  assert.equal(employee.can("completeTask", terminal), false);
+}
+assert.equal(employee.can("openReport", {...assigned, status: "Cancelled"}), false);
+assert.equal(employee.can("openReport", anotherEmployee), false);
 
 console.log("PASS: CEO and employee workflow permissions remain distinct");

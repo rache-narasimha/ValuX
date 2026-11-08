@@ -9,8 +9,8 @@
   const draftScope = practice ? "practice" : `task-${taskId || "standalone"}`;
   const DRAFT_KEY = `sln.progress-completion.form.draft.v1-${draftScope}`;
   const TODAY = localToday();
-  const sectionLabels = { setup: "Report Setup", assessment: "Work Assessment", bank: "Bank Sanction", photos: "Photos & Generate" };
-  const state = { linkedEstimationId: task?.linkedEstimationId || "", current: 0, details: {}, components: [], bank: { releases: [] }, photos: [] };
+  const sectionLabels = { setup: "Report Setup", assessment: "Work Assessment", bank: "Bank Sanction", photos: "Photos & Generate", offline: "Upload retrospective report" };
+  const state = { linkedEstimationId: task?.linkedEstimationId || "", current: 0, preparationMethod: "online", details: {}, components: [], bank: { releases: [] }, photos: [] };
   let saveTimer = null;
   let previousReports = [];
   let previewId = null;
@@ -168,8 +168,11 @@
 
   function sections() {
     const keys = ["setup", "assessment"];
-    if (isKarnataka()) keys.push("bank");
-    keys.push("photos");
+    if (state.preparationMethod === "offline") keys.push("offline");
+    else {
+      if (isKarnataka()) keys.push("bank");
+      keys.push("photos");
+    }
     return keys;
   }
 
@@ -226,13 +229,35 @@
     renderEstimationCorrection();
     renderReleases();
     syncInputsFromState();
-    element("bank-panel").hidden = !isKarnataka();
+    element("bank-panel").hidden = !isKarnataka() || state.preparationMethod === "offline";
+    renderPreparation();
     showSection(state.current);
+  }
+
+  function renderPreparation() {
+    const offline = state.preparationMethod === "offline";
+    document.body.dataset.progressPreparation = offline ? "offline" : "online";
+    element("progress-preparation").hidden = !task || ReportData.readOnly || !WorkflowAccess.can("changeWorkflow", currentTask());
+    element("progress-preparation-switch").textContent = offline ? "Fill online" : "Upload retrospective report";
+    element("progress-preparation-label").textContent = offline ? "Retrospective upload selected" : "Fill online selected";
+    window.dispatchEvent(new CustomEvent("sln:valuation-preparation-changed"));
+  }
+
+  async function prepareRetrospectiveUpload() {
+    const issues = validate({ offline: true });
+    if (issues.length) {
+      window.alert(issues.join("\n"));
+      showSection(sections().indexOf("assessment"), true);
+      return false;
+    }
+    await persistDraftNow();
+    return true;
   }
 
   function draftState() {
     return clone({
       linkedEstimationId: state.linkedEstimationId,
+      preparationMethod: state.preparationMethod,
       details: state.details,
       components: state.components,
       bank: state.bank,
@@ -261,6 +286,7 @@
   }
 
   function scheduleSave() {
+    if (ReportData.readOnly) return;
     element("status").classList.add("is-saving");
     element("status").setAttribute("aria-label", ReportData.localOnly ? "Saving draft locally" : "Saving draft");
     window.clearTimeout(saveTimer);
@@ -271,6 +297,7 @@
   }
 
   async function persistDraftNow() {
+    if (ReportData.readOnly) return;
     window.clearTimeout(saveTimer);
     saveTimer = null;
     const saved = await ReportData.save(DRAFT_KEY, task?.reportKey || requestedReportType(), draftState(), "1");
@@ -298,14 +325,14 @@
     } catch (_error) { element("status").textContent = "Draft could not be restored"; }
   }
 
-  function validate() {
+  function validate({ offline = false } = {}) {
     const issues = [];
     const current = currentTask();
     if (current?.estimationCorrectionPending) issues.push("Finalize the revised estimation first, then reload this report.");
     if (current?.estimationReviewRequired && state.details.estimationRevisionReviewed !== current.linkedEstimationSnapshotId) issues.push("Confirm that you reviewed the revised estimation and completion amounts.");
     const linked = linkedSummary();
     if (!linked || !state.components.length) issues.push("Select a finalized estimation report with component costs.");
-    if (!state.photos.length) issues.push("Attach at least one authenticated site photograph.");
+    if (!offline && !state.photos.length) issues.push("Attach at least one authenticated site photograph.");
     if (!state.details.reportDate) issues.push("Enter the report date.");
     if (!state.details.visitDate) issues.push("Enter the site-visit date.");
     if (!String(state.details.place || "").trim()) issues.push("Enter the report place.");
@@ -331,6 +358,7 @@
       institution: { code: linked?.institutionCode || "", name: linked?.institutionName || "", branch: linked?.branch || "" },
       linkedEstimation: {
         taskId: linked?.id || "", applicantName: summary.applicantName || linked?.customerName || "", applicantAddress: summary.applicantAddress || "",
+        identityVersion: summary.identityVersion || 1, workAddress: summary.workAddress || "",
         projectLocation: summary.projectLocation || linked?.propertyBrief || "", workDescription: summary.workDescription || "",
       },
       details: { ...state.details, materialsAtSite: numeric(state.details.materialsAtSite) },
@@ -431,6 +459,24 @@
     element("photo-upload").addEventListener("change", async (event) => { if (!confirmReportInvalidation()) { event.target.value = ""; return; } const added = await Promise.all([...event.target.files].map(fileToData)); const existing = new Set(state.photos.map((photo) => photo.key)); state.photos.push(...added.filter((photo) => !existing.has(photo.key))); event.target.value = ""; renderPhotos(); reportInputChanged(); });
     element("previous").addEventListener("click", () => showSection(state.current - 1, true));
     element("next").addEventListener("click", () => showSection(state.current + 1, true));
+    element("progress-preparation-switch").addEventListener("click", async (event) => {
+      const previous = state.preparationMethod;
+      if (currentTask()?.reportGeneratedAt && !window.confirm("Changing preparation method makes the retained report outdated. Continue?")) return;
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        state.preparationMethod = previous === "offline" ? "online" : "offline";
+        await persistDraftNow();
+        await ReportData.refreshTask();
+        markDirty();
+        render();
+        if (state.preparationMethod === "offline") showSection(sections().indexOf("assessment"), true);
+      } catch (error) {
+        state.preparationMethod = previous;
+        render();
+        window.alert(reportErrorMessage(error, "The preparation method could not be saved."));
+      } finally { button.disabled = false; }
+    });
     element("preview-report").addEventListener("click", () => requestReport("preview"));
     element("generate-docx").addEventListener("click", () => requestReport("generate"));
     element("close-preview").addEventListener("click", () => { element("preview-modal").hidden = true; });
@@ -446,6 +492,13 @@
       element("preview-report").disabled = true;
     }
     await restoreDraft();
+    if (task && ["progress", "completion"].includes(task.reportGroup)) {
+      const panel = RetrospectiveValuation.offlinePanel(task.reportKey, "retrospective", prepareRetrospectiveUpload);
+      if (panel) {
+        panel.classList.remove("panel");
+        element("progress-offline").append(panel);
+      }
+    }
     const restoredPreview = ReportData.preview();
     if (restoredPreview?.id) {
       previewId = restoredPreview.id;

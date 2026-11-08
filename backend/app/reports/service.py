@@ -33,6 +33,8 @@ ARTIFACT_TYPES = {
     "estimation_pdf": ({".pdf"}, "application/pdf"),
     "progress_docx": ({".docx"}, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
     "completion_docx": ({".docx"}, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    "progress_pdf": ({".pdf"}, "application/pdf"),
+    "completion_pdf": ({".pdf"}, "application/pdf"),
     "preview_pdf": ({".pdf"}, "application/pdf"),
 }
 
@@ -200,10 +202,79 @@ def _persist_inline_images(value: Any, task: dict[str, Any], actor: dict[str, An
     return result
 
 
+def _retained_report_inputs(database, task):
+    """Read the retained artifact's inputs without relaxing any write guard."""
+    artifact_id = task.get("final_artifact_id") if task["status"] == "Closed" else task.get("latest_artifact_id")
+    record = database.execute(
+        """SELECT r.payload, r.schema_version, r.input_fingerprint, r.created_at,
+                  d.payload AS draft_payload, d.input_fingerprint AS draft_fingerprint
+           FROM app.task_artifacts a
+           JOIN app.report_revisions r ON r.id=a.report_revision_id AND r.task_id=a.task_id
+           LEFT JOIN app.report_drafts d ON d.task_id=a.task_id
+           WHERE a.id=%s AND a.task_id=%s""", (artifact_id, task["id"]),
+    ).fetchone()
+    payload = {}
+    if record:
+        revision = record["payload"] or {}
+        payload = revision.get("draft")
+        if payload is None and record["input_fingerprint"] and record["input_fingerprint"] == record["draft_fingerprint"]:
+            payload = record["draft_payload"]
+        if payload is None:
+            payload = revision.get("form") or {}
+    payload = deepcopy(payload or {})
+    if task["report_group"] in {"progress", "completion"} and "linkedEstimationId" not in payload:
+        linked = payload.get("linkedEstimation") or {}
+        payload["linkedEstimationId"] = linked.get("taskId") or ""
+        for component in payload.get("components") or []:
+            calculated = float(component.get("estimatedCost") or 0) * float(component.get("completionPercent") or 0) / 100
+            component.setdefault("manualCompleted", abs(float(component.get("completedCost") or 0) - calculated) > .005)
+    if task["report_group"] in {"valuation", "revaluation"}:
+        payload.setdefault("preparationMethod", "offline" if task.get("preparation_source") in {"template", "retrospective"} else "online")
+        values = payload.get("values") or {}
+        payload.setdefault("floorCount", max([1, *[int(match.group(1)) for key in values if (match := re.match(r"building\.floors\.(\d+)\.", key))]]))
+        payload.setdefault("documentCount", max([1, *[int(match.group(1)) for key in values if (match := re.match(r"documents\.(\d+)\.", key))]]))
+    # Completed draft media is deliberately removed. The retained file contains it.
+    payload["photos"] = []
+    payload["map"] = None
+    return {"reportKey": task["report_key"], "schemaVersion": record["schema_version"] if record else "1",
+            "payload": payload, "revision": 0, "preview": None, "readOnly": True,
+            "updatedAt": record["created_at"].isoformat() if record else None}
+
+
+def revaluation_inputs(database, original):
+    """Copy only retained valuation form data into a new draft."""
+    retained = _retained_report_inputs(database, original)
+    previous = retained["payload"]
+    source = original.get("preparation_source")
+    prefix = "final" if original["status"] == "Closed" else "latest"
+    artifact_type = original.get(f"{prefix}_artifact_type")
+    artifact_source = original.get(f"{prefix}_artifact_source")
+    if previous.get("uploadType") in {"template", "retrospective"} and artifact_source == "uploaded":
+        source = previous["uploadType"]
+    elif artifact_source == "generated" and artifact_type == "valuation_docx":
+        source = "online"
+    bank_upload = artifact_type in {"kvb_xlsx", "valocity_docx", "valocity_pdf"}
+    values = previous.get("values")
+    values = values if isinstance(values, dict) else {}
+    copied = {
+        "values": values,
+        "floorCount": previous.get("floorCount", 1),
+        "documentCount": previous.get("documentCount", 1),
+        "preparationMethod": "offline" if bank_upload or source in {"template", "retrospective"} else "online" if source == "online" else "",
+        "uploadType": source if source in {"template", "retrospective"} else "",
+        "photos": [],
+        "map": None,
+    }
+    return {"payload": copied, "schemaVersion": retained["schemaVersion"], "source": source,
+            "manual": artifact_source != "generated" or not bool(values)}
+
+
 def get_draft(task_code: str, session: dict[str, Any]) -> dict[str, Any] | None:
     actor = _actor(session)
     with connection() as database:
         task = _task(database, task_code)
+        if task["status"] in {"Completed", "Closed"}:
+            return _retained_report_inputs(database, task)
         _require_editable(actor, task)
         row = database.execute(
             """
@@ -264,13 +335,14 @@ def require_current_preview(task_code: str, session: dict[str, Any], preview_tok
         raise ReportDataError("The form changed after preview. Preview the latest report before generating the DOCX.", 409, "preview_required")
 
 
-def require_report_key(task_code: str, session: dict[str, Any], expected_report_key: str) -> None:
+def require_report_key(task_code: str, session: dict[str, Any], expected_report_key: str) -> dict[str, Any]:
     actor = _actor(session)
     with connection() as database:
         task = _task(database, task_code)
         _require_editable(actor, task)
     if task["report_key"] != expected_report_key:
         raise ReportDataError("This report page does not match the selected task.", 409, "report_mismatch")
+    return task
 
 
 def valuation_download_filename(task_code: str, session: dict[str, Any], suffix: str) -> str:
@@ -285,7 +357,8 @@ def valuation_download_filename(task_code: str, session: dict[str, Any], suffix:
     # punctuation rather than as a filesystem path that discards the prefix.
     applicant = re.sub(r"[^a-zA-Z0-9._-]+", "_", _text(task.get("customer_name")))[:90].strip("_.") or "Applicant"
     code = _safe_name(task["task_code"], "Task").replace(" ", "_")
-    return f"{code}_{applicant}_{report_type}_Valuation_Report{suffix}"
+    assessment = "Revaluation" if task["report_group"] == "revaluation" else "Valuation"
+    return f"{code}_{applicant}_{report_type}_{assessment}_Report{suffix}"
 
 
 def save_draft(task_code: str, values: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
@@ -316,6 +389,31 @@ def save_draft(task_code: str, values: dict[str, Any], session: dict[str, Any]) 
             details = normalized.get("details") or {}
             mode = details.get("workMode") if report_key == "estimation" else normalized.get("preparationMethod")
             upload_type = details.get("uploadType") if report_key == "estimation" else normalized.get("uploadType")
+            if report_key == "estimation":
+                previous = ((current or {}).get("payload") or {}).get("details") or {}
+                previous_mode = previous.get("workMode")
+                method_switched = bool(previous_mode and mode != previous_mode)
+                upload_switched = bool(mode == previous_mode == "offline" and upload_type != previous.get("uploadType")
+                                       and (previous.get("uploadType") or task.get("report_generated_at")))
+                # Keep this revision authoritative: restoring an old browser payload
+                # after a method switch cannot restore its completion qualification.
+                preparation_revision = int(previous.get("preparationRevision") or 0) + int(method_switched or upload_switched)
+                details.pop("preparationRevision", None)
+                if preparation_revision:
+                    details["preparationRevision"] = preparation_revision
+                if "details" in normalized:
+                    normalized["details"] = details
+            if report_key in {"progress", "completion"}:
+                previous = (current or {}).get("payload") or {}
+                mode = mode or "online"
+                if mode not in {"online", "offline"}:
+                    raise ReportDataError("Select a valid preparation method.")
+                revision = int(previous.get("preparationRevision") or 0)
+                if mode != (previous.get("preparationMethod") or "online"):
+                    revision += 1
+                normalized["preparationMethod"] = mode
+                normalized["preparationRevision"] = revision
+                upload_type = "retrospective"
             selected_source = "online" if mode == "online" else upload_type if mode == "offline" else None
             preparation_changed = workflow_service.set_preparation_source(database, task, actor, selected_source)
             input_fingerprint = report_input_fingerprint(
@@ -384,7 +482,7 @@ def save_draft(task_code: str, values: dict[str, Any], session: dict[str, Any]) 
                     FROM app.tasks t
                     JOIN app.task_artifacts a ON a.id = t.latest_artifact_id
                     LEFT JOIN app.report_revisions r ON r.id = a.report_revision_id
-                    WHERE t.id = %s AND (a.artifact_type = %s OR a.artifact_type IN ('estimation_docx','estimation_pdf','valuation_pdf'))
+                    WHERE t.id = %s AND (a.artifact_type = %s OR a.artifact_type IN ('estimation_docx','estimation_pdf','valuation_pdf','progress_pdf','completion_pdf'))
                     """,
                     (task["id"], tracked_artifact_type),
                 ).fetchone()
@@ -540,6 +638,9 @@ def report_input_fingerprint(
             "bank": _compact_payload(source.get("bank") if isinstance(source.get("bank"), dict) else {}),
             "photos": _compact_payload(source.get("photos") if isinstance(source.get("photos"), list) else []),
         }
+        if source.get("preparationMethod") == "offline" or source.get("preparationRevision"):
+            report_input["preparationMethod"] = source.get("preparationMethod")
+            report_input["preparationRevision"] = source.get("preparationRevision") or 0
     else:
         report_input = {
             **identity,
@@ -569,13 +670,15 @@ def _create_snapshot(database, task: dict[str, Any], revision_id: uuid.UUID | No
     components = summary.get("components")
     if not isinstance(components, list) or not components:
         raise ReportDataError("The estimation report does not contain component costs.")
+    if summary.get("identityVersion") == 2 and any(not _text(summary.get(key)) for key in ("applicantName", "workDescription", "workAddress")):
+        raise ReportDataError("Complete Name of the Applicant, Name of the Work and Address of the Work before submitting.")
     snapshot_id = uuid.uuid4()
     number = database.execute(
         "SELECT COALESCE(MAX(snapshot_number), 0) + 1 AS number FROM app.estimation_snapshots WHERE estimation_task_id = %s",
         (task["id"],),
     ).fetchone()["number"]
     applicant = _text(summary.get("applicantName")) or task["customer_name"]
-    location = _text(summary.get("projectLocation")) or task["property_brief"]
+    location = _text(summary.get("workAddress")) if summary.get("identityVersion") == 2 else _text(summary.get("projectLocation")) or task["property_brief"]
     property_type = _text(summary.get("propertyType")) or "property"
     total = _decimal(summary.get("totalEstimatedCost"))
     database.execute(
@@ -607,7 +710,7 @@ def _create_snapshot(database, task: dict[str, Any], revision_id: uuid.UUID | No
                 estimated_cost, display_order, details
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
-            (uuid.uuid4(), snapshot_id, item_key, label, source, _decimal(component.get("estimatedCost")), index, Jsonb({"sourceId": _text(component.get("id"))})),
+            (uuid.uuid4(), snapshot_id, item_key, label, source, _decimal(component.get("estimatedCost")), index, Jsonb({"sourceId": _text(component.get("id")), "legacyLabel": _text(component.get("legacyLabel"))})),
         )
     return snapshot_id
 
@@ -635,10 +738,15 @@ def _validate_artifact(
         )
     ):
         return
+    if task["report_group"] in {"progress", "completion"}:
+        expected = task["report_group"]
+        if (retrospective and artifact_type in {f"{expected}_docx", f"{expected}_pdf"}) or (
+            source == "generated" and artifact_type == f"{expected}_docx"
+        ):
+            return
+        raise ReportDataError("This report file type does not match the task.")
     allowed = {
         "estimation": {"estimation_xlsx", "estimation_docx", "estimation_pdf"},
-        "progress": {"progress_docx"},
-        "completion": {"completion_docx"},
     }.get(task["report_group"], {"valuation_docx", "kvb_xlsx", "valocity_docx", "valocity_pdf"})
     if artifact_type not in allowed:
         raise ReportDataError("This report file type does not match the task.")
@@ -692,10 +800,6 @@ def register_artifact(
             task = _task(database, task_code, lock=True)
             _require_editable(actor, task)
             _validate_artifact(task, artifact_type, source, payload)
-            try:
-                workflow_service.require_estimation_ready(database, task, payload)
-            except workflow_service.WorkflowError as error:
-                raise ReportDataError(str(error), error.status, error.code) from error
             selected_source = (payload or {}).get("preparationSource") or ("retrospective" if retrospective else "online" if source == "generated" and artifact_type != "preview_pdf" else None)
             if selected_source is not None and selected_source not in {"online", "template", "retrospective"}:
                 raise ReportDataError("Select a valid preparation method.", 400, "invalid_preparation_source")
@@ -711,6 +815,30 @@ def register_artifact(
                 ).fetchone()
                 if draft_meta:
                     schema_version = draft_meta["schema_version"]
+            if task["report_group"] in {"progress", "completion"} and retrospective:
+                from ..progress.generator import retrospective_summary
+
+                if not _text(work_note):
+                    raise ReportDataError("Add a work note for the retrospective report.")
+                draft = (draft_meta or {}).get("payload") or {}
+                linked = database.execute(
+                    "SELECT task_code FROM app.tasks WHERE id=%s", (task["linked_estimation_task_id"],)
+                ).fetchone()
+                if not linked or draft.get("linkedEstimationId") != linked["task_code"]:
+                    raise ReportDataError("Reload the report to use its linked estimation.")
+                if draft.get("preparationMethod") != "offline":
+                    raise ReportDataError("Select Upload retrospective report before attaching the file.")
+                payload = {**draft, "retrospective": True, "preparationSource": "retrospective", "photos": []}
+                try:
+                    summary = retrospective_summary(payload, task["report_group"], linked["task_code"])
+                except ValueError as error:
+                    raise ReportDataError(str(error)) from error
+            elif task["report_group"] in {"progress", "completion"} and ((draft_meta or {}).get("payload") or {}).get("preparationMethod") == "offline":
+                raise ReportDataError("Select Fill online before generating this report.")
+            try:
+                workflow_service.require_estimation_ready(database, task, payload, verify_components=retrospective)
+            except workflow_service.WorkflowError as error:
+                raise ReportDataError(str(error), error.status, error.code) from error
             if retrospective and (
                 not draft_meta
                 or (((draft_meta.get("payload") or {}).get("details") or {}).get("workMode") if task["report_key"] == "estimation" else (draft_meta.get("payload") or {}).get("preparationMethod")) != "offline"
@@ -727,6 +855,8 @@ def register_artifact(
                     draft = database.execute("SELECT payload FROM app.report_drafts WHERE task_id = %s", (task["id"],)).fetchone()
                     payload = draft["payload"] if draft else {}
                 revision_payload = {"form": _compact_payload(payload or {})}
+                if draft_meta:
+                    revision_payload["draft"] = _compact_payload(draft_meta["payload"])
                 if summary:
                     revision_payload["summary"] = _compact_payload(summary)
                 revision_id = uuid.uuid4()
@@ -785,7 +915,7 @@ def register_artifact(
                 ).fetchone()
                 if previous:
                     database.execute("UPDATE app.task_artifacts SET superseded_at = NOW() WHERE id = %s", (previous["id"],))
-                    if task.get("final_artifact_id") != previous["id"]:
+                    if task.get("final_artifact_id") != previous["id"] and not _revaluation_pins_artifact(database, previous["id"]):
                         database.execute("UPDATE app.stored_files SET removed_at = NOW() WHERE id = %s", (previous["file_id"],))
                         remove_keys.append(previous["storage_key"])
                 database.execute(
@@ -850,6 +980,11 @@ def artifact_file(task_code: str, artifact_id: str, session: dict[str, Any]) -> 
     return {"path": path, "contentType": row["content_type"], "filename": row["original_filename"], "artifactType": row["artifact_type"]}
 
 
+def _revaluation_pins_artifact(database, artifact_id):
+    return database.execute("SELECT 1 FROM app.tasks WHERE linked_valuation_artifact_id=%s LIMIT 1",
+                            (artifact_id,)).fetchone() is not None
+
+
 def remove_latest_artifact(task_code: str, session: dict[str, Any]) -> dict[str, Any]:
     actor = _actor(session)
     remove_keys: list[str] = []
@@ -872,7 +1007,9 @@ def remove_latest_artifact(task_code: str, session: dict[str, Any]) -> dict[str,
         if not row:
             raise ReportDataError("The completed report attachment could not be found.", 404, "not_found")
         database.execute("UPDATE app.task_artifacts SET superseded_at = COALESCE(superseded_at, NOW()) WHERE id = %s", (row["id"],))
-        database.execute("UPDATE app.stored_files SET removed_at = NOW() WHERE id = %s", (row["file_id"],))
+        if not _revaluation_pins_artifact(database, row["id"]):
+            database.execute("UPDATE app.stored_files SET removed_at = NOW() WHERE id = %s", (row["file_id"],))
+            remove_keys.append(row["storage_key"])
         database.execute("UPDATE app.tasks SET latest_artifact_id = NULL, report_generated_at = NULL, version = version + 1, updated_at = NOW() WHERE id = %s", (task["id"],))
         database.execute(
             """
@@ -883,6 +1020,5 @@ def remove_latest_artifact(task_code: str, session: dict[str, Any]) -> dict[str,
             """,
             (uuid.uuid4(), task["id"], actor["id"], actor["name"], "Completed report attachment removed."),
         )
-        remove_keys.append(row["storage_key"])
     _delete_physical(remove_keys)
     return workflow_service.get_task(task_code)

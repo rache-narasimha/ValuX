@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>My Account · SLN Property Reports</title>
+    <link rel="icon" href="/assets/images/valux-monogram.png" type="image/png" />
+    <link rel="stylesheet" href="/assets/css/styles.css" />
+    <link rel="stylesheet" href="/assets/css/workflow.css" />
+    <script src="/assets/js/core/appearance.js"></script>
+  </head>
+  <body class="workflow-page">
+    <header class="app-header"></header>
+    <main class="page-frame account-page">
+      <section class="page-intro"><div><p class="eyebrow">Your account</p><h1>My Account</h1><p>Manage your profile photo and password.</p></div></section>
+      <div class="account-grid">
+        <section class="work-card account-card" aria-labelledby="profile-heading">
+          <h2 id="profile-heading">Profile</h2>
+          <div class="account-photo-row"><span class="avatar account-photo" data-current-user-initials></span><div><label class="button-link secondary photo-file-label" for="profile-photo-file">Choose photo</label><input type="file" id="profile-photo-file" accept="image/jpeg,image/png,image/webp" hidden /><button class="quiet-link" id="remove-photo" type="button">Remove photo</button><p class="field-help">JPEG, PNG or WebP · up to 2 MB</p></div></div>
+          <div id="photo-editor" class="photo-editor" hidden>
+            <canvas id="photo-crop" width="384" height="384" aria-label="Square profile photo preview"></canvas>
+            <div class="photo-controls"><label>Zoom<input id="photo-zoom" type="range" min="1" max="3" step="0.05" value="1" /></label><label>Horizontal position<input id="photo-x" type="range" min="0" max="100" value="50" /></label><label>Vertical position<input id="photo-y" type="range" min="0" max="100" value="50" /></label><div class="account-actions"><button id="save-photo" type="button" class="primary">Save photo</button><button id="cancel-photo" type="button" class="secondary">Cancel</button></div></div>
+          </div>
+          <p id="photo-message" class="account-message" role="status"></p>
+          <div class="account-identity"><label>Display name<input id="account-name" readonly /></label><label>User ID<input id="account-user-id" readonly /></label><label>Role<input id="account-role" readonly /></label><label>Email<input id="account-email" type="text" readonly /></label></div>
+          <p class="field-help">Your account details are read-only. Contact the account operator if they need correction.</p>
+        </section>
+        <section class="work-card account-card" aria-labelledby="security-heading">
+          <h2 id="security-heading">Security</h2>
+          <form id="password-form" class="account-password-form">
+            <h3>Change password</h3>
+            <label>Current password<input id="current-password" type="password" autocomplete="current-password" required maxlength="128" /></label>
+            <label>New password<input id="new-password" type="password" autocomplete="new-password" required minlength="12" maxlength="128" aria-describedby="password-rules" /></label>
+            <p id="password-rules" class="field-help">12–128 characters, including uppercase, lowercase, a number and a symbol. Your last 5 passwords cannot be reused.</p>
+            <label>Confirm new password<input id="confirm-password" type="password" autocomplete="new-password" required minlength="12" maxlength="128" /></label>
+            <label>Authenticator code<input id="account-totp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="6-digit code" /></label>
+            <p class="field-help">Other sessions will be signed out. This session will be renewed.</p>
+            <button type="submit" class="primary">Change password</button>
+            <p id="password-message" class="account-message" role="status"></p>
+          </form>
+          <div class="account-session-note"><h3>Session limits</h3><p>You’re signed out after 1 hour of inactivity or 24 hours from sign-in. Activity extends the inactivity timer.</p></div>
+        </section>
+      </div>
+    </main>
+    <script src="/assets/js/core/business-api.js"></script>
+    <script src="/assets/js/core/time.js"></script>
+    <script src="/assets/js/core/app-shell.js"></script>
+    <script src="/assets/js/components/account-chrome.js"></script>
+    <script src="/assets/js/core/workflow-access.js"></script>
+    <script src="/assets/js/pages/account.js"></script>
+  </body>
+</html>

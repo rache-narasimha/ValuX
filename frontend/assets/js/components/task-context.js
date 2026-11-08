@@ -28,6 +28,14 @@
   }
 
   document.body.classList.add("report-linked");
+  if (ReportData.readOnly) {
+    const artifact = task.status === "Closed" ? TaskStore.finalArtifact(task) : TaskStore.latestArtifact(task);
+    const notice = document.createElement("section");
+    notice.className = "report-task-context report-readonly-banner";
+    notice.innerHTML = `<div><strong>${WorkflowUI.escape(task.id)} · ${WorkflowUI.escape(task.status)} · Read-only</strong><p>Browse the inputs retained with this report. Photographs and maps are available in the retained document.</p></div><div class="report-readonly-actions">${artifact?.url ? `<a class="button-link primary" href="${WorkflowUI.escape(artifact.url)}">Download retained report</a>` : ""}<a class="button-link secondary" href="/tasks/detail?id=${encodeURIComponent(task.id)}">Assignment details</a></div>`;
+    document.querySelector("header").insertAdjacentElement("afterend", notice);
+    return;
+  }
 
   const top = document.createElement("section");
   top.className = "report-task-context report-task-context-compact";
@@ -49,7 +57,7 @@
   const bottom = document.createElement("section");
   bottom.className = "report-task-notes";
   bottom.innerHTML = `<div class="report-completion-heading"><div><h2>Work note</h2><p>Record progress, review context or completion details.</p></div><span id="generation-state" class="soft-badge">Report not generated</span></div>
-    <form id="report-note-form"><label for="report-work-note">Work note</label><textarea id="report-work-note" placeholder="Add a clear update for this assignment"></textarea><div class="report-note-actions"><button type="submit" class="secondary">Add note</button><button type="button" class="secondary" id="view-report-history" aria-expanded="false">View history</button><button type="button" class="primary" id="complete-task">Mark Completed</button></div><p id="report-note-error" class="report-task-context__error" role="alert" hidden></p></form>
+    <form id="report-note-form"><label for="report-work-note">Work note</label><textarea id="report-work-note" placeholder="Add a clear update for this assignment"></textarea><div class="report-note-actions"><button type="submit" class="secondary">Save note</button><button type="button" class="secondary" id="view-report-history" aria-expanded="false">View history</button><button type="button" class="primary" id="complete-task">Mark Completed</button></div><p id="report-note-error" class="report-task-context__error" role="alert" hidden></p></form>
     <section id="report-history" class="report-inline-history" hidden><div class="compact-section-heading"><h3>Task history</h3><span id="report-history-count" class="soft-badge"></span></div><ol id="report-history-list" class="activity-list"></ol></section>
     <div class="report-task-notes__links"><a href="/tasks/detail?id=${encodeURIComponent(task.id)}">Back to assignment details</a><a href="/">Back to work dashboard</a></div>`;
   reportForm.insertAdjacentElement("afterend", bottom);
@@ -87,8 +95,9 @@
     return TaskStore.get(taskId);
   }
 
-  function requestWorkNote(message) {
-    if (document.body.dataset.valuationPreparation === "offline") {
+  function requestWorkNote(message, expand = false) {
+    if (expand) { noteExpanded = true; render(); }
+    if (!expand && document.body.dataset.valuationPreparation === "offline") {
       const output = document.querySelector("[data-offline-status]");
       if (output) {
         output.textContent = message;
@@ -99,7 +108,7 @@
     noteError.textContent = message;
     noteError.hidden = false;
     bottom.scrollIntoView({ behavior: "smooth", block: "start" });
-    window.setTimeout(() => workNote.focus(), 350);
+    if (noteExpanded) window.setTimeout(() => workNote.focus(), 350);
   }
 
   function completionBlockReason(current) {
@@ -136,16 +145,16 @@
       ? task.reportFresh === false ? "Report outdated" : `Generated ${WorkflowUI.date(task.reportGeneratedAt)}`
       : "Report not generated";
     const completionReason = completionBlockReason(task);
-    const offline = document.body.dataset.valuationPreparation === "offline";
-    bottom.classList.toggle("report-offline-notes", offline);
-    bottom.querySelector(".report-completion-heading").hidden = offline;
+    const offline = document.body.dataset.valuationPreparation === "offline" || document.body.dataset.progressPreparation === "offline";
+    bottom.classList.toggle("report-offline-notes", !noteExpanded);
+    bottom.querySelector(".report-completion-heading").hidden = !noteExpanded;
     document.getElementById("report-complete-top").hidden = offline;
     document.getElementById("complete-task").hidden = offline;
-    noteToggle.hidden = !offline;
+    noteToggle.hidden = false;
     noteToggle.textContent = noteExpanded ? "Hide note" : "Add note";
     noteToggle.setAttribute("aria-expanded", String(noteExpanded));
     bottom.querySelectorAll("label[for='report-work-note'], #report-work-note, button[type='submit']").forEach((node) => {
-      node.hidden = offline && !noteExpanded;
+      node.hidden = !noteExpanded;
     });
     [document.getElementById("complete-task"), document.getElementById("report-complete-top")].forEach((button) => {
       button.classList.toggle("is-unavailable", Boolean(completionReason));
@@ -166,7 +175,7 @@
     }
     const current = currentTask();
     if (!current.retrospectiveReady && !workNote.value.trim()) {
-      requestWorkNote("Add the completion work note, then select Mark Completed again.");
+      requestWorkNote("Add the completion work note, then select Mark Completed again.", true);
       return;
     }
     if (current.retrospectiveReady && !workNote.value.trim() && !window.confirm("Mark this task Completed using the work note recorded with the offline report upload?")) return;
@@ -208,7 +217,7 @@
     try {
       await TaskStore.resume(taskId);
       render();
-    } catch (error) { requestWorkNote(error.message); }
+    } catch (error) { requestWorkNote(error.message, true); }
   });
   document.getElementById("report-add-note").addEventListener("click", () => {
     noteExpanded = true;

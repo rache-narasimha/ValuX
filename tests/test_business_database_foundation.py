@@ -5,6 +5,7 @@ from backend.app.auth.database import connection
 
 
 EXPECTED_APP_TABLES = {
+    "notifications",
     "estimation_snapshot_items",
     "estimation_snapshots",
     "institutions",

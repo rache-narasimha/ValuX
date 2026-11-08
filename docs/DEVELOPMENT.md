@@ -15,6 +15,8 @@ docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m 
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_report_data_service
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_password_history
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_auth_flow
+docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_account
+docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_notifications
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_general_generation
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_agricultural_generation
 docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_estimation_generation
@@ -34,6 +36,9 @@ sh valuation_app/tests/database_recovery_smoke.sh
 The authentication flow test is intentionally run inside Docker because it
 uses the internal PostgreSQL and Mailpit services. It creates unique accounts
 and removes them when complete.
+The signed-in account check also requires Mailpit. If normal development uses
+SMTP, temporarily override all mail settings to Mailpit for both the server and
+the test process, then restore the original Compose configuration afterward.
 
 The Phase 4 persistence smoke test creates one uniquely identified task, draft
 and local artifact, restarts PostgreSQL and the application, verifies their

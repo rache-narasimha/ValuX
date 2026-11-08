@@ -96,7 +96,7 @@ def assert_controlled_steel(generate):
     assert all(f"J{row}" in formula for row in [*steel_rows, stair, shades]), formula
     words = [sheet.cell(row, 1).value for row in range(1, sheet.max_row + 1)]
     assert "(Rupees One Lakh Ninety Three Thousand Three Hundred Seventy Five only)" in words
-    assert sheet.freeze_panes == "A17"
+    assert sheet.freeze_panes is None
     assert workbook.calculation.fullCalcOnLoad is True
     assert workbook.calculation.forceFullCalc is True
 

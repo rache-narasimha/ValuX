@@ -22,6 +22,9 @@ from openpyxl.styles import Border, Font, PatternFill, Side
 from openpyxl.utils import range_boundaries
 from openpyxl.workbook.properties import CalcProperties
 from openpyxl.worksheet.worksheet import Worksheet
+from openpyxl.worksheet.views import Selection
+
+from .presentation import applicant_text, compact_abstract, component_labels, component_work, modern_identity, work_text
 
 
 RESOURCE_DIRECTORY = Path(__file__).resolve().parents[3] / "resources" / "estimation"
@@ -80,6 +83,9 @@ class DetailSpec:
     component_name: str
     template_key: str
     form_data: MutableMapping[str, Any]
+    work_description: str = ""
+    first_sheet: bool = True
+    floor_label: str = ""
 
 
 @dataclass
@@ -154,6 +160,8 @@ def _template_key(state: Mapping[str, Any], component: Mapping[str, Any], sheet:
     centre_line = (state.get("details") or {}).get("measurementMethod") == "centre_line"
     suffix = "_centre_line" if centre_line else ""
 
+    if kind == "storage_shed":
+        return "storage_shed"
     if kind == "heavy_machinery_hall":
         return "heavy_machinery_hall"
     if kind == "normal_machinery_hall":
@@ -184,24 +192,23 @@ def _template_key(state: Mapping[str, Any], component: Mapping[str, Any], sheet:
 def _detail_specs(state: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[DetailSpec]:
     used_names: set[str] = set()
     specs: list[DetailSpec] = []
-    for component, sheet, form_data in _component_sheet_entries(state):
+    for record in component_labels(state):
+        component, sheet = record["component"], record["sheet"]
+        form_data = (sheet or component).get("formData") or {}
         key = _template_key(state, component, sheet)
         if not key or key not in manifest["templates"]:
             continue
-        component_name = f"{component.get('name')} - {sheet.get('label')}" if sheet else str(component.get("name") or "Estimate")
+        component_name = record["label"]
         typical = sheet and len(sheet.get("typicalFloorKeys") or []) > 1
-        name = _clean_sheet_name(sheet.get("label") if typical else component_name, used_names)
-        specs.append(DetailSpec(name, component_name, key, form_data))
+        name = _clean_sheet_name(component_name if modern_identity(state.get("details") or {}) else sheet.get("label") if typical else component_name, used_names)
+        specs.append(DetailSpec(name, component_name, key, form_data, component_work(component), record["first"], (sheet or {}).get("label", "")))
     if not specs:
         raise ValueError("Select at least one supported component before preparing a workbook.")
     return specs
 
 
 def _uses_separate_abstract(state: Mapping[str, Any]) -> bool:
-    if state.get("propertyType") != "residential":
-        return True
-    sheets = [sheet for _, sheet, _ in _component_sheet_entries(state) if sheet]
-    return not sheets or any(float(sheet.get("level") or 0) > 3 for sheet in sheets)
+    return not compact_abstract(state)
 
 
 def expected_estimation_sheet_names(state: Mapping[str, Any]) -> tuple[str, ...]:
@@ -281,6 +288,8 @@ def _copy_standard_inputs(
             start = next((row for row, serial in starts if row >= search_from and serial == item["sno"]), None)
         if start is None:
             expected = _normalised_text(item.get("label"))
+            if any(line.get("id") == "truss-lean" for line in item.get("rows") or []):
+                expected = _normalised_text("Angular Trusses Lean to Roof Type")
             for row in range(search_from, last_data_row + 1):
                 candidate = _normalised_text(ws.cell(row, 2).value)
                 if candidate and (candidate in expected or expected in candidate):
@@ -299,7 +308,7 @@ def _copy_standard_inputs(
                 if candidate and (candidate in expected or expected in candidate):
                     target = row
                     break
-            if target is None and len(input_rows) == 1:
+            if target is None and (len(input_rows) == 1 or line.get("id") == "plaster-gross"):
                 target = start
             if target is None and line.get("calculation") in {"subtotal", "percentage", "derived", "derived_expression"} and cursor < next_start:
                 target = cursor
@@ -310,6 +319,24 @@ def _copy_standard_inputs(
             cursor = target + 1
         search_from = start + 1
     return row_map
+
+
+def _configured_line(line: Mapping[str, Any], inputs: Mapping[str, Any], storage: bool) -> dict[str, Any]:
+    identifier = str(line.get("id") or "")
+    result = dict(line)
+    factor = _numeric(inputs.get("factor"))
+    if storage and identifier == "brick-net":
+        factor = 1
+    if factor is not None and line.get("calculation") == "percentage":
+        result["percentage"] = factor
+    if identifier in {"galvalume-roofing", "heavy-foundation"} and _numeric(inputs.get("quantity")) is not None:
+        result.update(calculation="manual_quantity_rate", rate=True)
+    return result
+
+
+def _storage_hidden(line: Mapping[str, Any]) -> bool:
+    identifier = str(line.get("id") or "")
+    return identifier == "truss-a" or identifier.endswith("-short")
 
 
 def _custom_additions(spec: DetailSpec, manifest: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -368,8 +395,11 @@ def _calculation_rows(item: Mapping[str, Any], data: Mapping[str, Any]) -> list[
 
     for base in item.get("rows") or []:
         base_id = scoped(base.get("id"))
+        if data.get("storageWorksheet") and _storage_hidden(base):
+            continue
+        effective = _configured_line(base, (data.get("rows") or {}).get(base_id, {}), bool(data.get("storageWorksheet")))
         rows.append({
-            **base,
+            **effective,
             "instanceId": base_id,
             "baseId": base_id,
             "sourceId": scoped(base.get("sourceId")) if base.get("sourceId") else None,
@@ -390,7 +420,7 @@ def _calculation_rows(item: Mapping[str, Any], data: Mapping[str, Any]) -> list[
 def _calculated_sheet_amount(spec: DetailSpec, manifest: Mapping[str, Any]) -> float:
     """Mirror the browser calculation model for words and Abstract totals."""
 
-    data = spec.form_data
+    data = {**spec.form_data, "storageWorksheet": spec.template_key == "storage_shed"}
     items = _prepared_calculation_items(spec, manifest)
     prepared = [(item, _calculation_rows(item, data)) for item in items]
     rows = [row for _, item_rows in prepared for row in item_rows]
@@ -445,7 +475,9 @@ def _calculated_sheet_amount(spec: DetailSpec, manifest: Mapping[str, Any]) -> f
             if calculation in {"derived", "derived_expression"}:
                 entered = _numeric(inputs.get("quantity"))
                 source = values.get(str(row.get("sourceId")), {}).get("quantity")
-                factor = 10 if calculation == "derived_expression" else float(row.get("multiplier") or 0)
+                factor = _numeric(inputs.get("factor"))
+                if factor is None:
+                    factor = 10 if calculation == "derived_expression" else float(row.get("multiplier") or 0)
                 quantity = entered if entered is not None else (None if source is None else float(source) * factor)
             elif calculation == "subtotal":
                 sources = group_values(row, row.get("sourceGroup"))
@@ -601,20 +633,24 @@ def _repair_standard_aggregate_formulas(
     custom_group_rows: Mapping[tuple[int, str], list[int]],
 ) -> None:
     for item_index, item in enumerate(manifest["worksheets"][spec.template_key]["items"]):
-        if not any(index == item_index for index, _ in custom_group_rows):
-            continue
+        storage = spec.template_key == "storage_shed"
+        inputs = spec.form_data.get("rows") or {}
+        has_custom = any(index == item_index for index, _ in custom_group_rows)
         grouped: dict[str, list[int]] = {}
-        for line in item.get("rows") or []:
-            target = row_map.get((item_index, str(line.get("id"))))
-            if target is None:
+        for base in item.get("rows") or []:
+            identifier = str(base.get("id"))
+            target = row_map.get((item_index, identifier))
+            if target is None or (storage and _storage_hidden(base)):
                 continue
+            line = _configured_line(base, inputs.get(identifier, {}), storage)
             group = line.get("group")
             if group:
                 grouped.setdefault(str(group), []).append(target)
                 grouped[str(group)].extend(custom_group_rows.get((item_index, str(group)), []))
                 grouped[str(group)] = list(dict.fromkeys(grouped[str(group)]))
             calculation = line.get("calculation")
-            if calculation not in {"subtotal", "percentage"}:
+            factor_changed = line.get("percentage") != base.get("percentage")
+            if calculation not in {"subtotal", "percentage"} or not (has_custom or factor_changed):
                 continue
             groups = line.get("includeSourceGroups") or [line.get("sourceGroup")]
             sources = [source for group_name in groups if group_name for source in grouped.get(str(group_name), [])]
@@ -625,6 +661,59 @@ def _repair_standard_aggregate_formulas(
                 ws.cell(target, 10).value = f'=IF(COUNT({references})=0,"",SUM({references}))'
             else:
                 ws.cell(target, 10).value = f'=IF(COUNT({references})=0,"",SUM({references})*{line.get("percentage")})'
+
+
+def _apply_dimension_formulas(
+    ws: Worksheet, spec: DetailSpec, manifest: Mapping[str, Any], row_map: Mapping[tuple[int, str], int],
+) -> None:
+    """Use the worksheet's mapped quantities for adjustable factors and shed measurements."""
+    storage = spec.template_key == "storage_shed"
+    rows = spec.form_data.get("rows") or {}
+    by_id = {identifier: target for (_, identifier), target in row_map.items()}
+    for index, item in enumerate(manifest["worksheets"][spec.template_key]["items"]):
+        for line in item.get("rows") or []:
+            identifier = line["id"]
+            target = row_map.get((index, identifier))
+            if target is None:
+                continue
+            description = ws.cell(target, 2)
+            if storage:
+                if _storage_hidden(line):
+                    ws.row_dimensions[target].hidden = True
+                    continue
+                if identifier.endswith("-long"):
+                    description.value = {
+                        "brick-long": "Measured brickwork run",
+                        "concrete-lintel-long": "Measured lintel run",
+                    }.get(identifier, "All-round building")
+                if identifier == "truss-lean":
+                    ws.cell(target, 1).value = 14
+                if identifier == "rsj-columns":
+                    description.value = "RSJ columns (ISLB 200)"
+                if identifier == "flooring":
+                    description.value = str(description.value).replace("0.3m thick", "0.15 m thick")
+                if identifier == "filling-basement":
+                    label = ws.cell(target - 1, 2)
+                    label.value = str(label.value).replace("gravel", "sand")
+            inputs = rows.get(identifier, {})
+            factor = _numeric(inputs.get("factor"))
+            configured = _configured_line(line, inputs, storage)
+            if configured.get("percentage") != line.get("percentage"):
+                percent = configured["percentage"]
+                if identifier == "ceiling-beams":
+                    description.value = f"Add {percent * 100:g}% for beams"
+                elif percent == 1:
+                    description.value = "Total measured quantity"
+                else:
+                    description.value = f"Net with {(1 - percent) * 100:g}% deduction for openings"
+            if line.get("calculation") in {"derived", "derived_expression"} and factor is not None:
+                description.value = f"{line['label']} @ {factor:g} {'kg/m²' if identifier == 'steel-roof-slab' else 'kg/m³'}"
+                source = by_id.get(line.get("sourceId"))
+                if source is not None and _numeric(inputs.get("quantity")) is None:
+                    ws.cell(target, 10).value = f'=IF(ISNUMBER(J{source}),J{source}*{factor},"")'
+            if configured["calculation"] != line["calculation"] and configured["calculation"] == "manual_quantity_rate":
+                ws.cell(target, 11).value = _numeric(inputs.get("rate"))
+                ws.cell(target, 12).value = f'=IF(COUNT(J{target},K{target})<2,"",J{target}*K{target})'
 
 
 def _custom_quantity_formula(line: Mapping[str, Any], row: int, by_id: Mapping[str, int], by_group: Mapping[str, list[int]]) -> str | None:
@@ -750,20 +839,43 @@ def _add_abstract_direct_row(ws: Worksheet, row: int, serial: int, description: 
 
 def _report_text(state: Mapping[str, Any]) -> tuple[str, str, str, str]:
     details = state.get("details") or {}
-    work = details.get("workDescription") or "[Name of the Work]"
-    applicant = ", ".join(filter(None, (details.get("applicantName"), details.get("projectLocation")))) or "[Applicant name and property location]"
-    location = details.get("projectLocation") or "[Project / Location]"
-    return f"Name of the Work : {work} at {location}", f"Name of the Applicant : {applicant}", details.get("place") or "[Enter place]", details.get("estimateDate") or "[Enter date]"
+    return f"Name of the Work : {work_text(details)}", f"Name of the Applicant : {applicant_text(details)}", details.get("place") or "[Enter place]", details.get("estimateDate") or "[Enter date]"
 
 
-def _apply_detail_report_text(ws: Worksheet, state: Mapping[str, Any], result: DetailResult) -> None:
+def _plinth_area(value):
+    if value is None or str(value).strip() == "":
+        return None
+    number = _numeric(value)
+    if number is None or number < 0:
+        raise ValueError("Plinth Area must be a valid non-negative area in sft.")
+    return float(number)
+
+
+def _area_text(value):
+    return f"{value:,.2f}" if value is not None else "[Enter area]"
+
+
+def _apply_detail_report_text(ws: Worksheet, state: Mapping[str, Any], result: DetailResult, spec: DetailSpec) -> None:
     work, applicant, place, date = _report_text(state)
-    ws["A8"] = work
+    ws["A8"] = f"Name of the Work : {work_text(state.get('details') or {}, spec.work_description)}" if modern_identity(state.get("details") or {}) else work
     ws["A11"] = applicant
-    place_row = result.last_row - 2
-    date_row = result.last_row
-    ws.cell(place_row, 1).value = f"Place : {place}"
-    ws.cell(date_row, 1).value = f"Date : {date}"
+    if modern_identity(state.get("details") or {}) or "plinthArea" in spec.form_data:
+        ws["A14"] = f"Plinth Area : {_area_text(_plinth_area(spec.form_data.get('plinthArea')))} sft."
+    # Detail footers are replaced by one signature block on the Abstract.
+    _clear_rows_and_merges(ws, result.words_row + 1)
+    result.last_row = result.words_row
+    if not spec.first_sheet:
+        # Preserve formula row addresses while removing the repeated header
+        # from both the visible worksheet and its print area.
+        for row in ws.iter_rows(min_row=1, max_row=13):
+            for cell in row:
+                if cell.value is not None:
+                    cell.value = None
+        for row in range(1, 14):
+            ws.row_dimensions[row].hidden = True
+        plinth = str(ws["A14"].value or "Plinth Area : [Enter area]")
+        ws["A14"] = f"{spec.floor_label.upper()} ({plinth})"
+        ws.row_dimensions[14].height = 38
 
 
 def _build_separate_abstract(
@@ -840,13 +952,15 @@ def _build_separate_abstract(
     _style_total_or_words_row(ws, words_row, YELLOW)
 
     place_row = words_row + 2
-    date_row = place_row + 2
+    date_row = place_row + 1
     _write_footer(ws, place_row, date_row, state)
     _apply_outer_border(ws, 1, words_row)
-    ws.freeze_panes = "A16"
+    ws.freeze_panes = None
     work, applicant, _, _ = _report_text(state)
     ws["A8"] = work
     ws["A11"] = applicant
+    # Areas belong to their component/floor sheets, never the overall Abstract.
+    ws["A14"] = None
     return words_row, date_row
 
 
@@ -915,7 +1029,11 @@ def _apply_a4_print_layout(ws: Worksheet) -> None:
     ws.page_margins.header = 0.15
     ws.page_margins.footer = 0.15
     ws.print_options.horizontalCentered = True
-    ws.print_area = f"A1:L{ws.max_row}"
+    first_row = 14 if ws.row_dimensions[1].hidden else 1
+    ws.print_area = f"A{first_row}:L{ws.max_row}"
+    ws.sheet_view.pane = None
+    ws.sheet_view.selection = [Selection(activeCell=f"A{first_row}", sqref=f"A{first_row}")]
+    ws.sheet_view.topLeftCell = f"A{first_row}"
 
 
 def _append_compact_abstract(
@@ -980,7 +1098,7 @@ def _append_compact_abstract(
     ws.cell(words_row, 12).value = f'=IF(COUNT(L{row})=0,"",L{row})'
     _style_total_or_words_row(ws, words_row, YELLOW)
     place_row = words_row + 2
-    date_row = place_row + 2
+    date_row = place_row + 1
     _write_footer(ws, place_row, date_row, state)
     _apply_outer_border(ws, 1, words_row)
     detail_result.compact_abstract_words_row = words_row
@@ -1012,11 +1130,18 @@ def generate_estimation_workbook(
     for spec in specs:
         ws = sheets[spec.name]
         result = results[spec.name]
-        if mode == "completed":
-            row_map = _copy_standard_inputs(ws, spec, manifest, result)
-            additions = _custom_additions(spec, manifest)
+        if mode == "completed" or spec.template_key == "storage_shed":
+            if mode == "completed":
+                if spec.form_data.get("dimensionsRequired") and not spec.form_data.get("dimensionSetup"):
+                    raise ValueError(f"Apply dimensions and defaults for {spec.component_name}.")
+                output_spec = spec
+            else:
+                output_spec = DetailSpec(spec.name, spec.component_name, spec.template_key, {})
+            row_map = _copy_standard_inputs(ws, output_spec, manifest, result)
+            additions = _custom_additions(spec, manifest) if mode == "completed" else []
             custom_group_rows = _append_custom_additions(ws, result, additions)
-            _repair_standard_aggregate_formulas(ws, spec, manifest, row_map, custom_group_rows)
+            _repair_standard_aggregate_formulas(ws, output_spec, manifest, row_map, custom_group_rows)
+            _apply_dimension_formulas(ws, output_spec, manifest, row_map)
         _repair_detail_totals(ws, result)
         explicit_final_amount = _numeric(spec.form_data.get("finalAmount")) if mode == "completed" else None
         if explicit_final_amount is not None:
@@ -1026,7 +1151,7 @@ def generate_estimation_workbook(
             ws.cell(result.words_row, 1).value = f"(Rupees {_amount_in_words(effective_final_amount)} only)"
         else:
             ws.cell(result.words_row, 1).value = "(Rupees [amount in words to be generated by the application] only)"
-        _apply_detail_report_text(ws, state, result)
+        _apply_detail_report_text(ws, state, result, spec)
 
     if separate_abstract:
         _build_separate_abstract(workbook["Abstract"], state, specs, results, manifest, mode == "completed")

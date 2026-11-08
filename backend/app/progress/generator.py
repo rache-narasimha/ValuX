@@ -172,7 +172,7 @@ def _add_title(document, report_type: str, is_karnataka: bool):
     _add_paragraph(document, "(Should be obtained before each disbursal)", align=WD_ALIGN_PARAGRAPH.CENTER, size=10)
 
 
-def _validate(payload: Mapping[str, Any]) -> dict[str, Any]:
+def _validate(payload: Mapping[str, Any], *, require_photos: bool = True) -> dict[str, Any]:
     institution = dict(payload.get("institution") or {})
     linked = dict(payload.get("linkedEstimation") or {})
     details = dict(payload.get("details") or {})
@@ -181,7 +181,7 @@ def _validate(payload: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(raw_components, list) or not raw_components:
         raise ValueError("The linked estimation report has no component estimates.")
     photos = list(payload.get("photos") or [])
-    if not photos:
+    if require_photos and not photos:
         raise ValueError("Attach at least one authenticated site photograph before generating the report.")
     for index, raw in enumerate(raw_components, start=1):
         label = str((raw or {}).get("label") or "").strip()
@@ -260,10 +260,10 @@ def _project_table(document, data):
     _set_column_widths(table, [2.78, 3.98])
     rows = [
         ("1. Name of the Branch", f"{institution.get('name', '')}, {institution.get('branch', '')}".strip(", ")),
-        ("2. Name & address of the borrower", ", ".join(filter(None, [str(linked.get("applicantName") or "").strip(), str(linked.get("projectLocation") or "").strip()]))),
-        ("3. Locality and address of the construction site", "\n".join(filter(None, [str(linked.get("workDescription") or "").strip(), str(linked.get("projectLocation") or "").strip()]))),
+        ("2. Name & address of the borrower", str(linked.get("applicantName") or "").strip() if linked.get("identityVersion") == 2 else ", ".join(filter(None, [str(linked.get("applicantName") or "").strip(), str(linked.get("projectLocation") or "").strip()]))),
+        ("3. Locality and address of the construction site", ", ".join(filter(None, [str(linked.get("workDescription") or "").strip().rstrip(", "), str((linked.get("workAddress") if linked.get("identityVersion") == 2 else linked.get("projectLocation")) or "").strip()]))),
         ("4. Name of panel valuer", VALUER_NAME),
-        ("5. Name of Bank's official who accompanied the panel valuer", "\n".join(filter(None, [str(details.get("officialName") or "").strip(), str(details.get("officialDesignation") or "").strip()]))),
+        ("5. Name of Bank's official who accompanied the panel valuer", ", ".join(filter(None, [str(details.get("officialName") or "").strip(), str(details.get("officialDesignation") or "").strip()]))),
         ("6. Date of visit to the construction site", display_date(data["visitDate"])),
     ]
     for row, (label, value) in zip(table.rows, rows):
@@ -274,53 +274,53 @@ def _project_table(document, data):
 
 
 def _works_table(document, data):
-    _add_paragraph(document, "7. Details of works completed/investment made:", size=10, after=3)
+    heading = _add_paragraph(document, "7. Details of works completed/investment made:", size=10, before=8, after=5, keep=True)
+    heading.paragraph_format.keep_with_next = True
     table = document.add_table(rows=1, cols=6)
     _normalize_table(table)
-    widths = [0.38, 1.56, 1.18, 1.27, 1.17, 1.17]
+    # Five main columns; the estimated-cost heading spans floor and amount.
+    widths = [0.34, 1.65, 1.0, 1.25, 1.25, 1.25]
     _set_column_widths(table, widths)
+    table.rows[0].cells[2].merge(table.rows[0].cells[3])
     headings = [
         "Sl. No.",
-        "Construction details",
-        "Total estimated cost (Rs.)",
-        "Stage / % of work completed",
-        "Cost of works completed / incurred (Rs.)",
-        "Cost of balance work (Rs.)",
+        "Construction details (Construction of house/ Flat/ Addl. Construction/ Renovation/ Repairs)",
+        "Total estimated cost (As submitted in the proposal) (Rs)",
+        "Details of works completed/ stage of construction/ % of work completed",
+        "Cost of works completed/ incurred (Rs)",
     ]
-    for index, (cell, heading) in enumerate(zip(table.rows[0].cells, headings)):
-        _set_width(cell, widths[index])
-        _cell_text(cell, heading, bold=True, size=8, align=WD_ALIGN_PARAGRAPH.CENTER)
+    for index, text in zip([0, 1, 2, 4, 5], headings):
+        _cell_text(table.rows[0].cells[index], text, bold=True, size=8.5, align=WD_ALIGN_PARAGRAPH.CENTER)
     _set_repeat_header(table.rows[0])
-    for index, component in enumerate(data["components"], start=1):
+    for component in data["components"]:
         row = table.add_row()
         values = [
-            index,
+            "", "",
             component["label"],
             _currency(component["estimatedCost"]),
             f"{component['completionPercent']:g}%",
             _currency(component["completedCost"]),
-            "Nil" if component["balanceCost"] <= 0.005 else _currency(component["balanceCost"]),
         ]
         for column, (cell, value) in enumerate(zip(row.cells, values)):
             _set_width(cell, widths[column])
-            _cell_text(cell, value, size=8.5, align=WD_ALIGN_PARAGRAPH.LEFT if column == 1 else WD_ALIGN_PARAGRAPH.CENTER)
+            _cell_text(cell, value, size=9, align=WD_ALIGN_PARAGRAPH.LEFT if column == 2 else WD_ALIGN_PARAGRAPH.RIGHT if column in {3, 5} else WD_ALIGN_PARAGRAPH.CENTER)
     total = table.add_row()
-    total.cells[0].merge(total.cells[1])
-    _cell_text(total.cells[0], "Total", bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
-    _cell_text(total.cells[2], _currency(sum(item["estimatedCost"] for item in data["components"])), bold=True, size=8.5, align=WD_ALIGN_PARAGRAPH.CENTER)
-    _cell_text(total.cells[3], "Total", bold=True, size=8.5, align=WD_ALIGN_PARAGRAPH.CENTER)
-    _cell_text(total.cells[4], _currency(data["worksTotal"]), bold=True, size=8.5, align=WD_ALIGN_PARAGRAPH.CENTER)
-    _cell_text(total.cells[5], _currency(sum(item["balanceCost"] for item in data["components"])), bold=True, size=8.5, align=WD_ALIGN_PARAGRAPH.CENTER)
+    _cell_text(total.cells[2], "Total", bold=True, size=9)
+    _cell_text(total.cells[3], _currency(sum(item["estimatedCost"] for item in data["components"])), bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
+    _cell_text(total.cells[4], "Total (Rs)", bold=True, size=9, align=WD_ALIGN_PARAGRAPH.CENTER)
+    _cell_text(total.cells[5], _currency(data["worksTotal"]), bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
+    final_row = len(table.rows) - 1
+    _cell_text(table.cell(1, 0).merge(table.cell(final_row, 0)), "1.", size=9, align=WD_ALIGN_PARAGRAPH.CENTER)
+    description = str(data["linked"].get("workDescription") or "").strip()
+    _cell_text(table.cell(1, 1).merge(table.cell(final_row, 1)), description, size=9)
     materials = table.add_row()
-    materials.cells[0].merge(materials.cells[3])
+    materials.cells[0].merge(materials.cells[4])
     _cell_text(materials.cells[0], "Add: Cost of materials at site (Rs.)", bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
-    materials.cells[4].merge(materials.cells[5])
-    _cell_text(materials.cells[4], _currency(data["materialsAtSite"]), bold=True, size=8.5, align=WD_ALIGN_PARAGRAPH.CENTER)
+    _cell_text(materials.cells[5], _currency(data["materialsAtSite"]), bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
     words = table.add_row()
-    words.cells[0].merge(words.cells[3])
-    _cell_text(words.cells[0], f"(Rupees {amount_in_words(data['totalValue'])} only)", bold=True, size=8.5, align=WD_ALIGN_PARAGRAPH.CENTER)
-    words.cells[4].merge(words.cells[5])
-    _cell_text(words.cells[4], _currency(data["totalValue"]), bold=True, size=8.5, align=WD_ALIGN_PARAGRAPH.CENTER)
+    words.cells[0].merge(words.cells[4])
+    _cell_text(words.cells[0], f"(Rupees {amount_in_words(data['totalValue'])} only)", bold=True, size=9, align=WD_ALIGN_PARAGRAPH.CENTER)
+    _cell_text(words.cells[5], _currency(data["totalValue"]), bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
 
 
 def _certificate(document, data):
@@ -425,7 +425,7 @@ def _bank_page(document, data):
 
     _add_paragraph(document, "Submitted to the Branch Head:", size=10, underline=True, before=9, after=4)
     official = str(data["details"].get("officialName") or "________________").strip()
-    site = str(linked.get("projectLocation") or "________________").strip()
+    site = str((linked.get("workAddress") if linked.get("identityVersion") == 2 else linked.get("projectLocation")) or "________________").strip()
     text = (f"I have accompanied Shri {VALUER_NAME}, who is in the panel of approved valuers of the Bank, during the work in progress assessment visit to the construction site of the above borrower, at {site}.\n"
             "The loan/instalment amount as assessed above may be released now against the progress made by the borrower in construction.")
     _add_paragraph(document, text, align=WD_ALIGN_PARAGRAPH.JUSTIFY, size=9, after=8)
@@ -517,7 +517,12 @@ def generate_progress_report(payload: Mapping[str, Any], output_path: str | Path
             temporary.unlink(missing_ok=True)
     applicant = data["linked"].get("applicantName") or data["reportType"]
     file_name = f"{_safe_name(applicant)}_{data['reportType'].title()}_Report.docx"
-    summary = {
+    summary = _summary(data)
+    return GeneratedProgressReport(content, file_name, data["reportType"], summary)
+
+
+def _summary(data):
+    return {
         "linkedEstimationId": str(data["linked"].get("taskId") or ""),
         "reportType": data["reportType"],
         "reportDate": data["reportDate"],
@@ -527,4 +532,17 @@ def generate_progress_report(payload: Mapping[str, Any], output_path: str | Path
         "materialsAtSite": data["materialsAtSite"],
         "totalValue": data["totalValue"],
     }
-    return GeneratedProgressReport(content, file_name, data["reportType"], summary)
+
+def retrospective_summary(draft, report_type, linked_task_code):
+    components = [
+        {key: item.get(key) for key in ("label", "estimatedCost", "completionPercent")}
+        | ({"completedCost": item.get("completedCost")} if item.get("manualCompleted") else {})
+        for item in (draft.get("components") or [])
+    ]
+    data = _validate({
+        **draft,
+        "components": components,
+        "requestedReportType": report_type,
+        "linkedEstimation": {"taskId": linked_task_code},
+    }, require_photos=False)
+    return _summary(data)

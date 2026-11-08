@@ -11,7 +11,7 @@
   </head>
   <body class="workflow-page">
     <header class="app-header">
-      <a class="brand" href="/"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
+      <a class="brand" href="/" aria-label="SLN Consultancy &amp; Engineering Services dashboard"><span class="brand-mark" aria-hidden="true">SLN</span><span class="sln-wordmark">Consultancy &amp; <span class="sln-wordmark-accent">Engineering Services</span></span></a>
       <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button><div data-role-switcher></div><a class="quiet-link" href="/">Cancel and return</a></div>
     </header>
     <main class="page-frame narrow-page">
@@ -35,7 +35,7 @@
         <section class="form-section">
           <div class="form-section-heading"><span>3</span><div><h2>Report and assignment</h2><p>Choose the work type, owner and target date.</p></div></div>
           <div class="form-grid">
-            <div class="field"><label class="required" for="report-type">Report type</label><select id="report-type" required><option value="">Select report type</option><option value="valuation">Valuation</option><option value="estimation">Estimation</option><option value="progress">Progress report</option><option value="completion">Completion report</option></select></div>
+            <div class="field"><label class="required" for="report-type">Report type</label><select id="report-type" required><option value="">Select report type</option><option value="valuation">Valuation</option><option value="revaluation">Re-Valuation</option><option value="estimation">Estimation</option><option value="progress">Progress report</option><option value="completion">Completion report</option></select></div>
             <div class="field" id="valuation-type-wrap" hidden><label class="required" for="valuation-type">Valuation type</label><select id="valuation-type"><option value="">Select valuation type</option><option value="general">General property valuation</option><option value="agricultural">Agricultural land valuation</option></select></div>
             <div class="field full" id="linked-estimation-wrap" hidden>
               <label class="required" for="open-linked-estimation">Linked estimation report</label>
@@ -68,7 +68,7 @@
     </main>
     <div class="workflow-modal" id="linked-estimation-modal" hidden>
       <section class="workflow-dialog estimation-selection-dialog" role="dialog" aria-modal="true" aria-labelledby="linked-estimation-title">
-        <div class="dialog-heading"><div><h2 id="linked-estimation-title">Select estimation report</h2><p>Search the eligible finalized estimates and select one report for this task.</p></div><button type="button" class="modal-x" data-close-estimation-picker aria-label="Close">×</button></div>
+        <div class="dialog-heading"><div><h2 id="linked-estimation-title">Select estimation report</h2><p id="linked-estimation-description">Search the eligible finalized estimates and select one report for this task.</p></div><button type="button" class="modal-x" data-close-estimation-picker aria-label="Close">×</button></div>
         <div class="estimation-picker-filters">
           <label>Search<input id="estimation-picker-search" type="search" placeholder="Task ID, applicant, property, branch or institution" /></label>
           <label>Institution<select id="estimation-picker-institution"><option value="">All institutions</option></select></label>
@@ -82,6 +82,7 @@
     <script src="/assets/js/core/business-api.js"></script>
     <script src="/assets/js/core/time.js"></script>
     <script src="/assets/js/core/app-shell.js"></script>
+    <script src="/assets/js/components/account-chrome.js"></script>
     <script src="/assets/js/core/workflow-access.js"></script>
     <script src="/assets/js/core/institutions.js"></script>
     <script src="/assets/js/core/task-store.js"></script>

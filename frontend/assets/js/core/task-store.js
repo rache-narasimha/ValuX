@@ -18,7 +18,7 @@
     progress: { group: "progress", code: "PRG", label: "Construction Progress Report", route: "/progress-completion" },
     completion: { group: "completion", code: "CMP", label: "Completion Report", route: "/progress-completion" },
   };
-  const REOPEN_WINDOW_DAYS = 7;
+  const REOPEN_WINDOW_DAYS = 15;
   const remoteMode = true;
   const remoteTasks = new Map();
 
@@ -190,22 +190,23 @@
 
   function requiredArtifactLabel(task) {
     if (task?.reportGroup === "estimation") return "completed estimation report (XLSX, DOCX or PDF)";
-    if (task?.institutionCode === "KVB") return "completed KVB Excel report";
-    if (task?.institutionCode === "KB") return "completed Valocity DOCX or PDF report";
+    if (task?.retrospectiveReady) return "completed report (DOCX or PDF)";
+    if (requiresInstitutionOfflineArtifact(task) && task.institutionCode === "KVB") return "completed KVB Excel report";
+    if (requiresInstitutionOfflineArtifact(task) && task.institutionCode === "KB") return "completed Valocity DOCX or PDF report";
     return "DOCX";
   }
 
   function latestArtifact(task) {
     if (task?.retrospectiveReady) return task?.latestDocx || task?.latestInstitutionArtifact || task?.latestXlsx;
-    if (task?.reportGroup === "estimation" || task?.institutionCode === "KVB") return task?.latestXlsx;
-    if (task?.institutionCode === "KB") return task?.latestInstitutionArtifact;
+    if (task?.reportGroup === "estimation" || (requiresInstitutionOfflineArtifact(task) && task.institutionCode === "KVB")) return task?.latestXlsx;
+    if (requiresInstitutionOfflineArtifact(task) && task.institutionCode === "KB") return task?.latestInstitutionArtifact;
     return task?.latestDocx;
   }
 
   function finalArtifact(task) {
     if (task?.retrospectiveReady) return task?.finalDocx || task?.finalInstitutionArtifact || task?.finalXlsx;
-    if (task?.reportGroup === "estimation" || task?.institutionCode === "KVB") return task?.finalXlsx;
-    if (task?.institutionCode === "KB") return task?.finalInstitutionArtifact;
+    if (task?.reportGroup === "estimation" || (requiresInstitutionOfflineArtifact(task) && task.institutionCode === "KVB")) return task?.finalXlsx;
+    if (requiresInstitutionOfflineArtifact(task) && task.institutionCode === "KB") return task?.finalInstitutionArtifact;
     return task?.finalDocx;
   }
 
@@ -218,10 +219,12 @@
     return !task.reopenedAt || new Date(artifact.generatedAt) >= new Date(task.reopenedAt);
   }
 
-  function reopenReferenceAt(task) { return task && ["Completed", "Closed"].includes(task.status) ? task.closedAt || task.completedAt || "" : ""; }
-  function reopenDeadline(task) { const reference = reopenReferenceAt(task); return reference ? addDays(reference, REOPEN_WINDOW_DAYS) : ""; }
+  function reopenDeadline(task) {
+    return task?.status === "Closed" && task.closedAt ? addDays(task.closedAt, REOPEN_WINDOW_DAYS) : "";
+  }
   function canReopen(task, reference = ValuxTime.todayDate()) {
-    if (!reopenReferenceAt(task)) return false;
+    if (task?.status === "Completed") return true;
+    if (task?.status !== "Closed") return false;
     const deadline = localDate(reopenDeadline(task));
     const current = ValuxTime.parseDate(ValuxTime.dateString(reference));
     if (!deadline || !current) return false;
@@ -281,7 +284,8 @@
   }
 
   async function eligibleEstimations(reportKey, assignedDate, options = {}) {
-    const payload = await BusinessApi.get("/api/estimations/eligible", {
+    const endpoint = reportKey === "revaluation" ? "/api/valuations/eligible" : "/api/estimations/eligible";
+    const payload = await BusinessApi.get(endpoint, {
       reportKey, assignedDate, search: options.search || "", institution: options.institution || "",
       status: options.status || "", offset: options.offset || 0, limit: options.limit || 20,
     });

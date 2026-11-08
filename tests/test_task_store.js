@@ -65,8 +65,10 @@ const store = context.window.TaskStore;
   assert.equal(store.matchesPeriod(task, "", "assignedDate", new Date("2030-01-01T00:00:00Z")), true);
   assert.equal(store.query({ institutionType: "Bank" }).total, 1);
   assert.equal(store.query({ institutionType: "NBFC" }).total, 0);
-  assert.equal(store.canReopen(task, new Date("2026-11-05T12:00:00Z")), true);
-  assert.equal(store.canReopen(task, new Date("2026-11-06T12:00:00Z")), false);
+  assert.equal(store.canReopen({ ...task, status: "Completed" }, new Date("2030-01-01T12:00:00Z")), true);
+  const closed = { ...task, status: "Closed", closedAt: "2026-10-29T12:00:00Z" };
+  assert.equal(store.canReopen(closed, new Date("2026-11-13T12:00:00Z")), true);
+  assert.equal(store.canReopen(closed, new Date("2026-11-14T12:00:00Z")), false);
   const historicalPdf = { url: "/historical.pdf", artifactType: "valuation_pdf" };
   assert.equal(store.latestArtifact({
     reportGroup: "valuation", institutionCode: "KVB", retrospectiveReady: true,

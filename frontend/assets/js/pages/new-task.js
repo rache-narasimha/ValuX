@@ -48,15 +48,27 @@
     institution.disabled = !choices.length;
   }
 
+  function isRevaluation() { return reportType.value === "revaluation"; }
+  function needsLinkedReport() { return ["progress", "completion", "revaluation"].includes(reportType.value); }
+  function linkedReportName() { return isRevaluation() ? "valuation" : "estimation"; }
+  function linkedRequiredMessage() {
+    return isRevaluation() ? "Select a Completed or Closed valuation before creating this assignment."
+      : "Select one eligible finalized estimation report before creating this assignment.";
+  }
+
   function refreshReportType() {
     valuationWrap.hidden = reportType.value !== "valuation";
     valuationType.required = reportType.value === "valuation";
     if (reportType.value !== "valuation") valuationType.value = "";
-    const linkedReport = ["progress", "completion"].includes(reportType.value);
+    const linkedReport = needsLinkedReport();
     linkedEstimationWrap.hidden = !linkedReport;
     linkedEstimation.required = false;
     if (linkedReport) {
-      document.getElementById("linked-estimation-help").textContent = "Choose one finalized eligible estimation. Search and filtering are available in the selection window.";
+      linkedEstimationWrap.querySelector("label").textContent = `Linked ${linkedReportName()} report`;
+      document.getElementById("linked-estimation-selection").textContent = selectedEstimationLabel(null);
+      document.getElementById("linked-estimation-help").textContent = isRevaluation()
+        ? "Choose a Completed or Closed valuation to start the Re-Valuation."
+        : "Choose one finalized eligible estimation. Search and filtering are available in the selection window.";
     }
     else {
       linkedEstimation.value = "";
@@ -73,7 +85,7 @@
   }
 
   function selectedEstimationLabel(candidate) {
-    return candidate ? `${candidate.id} · ${candidate.customerName} · ${candidate.propertyBrief}` : "Choose an eligible estimation report";
+    return candidate ? `${candidate.id} · ${candidate.customerName} · ${candidate.propertyBrief}` : `Choose an eligible ${linkedReportName()} report`;
   }
 
   function selectLinkedEstimation(candidate) {
@@ -86,13 +98,18 @@
   }
 
   function renderLinkedResults(total) {
+    const completedDate = (value) => value ? new Intl.DateTimeFormat("en-IN", {
+      day: "2-digit", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit",
+      timeZone: ValuxTime.timeZone, timeZoneName: "short",
+    }).format(new Date(value)) : "Not recorded";
     linkedResults.innerHTML = linkedRows.length ? linkedRows.map((candidate) => `<button type="button" class="estimation-picker-row" data-estimation-id="${WorkflowUI.escape(candidate.id)}">
       <span><strong>${WorkflowUI.escape(candidate.id)}</strong><small>${WorkflowUI.escape(candidate.institutionCode)} · ${WorkflowUI.escape(candidate.branch)}</small></span>
       <span><strong>${WorkflowUI.escape(candidate.customerName)}</strong><small>${WorkflowUI.escape(candidate.propertyBrief)}</small></span>
-      <span><strong>${WorkflowUI.date(candidate.assignedDate)}</strong><small>${WorkflowUI.escape(candidate.status)}</small></span>
+      <span class="picker-dates"><strong>Assigned: ${WorkflowUI.date(candidate.assignedDate)}</strong><small>Completed: ${completedDate(candidate.completedAt)}</small><small class="status-badge">${WorkflowUI.escape(candidate.status)}</small></span>
       <em>Select</em>
-    </button>`).join("") : WorkflowUI.empty("No eligible estimation report matches the current search and filters.");
-    document.getElementById("estimation-picker-count").textContent = `${total} eligible ${total === 1 ? "estimate" : "estimates"}`;
+    </button>`).join("") : WorkflowUI.empty(`No eligible ${linkedReportName()} report matches the current search and filters.`);
+    const noun = isRevaluation() ? "valuation" : "estimate";
+    document.getElementById("estimation-picker-count").textContent = `${total} eligible ${noun}${total === 1 ? "" : "s"}`;
   }
 
   async function loadLinkedEstimations(reset = false) {
@@ -111,9 +128,9 @@
       renderLinkedResults(result.total);
       linkedMore.hidden = !result.hasMore;
     } catch (exception) {
-      error.textContent = exception.message || "Eligible estimations could not be loaded.";
+      error.textContent = exception.message || `Eligible ${linkedReportName()} reports could not be loaded.`;
       error.hidden = false;
-      if (!linkedRows.length) linkedResults.innerHTML = WorkflowUI.empty("Eligible estimations could not be loaded. Try again.");
+      if (!linkedRows.length) linkedResults.innerHTML = WorkflowUI.empty(`Eligible ${linkedReportName()} reports could not be loaded. Try again.`);
     } finally {
       linkedMore.disabled = false;
       linkedResults.removeAttribute("aria-busy");
@@ -121,7 +138,11 @@
   }
 
   function openLinkedPicker() {
-    if (!["progress", "completion"].includes(reportType.value) || !assignedDate.value) return;
+    if (!needsLinkedReport() || !assignedDate.value) return;
+    document.getElementById("linked-estimation-title").textContent = `Select ${linkedReportName()} report`;
+    document.getElementById("linked-estimation-description").textContent = isRevaluation()
+      ? "Search Completed and Closed valuations and select the original report."
+      : "Search the eligible finalized estimates and select one report for this task.";
     linkedModal.hidden = false;
     document.body.classList.add("modal-open");
     loadLinkedEstimations(true);
@@ -138,6 +159,9 @@
     if (!linked) { setLinkedIdentity(false); return; }
     institutionType.value = linked.institutionType;
     refreshInstitutions();
+    if (isRevaluation() && !Array.from(institution.options).some((option) => option.value === linked.institutionCode)) {
+      institution.add(new Option(linked.institutionName, linked.institutionCode));
+    }
     institution.value = linked.institutionCode;
     document.getElementById("branch").value = linked.branch;
     document.getElementById("customer-name").value = linked.customerName;
@@ -173,10 +197,10 @@
 
   function taskPayload(allowSimilarTaskId = "") {
     const reportKey = reportType.value === "valuation" ? `valuation-${valuationType.value}` : reportType.value;
-    if (["progress", "completion"].includes(reportKey) && !linkedEstimation.value) {
-      throw new Error("Select one eligible finalized estimation report before creating this assignment.");
-    }
-    const selectedInstitution = (window.INSTITUTIONS[institutionType.value] || []).find((item) => item.code === institution.value);
+    if (needsLinkedReport() && !linkedEstimation.value) throw new Error(linkedRequiredMessage());
+    const original = isRevaluation() ? TaskStore.get(linkedEstimation.value) : null;
+    const selectedInstitution = original ? { name: original.institutionName }
+      : (window.INSTITUTIONS[institutionType.value] || []).find((item) => item.code === institution.value);
     if (!selectedInstitution) throw new Error("Select a valid bank or NBFC.");
     const selectedAssignee = picker.value();
     const assigneeReference = picker.id();
@@ -192,7 +216,8 @@
       customerName: document.getElementById("customer-name").value,
       propertyBrief: document.getElementById("property-brief").value,
       reportKey,
-      linkedEstimationId: linkedEstimation.value,
+      linkedEstimationId: isRevaluation() ? "" : linkedEstimation.value,
+      linkedValuationId: isRevaluation() ? linkedEstimation.value : "",
       assignee: assigneeReference,
       priority: document.getElementById("priority").value,
       assignedDate: assignedDate.value,
@@ -288,8 +313,8 @@
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (["progress", "completion"].includes(reportType.value) && !linkedEstimation.value) {
-      errorMessage.textContent = "Select one eligible finalized estimation report before creating this assignment.";
+    if (needsLinkedReport() && !linkedEstimation.value) {
+      errorMessage.textContent = linkedRequiredMessage();
       errorMessage.hidden = false;
       document.getElementById("open-linked-estimation").focus();
       return;

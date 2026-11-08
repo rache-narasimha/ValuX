@@ -20,7 +20,7 @@ from ..business_time import TENANT_TIME_ZONE_NAME, tenant_date, tenant_today
 STATUSES = ("Unassigned", "In Progress", "On Hold", "Completed", "Closed", "Cancelled")
 HOLD_REASONS = ("Awaiting Documents", "Scheduled Site Visit", "Awaiting Review", "Returned for Correction", "Custom")
 CANCELLATION_REASONS = ("Created by Mistake", "Wrong Details", "Custom")
-REOPEN_WINDOW_DAYS = 7
+CLOSED_REOPEN_WINDOW_DAYS = 15
 SIMILAR_TASK_WINDOW_MINUTES = 30
 PRIORITY_DUE_DAYS = {
     "Urgent": (0, 1),
@@ -194,6 +194,9 @@ def _payment_values(row: dict[str, Any]) -> dict[str, Any]:
 
 def _task_payload(row: dict[str, Any], activities: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     group, _code, label = REPORTS[row["report_key"]]
+    if row.get("report_group") == "revaluation":
+        group = "revaluation"
+        label = label.replace("Valuation", "Re-Valuation")
     payment = _payment_values(row)
     # Estimation freshness is persisted in task_artifacts.stale_at whenever its
     # canonical draft fingerprint changes. Comparing old stored fingerprints
@@ -228,6 +231,9 @@ def _task_payload(row: dict[str, Any], activities: list[dict[str, Any]] | None =
         "cancellationReason": row.get("cancellation_reason") or "",
         "assignedDate": _iso(row["assigned_date"]),
         "dueDate": _iso(row["due_date"]),
+        "linkedValuationId": row.get("linked_valuation_task_code") or "",
+        "linkedValuationArtifactId": str(row["linked_valuation_artifact_id"]) if row.get("linked_valuation_artifact_id") else "",
+        "revaluationManualEntry": bool(row.get("revaluation_manual_entry")),
         "linkedEstimationId": row.get("linked_estimation_task_code") or "",
         "linkedEstimationInternalId": str(row["linked_estimation_task_id"]) if row.get("linked_estimation_task_id") else "",
         "reportGeneratedAt": _iso(row.get("report_generated_at")),
@@ -239,7 +245,8 @@ def _task_payload(row: dict[str, Any], activities: list[dict[str, Any]] | None =
         "completedAt": _iso(row.get("completed_at")),
         "closedAt": _iso(row.get("closed_at")),
         "reopenedAt": _iso(row.get("reopened_at")),
-        "preparationSource": row.get("effective_preparation_source") or row.get("preparation_source") or "",
+        "preparationSource": (row.get("effective_preparation_source") if row["report_group"] in {"progress", "completion"}
+                              else row.get("preparation_source")) or "",
         "templateDownloadedAt": _iso(row.get("template_downloaded_at")),
         "estimationCorrectionPending": bool(row.get("estimation_correction_pending")),
         "estimationReviewRequired": bool(row.get("estimation_review_required")),
@@ -256,11 +263,8 @@ def _task_payload(row: dict[str, Any], activities: list[dict[str, Any]] | None =
         "estimationSummary": _snapshot_payload(row),
         "linkedEstimationSnapshotId": str(row["snapshot_id"]) if row.get("snapshot_id") else "",
         "progressSummary": (row.get("latest_revision_payload") or {}).get("summary"),
-        "retrospectiveReady": bool(
-            row.get("latest_artifact_source") == "uploaded"
-            and row.get("latest_artifact_type") in {"valuation_docx", "valuation_pdf", "estimation_xlsx", "estimation_docx", "estimation_pdf"}
-            and (row["report_group"] != "estimation" or row.get("preparation_source") in {"template", "retrospective"})
-        ),
+        "retrospectiveReady": _retrospective_attachment(row),
+        "ownPreparationSource": row.get("preparation_source") or "",
         "activity": activities or [],
     }
     latest = _artifact_payload(row, "latest")
@@ -289,7 +293,7 @@ def _artifact_payload(row: dict[str, Any], prefix: str) -> dict[str, Any] | None
     source = row.get(f"{prefix}_artifact_source") or "generated"
     artifact_type = row.get(f"{prefix}_artifact_type") or ""
     if source == "uploaded":
-        label = "Uploaded Excel" if artifact_type in {"estimation_xlsx", "kvb_xlsx"} else "Attached estimation report" if artifact_type.startswith("estimation_") else "Attached valuation report"
+        label = "Uploaded Excel" if artifact_type in {"estimation_xlsx", "kvb_xlsx"} else "Attached report"
     else:
         label = "Generated Excel" if artifact_type == "estimation_xlsx" else "Generated report"
     return {
@@ -312,6 +316,8 @@ def _snapshot_payload(row: dict[str, Any]) -> dict[str, Any] | None:
     return {
         "snapshotId": str(row["snapshot_id"]),
         "version": 1,
+        "identityVersion": row.get("snapshot_identity_version") or 1,
+        "workAddress": row.get("snapshot_project_location") if row.get("snapshot_identity_version") == 2 else "",
         "applicantName": row.get("snapshot_applicant_name") or "",
         "applicantAddress": row.get("snapshot_applicant_address") or "",
         "projectLocation": row.get("snapshot_project_location") or "",
@@ -335,6 +341,7 @@ def _snapshot_payload(row: dict[str, Any]) -> dict[str, Any] | None:
 
 TASK_SELECT = """
     SELECT t.*, linked.task_code AS linked_estimation_task_code,
+           original.task_code AS linked_valuation_task_code,
            CASE WHEN t.report_group IN ('progress', 'completion') THEN linked.preparation_source ELSE t.preparation_source END AS effective_preparation_source,
            p.estimated_fee, p.agreed_fee, p.received_amount,
            p.due_date AS payment_due_date, p.updated_at AS payment_updated_at,
@@ -360,9 +367,11 @@ TASK_SELECT = """
            selected_snapshot.construction_type AS snapshot_construction_type,
            selected_snapshot.property_subtype AS snapshot_property_subtype,
            selected_snapshot.total_estimated_cost AS snapshot_total_estimated_cost,
+           selected_revision.payload -> 'summary' -> 'identityVersion' AS snapshot_identity_version,
            snapshot_rows.items AS snapshot_items
     FROM app.tasks t
     LEFT JOIN app.tasks linked ON linked.id = t.linked_estimation_task_id
+    LEFT JOIN app.tasks original ON original.id = t.linked_valuation_task_id
     LEFT JOIN app.task_payments p ON p.task_id = t.id
     LEFT JOIN app.task_artifacts la ON la.id = t.latest_artifact_id
     LEFT JOIN app.stored_files lf ON lf.id = la.stored_file_id AND lf.removed_at IS NULL
@@ -378,6 +387,7 @@ TASK_SELECT = """
         ORDER BY (s.id = t.linked_estimation_snapshot_id) DESC, s.snapshot_number DESC
         LIMIT 1
     ) selected_snapshot ON TRUE
+    LEFT JOIN app.report_revisions selected_revision ON selected_revision.id = selected_snapshot.source_revision_id
     LEFT JOIN LATERAL (
         SELECT COALESCE(
             jsonb_agg(jsonb_build_object(
@@ -414,15 +424,30 @@ def _activities(database, task_id: uuid.UUID) -> list[dict[str, Any]]:
     return [_activity_payload(row) for row in rows]
 
 
-def _activity(database, task_id: uuid.UUID, actor: dict[str, Any], event_type: str, message: str, details: dict[str, Any] | None = None) -> None:
+def _activity(database, task_id: uuid.UUID, actor: dict[str, Any], event_type: str, message: str, details: dict[str, Any] | None = None, *, notification: str | None = None) -> None:
+    activity_id = uuid.uuid4()
     database.execute(
         """
         INSERT INTO app.task_activities
             (id, task_id, event_type, actor_user_id, actor_name_snapshot, message, details)
         VALUES (%s, %s, %s, %s, %s, %s, %s)
         """,
-        (uuid.uuid4(), task_id, event_type, actor["id"], actor["name"], message, Jsonb(details or {})),
+        (activity_id, task_id, event_type, actor["id"], actor["name"], message, Jsonb(details or {})),
     )
+    if notification:
+        from .notifications import record
+
+        record(database, task_id, activity_id, actor["id"], notification)
+
+
+def _revaluation_activity(database, task, actor, action):
+    original_id = task.get("linked_valuation_task_id")
+    if original_id:
+        code = task["task_code"]
+        artifact = task.get("linked_valuation_artifact_id")
+        _activity(database, original_id, actor, "status", f"Revaluation {code} {action}.",
+                  {"revaluationTaskId": code, "revaluationEvent": action,
+                   "sourceArtifactId": str(artifact) if artifact else None})
 
 
 def _task_row(database, task_code: str, lock: bool = False) -> dict[str, Any]:
@@ -453,11 +478,22 @@ def _update_task(database, task_id: uuid.UUID, assignments: str, values: tuple[A
     )
 
 
+def _retrospective_attachment(row):
+    return row.get("latest_artifact_source") == "uploaded" and (
+        row.get("latest_artifact_type") in {"valuation_docx", "valuation_pdf"}
+        or row.get("preparation_source") in {"template", "retrospective"}
+        and row.get("latest_artifact_type") in {
+            "estimation_xlsx", "estimation_docx", "estimation_pdf",
+            "progress_docx", "progress_pdf", "completion_docx", "completion_pdf",
+        }
+    )
+
+
 def set_preparation_source(database, task, actor, source):
     """Record an explicit method; absence of legacy metadata remains unknown."""
     if source not in {"online", "template", "retrospective"}:
         return False
-    if task["report_group"] not in {"estimation", "valuation"}:
+    if task["report_group"] not in {"estimation", "valuation", "progress", "completion", "revaluation"}:
         return False
     if task.get("preparation_source") == source:
         return False
@@ -480,7 +516,7 @@ def record_template_download(task_code, session):
         _activity(database, task["id"], actor, "note", "Report template downloaded.", {"templateDownloaded": True})
 
 
-def require_estimation_ready(database, task, payload=None):
+def require_estimation_ready(database, task, payload=None, *, verify_components=False):
     if task["report_group"] not in {"progress", "completion"}:
         return
     parent = database.execute("SELECT status FROM app.tasks WHERE id = %s", (task["linked_estimation_task_id"],)).fetchone()
@@ -490,6 +526,7 @@ def require_estimation_ready(database, task, payload=None):
         reviewed = (payload or {}).get("details", {}).get("estimationRevisionReviewed")
         if reviewed != str(task.get("linked_estimation_snapshot_id") or ""):
             raise WorkflowError("Review the revised estimation components and confirm the correction before generating this report.", 409, "estimation_review_required")
+    if verify_components or task.get("estimation_review_required"):
         expected = database.execute("SELECT details,item_key,label,estimated_cost FROM app.estimation_snapshot_items WHERE snapshot_id=%s ORDER BY display_order", (task["linked_estimation_snapshot_id"],)).fetchall()
         supplied = {str(item.get("id")): item for item in (payload or {}).get("components", [])}
         matches = len(supplied) == len(expected)
@@ -524,12 +561,17 @@ def _refresh_linked_reports(database, estimation, actor):
                 # Historical report media is not an active draft upload.
                 content["photos"] = draft_photos
         old = content.get("components") or []
-        by_label = {str(item.get("label", "")).strip().casefold(): item for item in old}
+        matched_old = set()
         revised = []
         for item in items:
-            previous = by_label.get(item["label"].strip().casefold(), {})
-            if sum(1 for candidate in old if str(candidate.get("label", "")).strip().casefold() == item["label"].strip().casefold()) > 1:
-                previous = {}
+            source = item["details"] or {}
+            candidates = [index for index, candidate in enumerate(old) if index not in matched_old and str(candidate.get("id")) == str(source.get("sourceId") or item["item_key"])]
+            if not candidates:
+                labels = {item["label"].strip().casefold(), str(source.get("legacyLabel") or "").strip().casefold()}
+                candidates = [index for index, candidate in enumerate(old) if index not in matched_old and str(candidate.get("label", "")).strip().casefold() in labels]
+            previous = old[candidates[0]] if len(candidates) == 1 else {}
+            if previous:
+                matched_old.add(candidates[0])
             amount = float(item["estimated_cost"])
             percent = previous.get("completionPercent", "")
             manual = bool(previous.get("manualCompleted"))
@@ -544,10 +586,9 @@ def _refresh_linked_reports(database, estimation, actor):
                             "completedCost": previous.get("completedCost", "") if manual else amount * float(percent or 0) / 100,
                             "manualCompleted": manual,
                             "estimationReviewReason": "Review previous manual completion amount" if manual else "New component" if not previous else ""})
-        labels = {item["label"].casefold() for item in revised}
         details = content.setdefault("details", {})
         details.pop("estimationRevisionReviewed", None)
-        details["estimationRemovedComponents"] = [item.get("label") for item in old if str(item.get("label", "")).casefold() not in labels]
+        details["estimationRemovedComponents"] = [item.get("label") for index, item in enumerate(old) if index not in matched_old]
         content["linkedEstimationId"] = estimation["task_code"]
         content["components"] = revised
         content["estimationSnapshotId"] = str(snapshot["id"])
@@ -570,6 +611,14 @@ def get_task(task_code: str) -> dict[str, Any]:
         result = _task_payload(row, _activities(database, row["id"]))
         if row["report_group"] == "estimation":
             result["linkedReports"] = [{"id": child["task_code"], "status": child["status"], "label": child["report_key"]} for child in database.execute("SELECT task_code,status,report_key FROM app.tasks WHERE linked_estimation_task_id=%s AND status<>'Cancelled' ORDER BY created_at", (row["id"],)).fetchall()]
+        if row["report_group"] == "valuation":
+            result["revaluations"] = [
+                {"id": child["task_code"], "status": child["status"], "assignedDate": _iso(child["assigned_date"])}
+                for child in database.execute(
+                    "SELECT task_code,status,assigned_date FROM app.tasks WHERE linked_valuation_task_id=%s ORDER BY created_at DESC,id",
+                    (row["id"],),
+                ).fetchall()
+            ]
         return result
 
 
@@ -672,9 +721,10 @@ def summary(group: str = "all") -> dict[str, int]:
 def create_task(payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
     actor = _actor(session)
     report_key = _required(payload.get("reportKey"), "Select a supported report type.")
-    if report_key not in REPORTS:
+    revaluation = report_key == "revaluation"
+    if not revaluation and report_key not in REPORTS:
         raise WorkflowError("Select a supported report type.")
-    report_group, report_code, _label = REPORTS[report_key]
+    report_group, report_code = ("revaluation", "REVAL") if revaluation else REPORTS[report_key][:2]
     institution_code = _required(payload.get("institutionCode"), "Select a valid bank or NBFC.").upper()
     branch = _required(payload.get("branch"), "Enter the assigning branch.")
     customer = _required(payload.get("customerName"), "Enter the applicant or customer name.")
@@ -694,7 +744,8 @@ def create_task(payload: dict[str, Any], session: dict[str, Any]) -> dict[str, A
         raise WorkflowError("Add an acknowledgement or routing work note for the assignment.")
 
     with connection() as database:
-        institution = database.execute("SELECT * FROM app.institutions WHERE code = %s AND active = TRUE FOR SHARE", (institution_code,)).fetchone()
+        institution = database.execute("SELECT * FROM app.institutions WHERE code = %s AND (active = TRUE OR %s) FOR SHARE",
+                                       (institution_code, revaluation)).fetchone()
         if not institution:
             raise WorkflowError("The selected institution is inactive or no longer available.")
         assignee = None
@@ -705,6 +756,23 @@ def create_task(payload: dict[str, Any], session: dict[str, Any]) -> dict[str, A
             ).fetchone()
             if not assignee:
                 raise WorkflowError("Select a valid employee.")
+        original = None
+        original_artifact = None
+        seed = None
+        if revaluation:
+            from ..reports.service import revaluation_inputs
+
+            original_code = _required(payload.get("linkedValuationId"), "Select a Completed or Closed valuation.")
+            original = _task_row(database, original_code, lock=True)
+            if original["report_group"] != "valuation" or original["status"] not in {"Completed", "Closed"}:
+                raise WorkflowError("Select a Completed or Closed valuation.")
+            if original["institution_id"] != institution["id"]:
+                raise WorkflowError("The revaluation institution must match the linked valuation.")
+            report_key = original["report_key"]
+            branch, customer, property_brief = (original[key] for key in ("branch", "customer_name", "property_brief"))
+            original_artifact = original.get("final_artifact_id") if original["status"] == "Closed" else original.get("latest_artifact_id")
+            seed = revaluation_inputs(database, original)
+
         linked = None
         linked_snapshot = None
         linked_code = _text(payload.get("linkedEstimationId"))
@@ -764,15 +832,17 @@ def create_task(payload: dict[str, Any], session: dict[str, Any]) -> dict[str, A
                     branch, customer_name, property_brief, assignee_user_id, assignee_name_snapshot,
                     created_by_user_id, priority, status, assigned_date, due_date,
                     linked_estimation_task_id, linked_estimation_snapshot_id,
-                    duplicate_key
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    duplicate_key, linked_valuation_task_id, linked_valuation_artifact_id,
+                    revaluation_manual_entry, preparation_source
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     task_id, task_code, report_key, report_group, institution["id"], institution["code"], institution["name"], institution["institution_type"],
                     branch, customer, property_brief, assignee["id"] if assignee else None, assignee["display_name"] if assignee else None,
                     actor["id"], priority, status, assigned_date, due_date,
                     linked["id"] if linked else None, linked_snapshot["id"] if linked_snapshot else None,
-                    duplicate_key,
+                    duplicate_key, original["id"] if original else None, original_artifact,
+                    seed["manual"] if seed else False, seed["source"] if seed else None,
                 ),
             )
         except IntegrityError as error:
@@ -784,7 +854,16 @@ def create_task(payload: dict[str, Any], session: dict[str, Any]) -> dict[str, A
                 raise WorkflowError("A Completion task already exists for this estimation.", 409, "duplicate") from error
             raise
         database.execute("INSERT INTO app.task_payments (task_id) VALUES (%s)", (task_id,))
-        _activity(database, task_id, actor, "created", f'Assignment created and routed to {assignee["display_name"]}.' if assignee else "Assignment created without an assignee.")
+        if seed:
+            database.execute(
+                """INSERT INTO app.report_drafts (task_id, report_key, schema_version, payload, revision, updated_by_user_id)
+                   VALUES (%s, %s, %s, %s, 1, %s)""",
+                (task_id, report_key, seed["schemaVersion"], Jsonb(seed["payload"]), actor["id"]),
+            )
+            _revaluation_activity(database, {"linked_valuation_task_id": original["id"],
+                                            "task_code": task_code, "linked_valuation_artifact_id": original_artifact},
+                                  actor, "created")
+        _activity(database, task_id, actor, "created", f'Assignment created and routed to {assignee["display_name"]}.' if assignee else "Assignment created without an assignee.", notification="assigned" if assignee else "unassigned")
         if note:
             _activity(database, task_id, actor, "note", note)
         row = _task_row(database, task_code)
@@ -803,6 +882,12 @@ def _mutate(task_code: str, payload: dict[str, Any], session: dict[str, Any], ac
         _check_version(row, payload.get("version"))
         action(database, row, actor, payload)
         updated = _task_row(database, task_code)
+        if row.get("linked_valuation_task_id") and updated["status"] != row["status"]:
+            event = {"Completed": "completed", "Closed": "closed", "Cancelled": "cancelled"}.get(updated["status"])
+            if updated["status"] == "In Progress" and row["status"] in {"Completed", "Closed"}:
+                event = "reopened"
+            if event:
+                _revaluation_activity(database, updated, actor, event)
         return _task_payload(updated, _activities(database, updated["id"]))
 
 
@@ -831,7 +916,7 @@ def assign(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> 
             raise WorkflowError("Select a different employee for the transfer.")
         previous = row.get("assignee_name_snapshot")
         _update_task(database, row["id"], "assignee_user_id = %s, assignee_name_snapshot = %s, status = 'In Progress', hold_reason = NULL", (target["id"], target["display_name"]))
-        _activity(database, row["id"], actor, "assignment", f"Task transferred from {previous} to {target['display_name']}." if previous else f"Task assigned to {target['display_name']} and started.")
+        _activity(database, row["id"], actor, "assignment", f"Task transferred from {previous} to {target['display_name']}." if previous else f"Task assigned to {target['display_name']} and started.", notification="assigned")
         _activity(database, row["id"], actor, "note", note)
     return _mutate(task_code, payload, session, action)
 
@@ -848,7 +933,7 @@ def put_on_hold(task_code: str, payload: dict[str, Any], session: dict[str, Any]
             raise WorkflowError("Only active assigned work can be placed on hold.", 409, "invalid_transition")
         previous = row.get("hold_reason")
         _update_task(database, row["id"], "status = 'On Hold', hold_reason = %s", (reason,))
-        _activity(database, row["id"], actor, "status", f"On-hold reason changed from {previous} to {reason}." if previous else f"Task placed on hold: {reason}.")
+        _activity(database, row["id"], actor, "status", f"On-hold reason changed from {previous} to {reason}." if previous else f"Task placed on hold: {reason}.", notification="hold" if row["status"] != "On Hold" else None)
         _activity(database, row["id"], actor, "note", note)
     return _mutate(task_code, payload, session, action)
 
@@ -892,11 +977,7 @@ def complete(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -
     media_storage_keys: list[str] = []
 
     def action(database, row, actor, values):
-        retrospective = (
-            row.get("latest_artifact_source") == "uploaded"
-            and row.get("latest_artifact_type") in {"valuation_docx", "valuation_pdf", "estimation_xlsx", "estimation_docx", "estimation_pdf"}
-            and (row["report_group"] != "estimation" or row.get("preparation_source") in {"template", "retrospective"})
-        )
+        retrospective = _retrospective_attachment(row)
         note = _text(values.get("note"))
         if not retrospective and not note:
             raise WorkflowError("Add a completion work note.")
@@ -940,7 +1021,7 @@ def complete(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -
                 raise WorkflowError("The linked estimation is already permanently blocked by another completed Completion task.", 409, "estimation_locked")
             database.execute("UPDATE app.tasks SET completion_blocked_at = COALESCE(completion_blocked_at, %s), completion_blocked_by_task_id = COALESCE(completion_blocked_by_task_id, %s), version = version + 1, updated_at = NOW() WHERE id = %s", (now, row["id"], linked["id"]))
         completion_message = "Task marked Completed using the work note recorded with the offline report upload." if retrospective else "Task marked Completed after report generation."
-        _activity(database, row["id"], actor, "status", completion_message)
+        _activity(database, row["id"], actor, "status", completion_message, notification="completed")
         if note:
             _activity(database, row["id"], actor, "note", note)
         if row["report_key"] in {"valuation-general", "valuation-agricultural", "progress", "completion"}:
@@ -994,12 +1075,14 @@ def update_payment(task_code: str, payload: dict[str, Any], session: dict[str, A
         if basis is not None and received > basis:
             raise WorkflowError("Amount received cannot exceed the agreed or estimated fee.")
         due_date = _date(values.get("dueDate"), "Select a valid payment due date.") if _text(values.get("dueDate")) else row.get("payment_due_date")
+        payment_changed = (estimated, agreed, received, due_date) != (
+            row.get("estimated_fee"), row.get("agreed_fee"), row.get("received_amount") or Decimal("0"), row.get("payment_due_date"))
         database.execute("UPDATE app.task_payments SET estimated_fee = %s, agreed_fee = %s, received_amount = %s, due_date = %s, updated_by_user_id = %s, version = version + 1, updated_at = NOW() WHERE task_id = %s", (estimated, agreed, received, due_date, actor["id"], row["id"]))
         _update_task(database, row["id"], "status = status", ())
         refreshed = _task_row(database, row["task_code"])
         payment = _payment_values(refreshed)
         outstanding = "N/A" if payment["outstanding"] is None else f"₹{payment['outstanding']:,.2f}"
-        _activity(database, row["id"], actor, "payment", f"Payment updated: {payment['status']}; outstanding {outstanding}.")
+        _activity(database, row["id"], actor, "payment", f"Payment updated: {payment['status']}; outstanding {outstanding}.", notification="payment" if payment_changed else None)
         note = _text(values.get("note"))
         if note:
             _activity(database, row["id"], actor, "note", note)
@@ -1014,7 +1097,7 @@ def close(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> d
         if not row.get("latest_artifact_id"):
             raise WorkflowError("The retained final report is missing.", 409, "artifact_missing")
         _update_task(database, row["id"], "status = 'Closed', closed_at = NOW(), final_artifact_id = latest_artifact_id", ())
-        _activity(database, row["id"], actor, "status", "Request closed after payment settlement.")
+        _activity(database, row["id"], actor, "status", "Request closed after payment settlement.", notification="closed")
         note = _text(values.get("note"))
         if note:
             _activity(database, row["id"], actor, "note", note)
@@ -1047,9 +1130,10 @@ def reopen(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> 
         note = _required(values.get("note"), "Add a work note explaining why the completed or closed task is being reopened.")
         if row["status"] not in {"Completed", "Closed"}:
             raise WorkflowError("Only a completed or closed task can be reopened.", 409, "invalid_transition")
-        reference = row.get("closed_at") or row.get("completed_at")
-        if not reference or tenant_today() > tenant_date(reference) + timedelta(days=REOPEN_WINDOW_DAYS):
-            raise WorkflowError(f"Completed and closed tasks can be reopened only within {REOPEN_WINDOW_DAYS} calendar days of completion or closure.", 409, "reopen_expired")
+        if row["status"] == "Closed":
+            closed_at = row.get("closed_at")
+            if not closed_at or tenant_today() > tenant_date(closed_at) + timedelta(days=CLOSED_REOPEN_WINDOW_DAYS):
+                raise WorkflowError(f"Closed tasks can be reopened within {CLOSED_REOPEN_WINDOW_DAYS} calendar days of closure.", 409, "reopen_expired")
         previous = row["status"]
         if row.get("latest_artifact_id"):
             database.execute("UPDATE app.task_artifacts SET superseded_at = COALESCE(superseded_at, NOW()) WHERE id = %s", (row["latest_artifact_id"],))
@@ -1066,6 +1150,26 @@ def reopen(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> 
                 database.execute("UPDATE app.report_drafts SET preview_fingerprint=NULL, preview_token=NULL, preview_artifact_id=NULL, revision=revision+1 WHERE task_id=%s", (child["id"],))
                 _activity(database, child["id"], actor, "status", "Linked estimation reopened; this report requires correction. " + note, {"estimationTask": row["task_code"], "previousStatus": child["status"]})
     return _mutate(task_code, payload, session, action)
+
+
+def eligible_valuations(options):
+    limit = _bounded_integer(options.get("limit"), 20, 1, 100, "Use a valid page size.")
+    offset = _bounded_integer(options.get("offset"), 0, 0, 10_000_000, "Use a valid page offset.")
+    conditions = ["t.report_group = 'valuation'", "t.status IN ('Completed', 'Closed')"]
+    params = []
+    for option, column in (("institution", "institution_code_snapshot"), ("status", "status")):
+        if options.get(option):
+            conditions.append(f"t.{column} = %s")
+            params.append(options[option])
+    if _text(options.get("search")):
+        conditions.append("CONCAT_WS(' ',t.task_code,t.customer_name,t.property_brief,t.branch,t.institution_name_snapshot,t.institution_code_snapshot) ILIKE %s")
+        params.append(f"%{_text(options['search'])}%")
+    where = " AND ".join(conditions)
+    with connection() as database:
+        total = database.execute(f"SELECT count(*) AS count FROM app.tasks t WHERE {where}", tuple(params)).fetchone()["count"]
+        rows = database.execute(f"{TASK_SELECT} WHERE {where} ORDER BY COALESCE(t.closed_at,t.completed_at) DESC NULLS LAST,t.task_code LIMIT %s OFFSET %s",
+                                (*params, limit, offset)).fetchall()
+    return {"items": [_task_payload(row) for row in rows], "total": total, "hasMore": offset + limit < total}
 
 
 def eligible_estimations(

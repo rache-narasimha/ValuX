@@ -13,6 +13,7 @@
     button.setAttribute("aria-label", "Collapse report sections");
     button.innerHTML = "‹<span>Sections</span>";
     aside.prepend(button);
+    window.ReportCalculator?.install(aside);
 
     const apply = (collapsed) => {
       document.body.classList.toggle("report-nav-collapsed", collapsed);

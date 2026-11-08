@@ -17,7 +17,8 @@ deferred, a separate explicit user request is required before implementation.
   Completion locks. The backend workflow service is authoritative for roles,
   transitions and concurrency. Task-linked report drafts, report revisions,
   local-file metadata and estimation snapshots are durable in PostgreSQL.
-  Browser storage remains appropriate only for appearance and practice drafts.
+  Browser storage remains appropriate for appearance, practice drafts and the
+  approved daily scratch-calculator history; it is not task/report persistence.
 - ValuX stores timestamps and performs audit/session/internal processing in
   UTC. Calendar rules and user-facing timestamp display use the tenant's
   configured IANA time zone. SLN is configured as `Asia/Kolkata`, so SLN users
@@ -82,8 +83,15 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - There is no separate Assigned state. Assigning an Unassigned task moves it
   directly to In Progress.
 - A task that has entered In Progress cannot return to Unassigned.
-- The report form can open only for an assigned active task. Employees must be
-  the assignee; the father/CEO may open assigned work for review or completion.
+- Active report editing requires an assigned task. Employees must be the
+  assignee; the father/CEO may edit assigned work for review or completion.
+  Completed and Closed report forms are viewable read-only by users who can
+  view the task, using the inputs associated with the retained artifact (the
+  final artifact for Closed). They allow section navigation and retained-file
+  download, but no editing, autosave, draft removal, upload or regeneration.
+  Existing note/payment/reopening permissions remain separate. Removed draft
+  media remains visible in the retained document. Offline reports expose only
+  captured setup/component information and their retained file.
 - Reassignment and transfer use the same assignment action. A work note is
   mandatory and the activity history records the previous and new assignee.
 - An active task may be placed On Hold with one of: Awaiting Documents,
@@ -94,7 +102,8 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   optional when resuming.
 - A task can become Completed only after successful report generation while it
   is In Progress. A completion work note is mandatory except for the approved
-  offline valuation/estimation upload flow, which reuses its upload work note.
+  offline valuation, revaluation, estimation, Progress and Completion upload
+  flows, which reuse their upload work note.
 - Editable calendar fields currently accept past, present and future dates.
   Assignment priority may suggest a due date, but does not impose a maximum;
   a due date still cannot be earlier than its assigned date.
@@ -102,9 +111,9 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Cancellation reasons are Created by Mistake, Wrong Details, and Custom.
   Custom requires a work-note explanation. Cancellation is recorded in
   activity history.
-- A Completed or Closed task may be reopened only by the father/CEO, within the
-  configured seven-calendar-day reopening window from its completion or closure,
-  with a mandatory work note. A newly
+- Only the father/CEO may reopen a task, with a mandatory work note. Completed
+  tasks have no reopening deadline. Closed tasks can be reopened through the
+  fifteenth tenant calendar day after closure. A newly
   generated DOCX is required before completing an ordinary valuation again.
   Karur Vysya Bank requires a newly attached completed KVB XLSX; Karnataka
   Bank requires a newly attached Valocity DOCX or PDF. An estimation requires
@@ -194,11 +203,55 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   artifact; Closed uses the immutable final artifact.
 - The layout should use available horizontal space efficiently, show useful
   task details before opening a record, and become compact on smaller screens.
+- Normal action buttons share a 14px-equivalent font, with 13px-equivalent
+  compact table actions and matching primary/secondary control sizing. Long
+  labels wrap inside their controls and action groups reflow without overflow;
+  icons remain centred. Payment-dialog explanations do not stretch adjacent
+  buttons. The workload label is "Selected Period Total". The estimation picker may widen
+  within the viewport and presents one compact task row with explicitly
+  labelled Assigned and Completed dates, completion time in tenant time zone,
+  and a distinct status.
 - Father/CEO institution charts include every configured bank and NBFC, showing
   zero for institutions with no work in the selected period.
-- Institution workload and finance support All time, daily, weekly, monthly
-  and yearly views. All period choices remain visible; All time hides only
-  the supplementary date/week/month/year picker.
+- Dashboard category counts, status cards, institution workload/finance,
+  assignment-status distribution and report-type totals share one Assigned
+  during period (All time, daily, weekly, monthly or yearly). All time hides
+  only the supplementary picker. Dates are assignment dates; finance shows
+  the current payment position of assignments in that period. Recent activity
+  and the actionable Completed payment-tracking list retain their existing
+  scopes. Status-card and workload drill-downs carry the selected period.
+- Report-category and Assigned during controls share one compact filter panel,
+  keeping report selection and Assigned during on one row on roomy desktops at
+  100% zoom, with a compact week picker; they wrap into aligned rows on smaller
+  screens. The dashboard title for all report types is “Property Reports”, with
+  “All reports” as its category control and “Re-Valuation” as the linked
+  valuation category label. The heading shares its desktop row with the period
+  summary and New assignment. Its supporting line describes valuation and
+  construction reporting, assignment progress, fees and payments. Doughnut
+  legends separate Count and % columns, with clean flush
+  segment boundaries. Institution section headings and report-type rows use
+  decorative SVG icons; report labels use a compact shared column so the bars
+  use the remaining width. Existing chart drill-downs remain unchanged.
+  Institution Workload shows
+  assignment counts with existing task-list links. Its NBFC column includes
+  Total Institutions, derived from the configured institutions listed in the
+  chart; these institution counts do not change with period/report filters.
+- Income & Payments is consolidated into the lower summary, with no duplicate
+  institution payment bars, analysis toggle or payment-view control. It defaults
+  to all institutions within the shared period; its institution selector narrows
+  the three amounts and collection doughnut, and All institutions resets it.
+  Financial views remain CEO-only.
+- The dashboard places institution analysis beside assignment status, and
+  payment summary beside report types on roomy desktop screens. The right
+  panel stacks a compact Assignment Status chart above Workload by Institution
+  Type (CEO-only). The latter uses Bank/NBFC assignment counts and percentages
+  from the same filtered workload data, not configured-institution counts.
+  With no matching assignments it displays an empty ring and No assignments.
+  Panels stack before their content becomes cramped, with content-led chart
+  heights and consistent heading/section spacing. Task-status colours match their
+  distribution legend. Cancelled work appears in that distribution when present
+  so its total agrees with category counts; finance still excludes Cancelled
+  assignments. Empty fee totals do not show a fabricated collection percentage.
 - Workload totals link to the existing task-summary page for Banks, NBFCs or
   both together, preserving the selected report group and assigned-date
   period. Aggregate summaries, task tables and exports use the same filters.
@@ -348,16 +401,70 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   remain separate actions. This route has one primary completion action and
   compact optional Add note/View history controls instead of a second
   permanently visible work-note composer.
-- Estimation uses Date of Estimation. Its task applicant name comes from the
-  assignment; estimation applicant and Progress/Completion borrower outputs use
-  Name, Property Location. A separate Applicant Address is not required; the
-  detailed construction-site locality/address and signing Place remain separate.
+- Estimation uses Date of Estimation and an editable Name of the Applicant,
+  initially filled from the assignment only when the saved applicant is empty.
+  The edited Name, Place passes directly to estimation and Progress/Completion
+  borrower fields, without another location suffix or assignment-name change.
+- Estimation Report Setup has two shared fields: Name of the Work (the overall
+  description without its address) and Address of the Work. The overall report
+  joins them with one "at" connector. Component descriptions are derived from
+  component names and floor configurations using that same address, without
+  per-component work-description inputs. Progress/Completion construction-site
+  fields use Name of the Work, Address of the Work. Karnataka Bank's site
+  certificate uses Address of the Work alone. Older
+  saved descriptions/identities remain intact until reviewed; no automatic
+  address extraction or rewrite is performed.
+- Estimation worksheet labels, Abstract rows, navigation and linked component
+  summaries use one naming rule. A single building uses floor names; multiple
+  buildings use a meaningful building prefix and floor abbreviation. Tabs stay
+  unique and within Excel's length limit, while summaries retain full labels.
+  Stable component/floor IDs and legacy labels preserve linkage during approved
+  correction flows; completed historical reports are not silently renamed.
+- Independent estimation components retain their own work/applicant header.
+  For buildings, only the first floor sheet retains it; later sheets begin with
+  their floor heading and plinth area. Generated/template worksheets have no
+  frozen or split panes. A single residential building through G+2 uses a compact
+  Abstract on the final detail sheet. Multiple independent components/buildings,
+  or G+3 and above, use a separate Abstract; typical groups use their actual floors.
+  Place, Date and signature occur only after that applicable Abstract, with
+  Place and Date on consecutive rows and no detail-sheet signature blocks.
+- Optional plinth areas in sft. are entered per component/floor worksheet,
+  including the total area of all floors represented on a typical sheet. Report
+  Setup and both Abstract layouts have no Overall Plinth Area field or aggregate
+  area wording. Legacy overall-area values are ignored in newly generated output;
+  individual areas populate worksheet headings and never drive cost calculations.
+- Every task-linked report form starts with its work-note composer collapsed.
+  Add note/Hide note toggles it; Save note submits it. A required completion note
+  reveals/focuses the composer, preserving all existing note and offline-note rules.
+- All report forms offer a compact draggable calculator at the end of the section
+  sidebar and hide numeric spinner arrows while preserving number validation.
+  Calculator history is local to the signed-in user, task (or practice report),
+  and tenant calendar day, surviving reload/dismissal in that browser only. It
+  supports Basic and Scientific modes, arithmetic, decimals, percentages, powers,
+  roots, logarithms, factorial, trigonometric/hyperbolic and inverse functions,
+  constants, scientific notation, random numbers and memory controls. Degrees
+  is the initial angle mode, with a visible DEG/RAD switch. Mode, memory and
+  history remain local within the same daily scope. It never changes report
+  fields, report freshness or workflow state.
 - Estimation preparation is selected immediately after Report Setup. Fill online
   exposes configuration, components, measurements, Abstract, preview and XLSX
   generation. Complete offline and upload exposes attachment first, followed by
   extracted or manually entered component totals and one substantive upload note.
   Optional workbook-template configuration remains available without making it
   mandatory for retrospective uploads. No photographs or map are required.
+- New supported online estimation worksheets have a Dimensions & Defaults step
+  between component selection and measurements. Each floor or independent component
+  uses its own outside wall dimensions, applicable run and column counts, and editable
+  measurement defaults. Applying them updates the linked quantities and preserves
+  rates, independent measurements, lump sums and custom entries. Older worksheets
+  can use this step explicitly or continue with their saved manual measurements.
+  Inputs share a baseline within each row when their labels wrap.
+- RCC uses long-wall and short-wall layer adjustments, or the perimeter and user-entered
+  centre-wall runs on Centre Line worksheets. Shed configurations offer Storage Shed
+  separately from Machinery Hall and use the respective geometry, structural steel and
+  roofing measurements. Shed brickwork uses gross quantity and wall plaster retains
+  its editable opening deduction. Workbook quantities use the same applied measurements
+  and factors as the online form.
 - Standard general/agricultural valuation and estimation offline uploads ask for
   Filled template or Retrospective report. Filled template requires only a prior
   template download recorded against the task, valid across reloads, devices and
@@ -377,6 +484,19 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   Changed report inputs invalidate the preview and retained report; workflow-only
   changes do not. Switching preparation methods retains entered data but requires
   a newly generated or attached report.
+- Estimation gives action-specific confirmation for every actual preparation or
+  previously selected upload-type change, including repeated switches. First
+  selection without a retained report needs no warning. Cancellation restores
+  the previous selection and section. Existing configuration/measurements remain;
+  a server-managed preparation revision prevents an earlier report/preview from
+  qualifying again when the user switches back.
+- Estimation extraction, preview, template preparation, generation, submission and
+  retained-file removal display one processing indicator with meaningful stage
+  text and no fabricated percentages. Conflicting actions are blocked until it
+  finishes, controls recover after failure, and superseded extraction results
+  cannot overwrite a newer selection. The report-output card uses a contained
+  filename, compact download icon and distinct ready/outdated states; report
+  readiness does not mark the task Completed.
 - Preparation Method is recorded explicitly as Online, Filled template or
   Retrospective. Older records without sufficient metadata remain Not recorded;
   no source is guessed. Previous choices remain in activity/revision history.
@@ -394,9 +514,10 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   task. Final online or offline estimates create immutable component-cost snapshots.
   New linked reports use the latest snapshot and assess each component's full final
   amount, including lump sums and adjustments, without measurement-line duplication.
-- When the CEO reopens an eligible estimation within its normal seven-day window,
+- When the CEO reopens an eligible estimation under the normal reopening rules,
   the confirmation lists affected non-Cancelled linked reports. Completed or Closed
-  dependants reopen as In Progress even if older than seven days; active dependants
+  dependants reopen as In Progress regardless of their own reopening deadline.
+  Active dependants
   become outdated. Payments, history and prior documents remain retained. Preparing
   or completing dependants is blocked until the revised estimation is finalized.
 - Finalizing the revised estimation advances affected existing dependants to its
@@ -407,13 +528,44 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   does not release the permanent Completion lock for new assignments.
 - A linked report is classified as Completion only when every component is at
   100 percent and every balance-work amount is nil/zero. Otherwise it is a
-  Progress report. The generated DOCX includes a Cost of Balance Work column.
+  Progress report. Balance work remains calculated internally and in the form;
+  it is not a column or total in generated DOCX reports for any institution.
+- All institutions' Progress/Completion assessment tables use the same five
+  reference headings: Sl. No.; Construction details (Construction of house/
+  Flat/ Addl. Construction/ Renovation/ Repairs); Total estimated cost (As
+  submitted in the proposal) (Rs); Details of works completed/ stage of
+  construction/ % of work completed; Cost of works completed/ incurred (Rs).
+  Name of the Work is repeated in the description cell spanning the floor rows.
+  The third heading spans separate component/floor and amount cells, aligned
+  with each floor's percentage and completed cost. Existing combined groups
+  remain combined. Totals, materials and amount-in-words remain. Point 7 has
+  paragraph spacing before it and stays with the following table header.
+  The form retains separate Name of the Accompanying Bank Official and
+  Designation inputs; the report displays Name, Designation, while Karnataka
+  Bank's signature uses the official name separately.
 - Karnataka Bank reports include the bank-specific Format/Reference content
   and Branch Sanction page. Reports for other institutions omit those items.
-- Progress/Completion site photographs retain their existing upload and
-  document-layout rules. At least one authenticated site photograph is
-  mandatory for every Progress or Completion report. The final report artifact
-  is DOCX.
+- Progress and Completion default to Fill online for a linked finalized estimate
+  with retained component costs. The CEO and assigned employee may choose Upload
+  retrospective report from Report Setup. Review the assessment, attach a DOCX or
+  PDF and record one work note, then mark the task Completed separately. The same
+  linked-estimate and assessment rules apply. A changed assessment or revised
+  linked estimation requires review and a fresh attachment. The task records its
+  own preparation method while the CEO filter still uses the linked estimate's.
+- Online Progress/Completion retain their existing site-photograph and document
+  rules, including at least one authenticated site photograph and a generated
+  DOCX. Retrospective upload qualifies with the retained DOCX or PDF and requires
+  no separate photo upload, preview or template download.
+- Revaluation is a separate assignment linked to an original Completed or Closed
+  General or Agricultural Valuation. It pins the original retained report version
+  and starts with an editable copy of its saved fields, excluding photos and maps.
+  It uses the original preparation method by default and offers the applicable
+  valuation methods, including existing bank-specific routes. When only an
+  uploaded file is available, the original remains selectable and users can refer
+  to the retained file to enter missing details. Revaluation has its own task ID,
+  workflow and payment. The original task shows the count and links for its
+  Revaluations and receives audit events for creation, completion, reopening,
+  cancellation and closure.
 - A task-linked Progress/Completion preview remains approved across reloads
   while its saved details, component completion values, Karnataka Bank inputs,
   photographs, schema and template version remain unchanged. Changing a report
@@ -431,7 +583,7 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Once active, users may sign in with User ID or verified email.
 - Every fresh login requires TOTP. There is no trusted-device bypass under the
   current policy.
-- Passwords must satisfy the configured strength policy and none of the last 24
+- Passwords must satisfy the configured strength policy and none of the last 5
   passwords may be reused.
 - Self-service password recovery requires the verified recovery email.
 - If the user loses all recovery factors, the operator performs assisted
@@ -442,6 +594,40 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   force.
 - Authentication data belongs in PostgreSQL's dedicated `auth` schema. Do not
   move it to `public`, and do not add business tables to `auth`.
+- My Account is available to both roles. Display name, User ID, role and email
+  are read-only. Users may preview, square-crop, save or remove a JPEG/PNG/WebP
+  profile photo (up to 2 MB); initials remain the fallback.
+- Signed-in password changes require the current password, matching new password
+  and a fresh authenticator code. Strength and the five-password history apply
+  to activation, recovery and voluntary changes. A successful voluntary change
+  renews the current session, revokes other sessions, records a security event
+  and sends a confirmation email. No periodic password expiry is imposed.
+- Sessions expire after 60 minutes of inactivity or 24 hours from sign-in.
+  Human activity extends only the inactivity timer. Notification polling and
+  profile-image requests do not keep a session active.
+
+## 8a. Shared branding and notifications
+
+- Signed-in pages use SLN's supplied building monogram directly on the header
+  background, with “Consultancy & Engineering Services” as the visible
+  wordmark and the full firm name in the header link’s accessible label. The
+  application and report-section sidebars show Powered by ValuX; ValuX is clickable with a
+  Website coming soon tooltip and no destination until a URL is approved.
+- Powered by ValuX uses the login wordmark's typography and original navy/orange
+  colours. Collapsed sidebars display the original-colour ValuX logo instead;
+  the dashboard also displays the full branding at its content footer while
+  its application sidebar is collapsed.
+- The shared header has My Account and a notification bell beside appearance.
+  Notifications show task/customer, event, actor and tenant-local time, with
+  links to assignment details, individual read controls and Mark all as read.
+  Read state is durable per user; lists are bounded and load more on request.
+- Only new events create notifications, in the same transaction as task history.
+  Active recipients exclude the actor: assignment/transfer to the new assignee;
+  On Hold transitions to CEOs; payment changes, Completed and Closed to CEOs
+  and the current assignee; newly created Unassigned tasks to all active users.
+  Repeated/no-op updates and ordinary work notes do not create notifications.
+- Notification polling runs only on visible pages, approximately every 30 seconds.
+  These are in-app notifications, without browser push, sound or notification emails.
 
 ## 9. Current deferred scope
 

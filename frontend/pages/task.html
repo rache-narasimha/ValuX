@@ -11,7 +11,7 @@
   </head>
   <body class="workflow-page">
     <header class="app-header">
-      <a class="brand" href="/"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
+      <a class="brand" href="/" aria-label="SLN Consultancy &amp; Engineering Services dashboard"><span class="brand-mark" aria-hidden="true">SLN</span><span class="sln-wordmark">Consultancy &amp; <span class="sln-wordmark-accent">Engineering Services</span></span></a>
       <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button><div data-role-switcher></div><a class="quiet-link" href="/tasks">← All tasks</a></div>
     </header>
     <main class="page-frame" id="task-workspace">
@@ -26,6 +26,10 @@
             <article class="work-card">
               <div class="section-heading"><div><h2>Assignment details</h2></div></div>
               <dl class="detail-grid" id="assignment-details"></dl>
+            </article>
+            <article class="work-card" id="revaluation-links" hidden>
+              <div class="section-heading"><h2 id="revaluation-links-title"></h2></div>
+              <div id="revaluation-links-list"></div>
             </article>
             <article class="work-card" id="activity-card">
               <div class="section-heading"><div><h2>Work notes and activity</h2><p>Use this one work-note field for progress and for any action requiring context.</p></div></div>
@@ -96,6 +100,7 @@
     <script src="/assets/js/core/business-api.js"></script>
     <script src="/assets/js/core/time.js"></script>
     <script src="/assets/js/core/app-shell.js"></script>
+    <script src="/assets/js/components/account-chrome.js"></script>
     <script src="/assets/js/core/workflow-access.js"></script>
     <script src="/assets/js/core/task-store.js"></script>
     <script src="/assets/js/components/employee-picker.js"></script>

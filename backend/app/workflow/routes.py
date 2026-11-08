@@ -10,7 +10,7 @@ from ..auth import routes as auth_routes
 from ..auth.service import AuthError
 from ..business_time import TENANT_TIME_ZONE_NAME
 from ..reference import service as reference_service
-from . import service
+from . import notifications, service
 
 
 TASK_ACTIONS = {
@@ -78,8 +78,11 @@ def handle_get(handler, path: str) -> bool:
     if not path.startswith("/api/"):
         return False
     try:
-        session = auth_routes.require_full_session(handler)
+        session = auth_routes.require_full_session(handler, refresh=path != "/api/notifications")
         options = _query(handler)
+        if path == "/api/notifications":
+            handler.send_json({"ok": True, **notifications.list_for(session, options)})
+            return True
         if path == "/api/tasks":
             handler.send_json({"ok": True, **service.list_tasks(options, session)})
             return True
@@ -96,6 +99,9 @@ def handle_get(handler, path: str) -> bool:
         if path == "/api/institutions":
             include_inactive = options.get("includeInactive") == "true" and session["role"] == "father"
             handler.send_json({"ok": True, "institutions": reference_service.list_institutions(include_inactive)})
+            return True
+        if path == "/api/valuations/eligible":
+            handler.send_json({"ok": True, **service.eligible_valuations(options)})
             return True
         if path == "/api/estimations/eligible":
             result = service.eligible_estimations(
@@ -117,12 +123,16 @@ def handle_get(handler, path: str) -> bool:
 
 
 def handle_post(handler, path: str) -> bool:
-    if path != "/api/tasks" and not path.startswith(("/api/tasks/", "/api/institutions")):
+    if path not in {"/api/tasks", "/api/notifications/read"} and not path.startswith(("/api/tasks/", "/api/institutions")):
         return False
     try:
         session = auth_routes.require_full_session(handler)
         auth_routes.verify_csrf(handler)
         payload = auth_routes.read_payload(handler, 256 * 1024)
+        if path == "/api/notifications/read":
+            notifications.mark_read(session, payload)
+            handler.send_json({"ok": True})
+            return True
         if path == "/api/tasks":
             handler.send_json({"ok": True, "task": service.create_task(payload, session)}, 201)
             return True

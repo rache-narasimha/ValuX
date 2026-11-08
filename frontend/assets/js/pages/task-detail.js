@@ -112,7 +112,8 @@
     openReport.href = canOpen ? `${report.route}?task=${encodeURIComponent(task.id)}` : "#";
     if (!report.route) openReport.textContent = "Report form pending";
     else if (task.status === "Unassigned") openReport.textContent = "Assign before opening report";
-    else if (["Completed", "Closed", "Cancelled"].includes(task.status)) openReport.textContent = "Report editing unavailable";
+    else if (["Completed", "Closed"].includes(task.status)) openReport.textContent = "View report";
+    else if (task.status === "Cancelled") openReport.textContent = "Report editing unavailable";
     else openReport.textContent = canOpen ? "Open report" : "Assigned employee only";
     openReport.classList.toggle("disabled-link", !canOpen);
     openReport.setAttribute("aria-disabled", String(!canOpen));
@@ -153,7 +154,11 @@
     if (!terminal) return;
     const download = element("download-final-docx");
     const artifact = closed ? TaskStore.finalArtifact(task) : TaskStore.latestArtifact(task);
-    const artifactLabel = task.reportGroup === "estimation" ? "estimation report" : task.institutionCode === "KVB" ? "Excel report" : task.institutionCode === "KB" ? "Valocity report" : "DOCX";
+    const bankUpload = TaskStore.requiresInstitutionOfflineArtifact(task);
+    const artifactLabel = task.reportGroup === "estimation" ? "estimation report"
+      : bankUpload && task.institutionCode === "KVB" ? "Excel report"
+      : bankUpload && task.institutionCode === "KB" ? "Valocity report"
+      : artifact?.artifactType?.endsWith("_pdf") ? "PDF report" : "DOCX";
     if (artifact?.url) {
       download.hidden = false;
       download.title = `Download final ${artifactLabel}`;
@@ -172,10 +177,33 @@
     }
     const deadline = TaskStore.reopenDeadline(task);
     element("reopen-deadline").textContent = WorkflowAccess.currentRole() === "father"
-      ? TaskStore.canReopen(task)
-        ? `Reopening is available through ${WorkflowUI.date(deadline)}.`
-        : `The reopening window ended on ${WorkflowUI.date(deadline)}.`
+      ? task.status === "Completed"
+        ? "Reopening is available while the task is Completed."
+        : !deadline
+          ? "The closure date is unavailable."
+          : TaskStore.canReopen(task)
+            ? `Reopening is available through ${WorkflowUI.date(deadline)}.`
+            : `The reopening window ended on ${WorkflowUI.date(deadline)}.`
       : "Only the CEO can reopen a completed or closed task.";
+  }
+
+  function renderRevaluationLinks() {
+    const card = element("revaluation-links");
+    const list = element("revaluation-links-list");
+    const title = element("revaluation-links-title");
+    const taskLink = (id) => `<a class="quiet-link" href="/tasks/detail?id=${encodeURIComponent(id)}">${WorkflowUI.escape(id)}</a>`;
+    card.hidden = !["valuation", "revaluation"].includes(task.reportGroup);
+    if (task.reportGroup === "revaluation" && task.linkedValuationId) {
+      const source = task.linkedValuationId;
+      const artifact = task.linkedValuationArtifactId;
+      title.textContent = "Original valuation";
+      list.innerHTML = `<p>${taskLink(source)}${artifact ? ` · <a class="quiet-link" href="/api/tasks/${encodeURIComponent(source)}/artifacts/${encodeURIComponent(artifact)}/download">Download source report</a>` : ""}</p>${task.revaluationManualEntry ? "<p>Manual entry required for details available only in the original report.</p>" : ""}`;
+    } else if (task.reportGroup === "valuation") {
+      const children = task.revaluations || [];
+      title.textContent = `Re-Valuations (${children.length})`;
+      list.innerHTML = children.length ? `<ul>${children.map((child) => `<li>${taskLink(child.id)} · ${WorkflowUI.date(child.assignedDate)} · ${WorkflowUI.escape(child.status)}</li>`).join("")}</ul>`
+        : "<p>No linked Re-Valuations.</p>";
+    }
   }
 
   async function verifyFinalReport(artifact) {
@@ -220,8 +248,13 @@
       ["Due date", WorkflowUI.date(task.dueDate)], ["On-hold reason", task.holdReason || "—"],
     ];
     if (task.linkedEstimationId) assignmentDetails.splice(5, 0, ["Linked estimation", task.linkedEstimationId]);
+    if (task.linkedEstimationId && task.ownPreparationSource) {
+      const preparationLabel = { online: "Online", retrospective: "Retrospective" }[task.ownPreparationSource];
+      if (preparationLabel) assignmentDetails.splice(6, 0, ["Report preparation", preparationLabel]);
+    }
     element("assignment-details").innerHTML = assignmentDetails.map(([label, value]) => `<div><dt>${WorkflowUI.escape(label)}</dt><dd>${WorkflowUI.escape(value)}</dd></div>`).join("");
 
+    renderRevaluationLinks();
     configureReportLink();
     configureWorkflow();
     element("cancel-task-button").hidden = !WorkflowAccess.can("cancelTask", task);

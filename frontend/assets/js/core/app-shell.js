@@ -4,6 +4,19 @@
 
   const COLLAPSE_KEY = "sln.application.sidebar-collapsed.v1";
   let durableSummary = window.__VALUX_BUSINESS_CONTEXT__?.summary || null;
+  const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character]));
+  const brandWordmark = '<span class="sln-wordmark">Consultancy &amp; <span class="sln-wordmark-accent">Engineering Services</span></span>';
+  function logo(placement) {
+    // Clip the paper surrounding the original monogram while preserving its lettering and colours.
+    const clip = `sln-monogram-${placement}`;
+    return `<span class="brand-mark sln-brand-mark" aria-hidden="true">
+      <svg viewBox="660 290 730 880" width="38" height="46">
+        <defs><clipPath id="${clip}"><path d="M679 1149V564L847 473V400L1024 307L1201 400V575L1267 506L1228 480L1369 422L1346 572L1312 541L1263 614L1369 671V1149Z"/></clipPath></defs>
+        <image href="/assets/images/sln-logo-source.png" width="2048" height="2048" clip-path="url(#${clip})" />
+      </svg>
+    </span>`;
+  }
+  const poweredBy = '<div class="powered-by"><span>Powered by</span><button type="button" class="valux-brand" title="Website coming soon" aria-label="ValuX — website coming soon"><span class="valux-wordmark">Valu<span>X</span></span><img class="valux-footer-logo" src="/assets/images/valux-monogram.png" alt="" /></button></div>';
 
   const icons = {
     dashboard: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10M9 20v-6h6v6"/></svg>',
@@ -18,6 +31,7 @@
     add: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
     trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5"/></svg>',
     upload: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 15v5h14v-5"/></svg>',
+    bell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>',
   };
   icons.institutions = icons.institution;
   icons.payments = icons.payment;
@@ -86,7 +100,7 @@
 
   function sidebarMarkup() {
     const assignmentActive = activeFor(location.pathname, location.search, "assignments");
-    return `<div class="sidebar-brand-mobile"><span class="brand-mark">SLN</span><strong>Property Reports</strong></div>
+    return `<div class="sidebar-brand-mobile">${logo("sidebar")}${brandWordmark}</div>
       <nav class="application-navigation" aria-label="Application navigation">
         ${navLink({ key: "dashboard", label: "Dashboard", href: "/" })}
         <details class="assignment-navigation"${assignmentActive ? " open" : ""}>
@@ -99,16 +113,28 @@
         ${navLink({ key: "reports", label: "Reports", href: "/tasks?status=Closed" })}
         ${navLink({ key: "settings", label: "Settings", href: "/settings/institutions", fatherOnly: true })}
       </nav>
-      <button class="sidebar-collapse" id="sidebar-toggle" type="button" aria-label="Collapse application navigation" title="Collapse menu" aria-expanded="true"><span>${icons.chevron}</span></button>`;
+      <button class="sidebar-collapse" id="sidebar-toggle" type="button" aria-label="Collapse application navigation" title="Collapse menu" aria-expanded="true"><span>${icons.chevron}</span></button>${poweredBy}`;
   }
 
   function headerMarkup(report = null) {
     const identity = window.__VALUX_AUTH_CONTEXT__?.user || {};
     return `<button class="mobile-menu-button" type="button" aria-label="Open application navigation">${icons.menu}</button>
-      <a class="brand" href="/" aria-label="SLN work dashboard"><span class="brand-mark">SLN</span><span><strong>Property Reports</strong><small>Work management</small></span></a>
+      <a class="brand" href="/" aria-label="SLN Consultancy &amp; Engineering Services dashboard">${logo("header")}${brandWordmark}</a>
       ${report ? `<div class="report-shell-title"><strong>${report.title}</strong><small>${report.description}</small></div>` : ""}
       <nav class="header-shortcuts" aria-label="Quick navigation">${headerShortcuts()}</nav>
-      <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button>${report ? `<span id="status" class="report-status" aria-live="polite">${report.status}</span>` : ""}<details class="account-menu"><summary class="user-chip"><span class="avatar" data-current-user-initials>${identity.initials || "VX"}</span><span><strong data-current-user-name>${identity.name || "ValuX user"}</strong><small data-current-user-role>${identity.roleLabel || "Authenticated user"}</small></span></summary><div class="account-menu-panel"><span>${identity.userId || ""}</span>${identity.email ? `<small>${identity.email}</small>` : ""}<button type="button" data-sign-out>Sign out</button></div></details></div>`;
+      <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button>
+      <div class="notification-menu"><button class="notification-bell" type="button" aria-label="Notifications" aria-expanded="false" aria-controls="notification-panel">${icons.bell}<span class="notification-count" hidden></span></button>
+        <section class="notification-panel" id="notification-panel" aria-label="Notifications" hidden><div class="notification-heading"><h2>Notifications</h2><button type="button" data-notifications-read-all>Mark all as read</button></div><div class="notification-list"></div><button type="button" class="notification-more" hidden>Load more</button><p class="notification-feedback" role="status"></p></section></div>
+      ${report ? `<span id="status" class="report-status" aria-live="polite">${escape(report.status)}</span>` : ""}<details class="account-menu"><summary class="user-chip"><span class="avatar" data-current-user-initials>${avatar(identity)}</span><span><strong data-current-user-name>${escape(identity.name || "ValuX user")}</strong><small data-current-user-role>${escape(identity.roleLabel || "Authenticated user")}</small></span></summary><div class="account-menu-panel"><span>${escape(identity.userId)}</span>${identity.email ? `<small>${escape(identity.email)}</small>` : ""}<a class="account-link" href="/account">My Account</a><button type="button" data-sign-out>Sign out</button></div></details></div>`;
+  }
+
+  function avatar(identity) {
+    return identity.photoUrl ? `<img src="${escape(identity.photoUrl)}" alt="Your profile photo" />` : escape(identity.initials || "VX");
+  }
+
+  function updateUser(user) {
+    window.__VALUX_AUTH_CONTEXT__.user = user;
+    document.querySelectorAll("[data-current-user-initials]").forEach((element) => { element.innerHTML = avatar(user); });
   }
 
   function installHeader() {
@@ -141,6 +167,10 @@
       shell.prepend(sidebar);
     }
     sidebar.innerHTML = sidebarMarkup();
+    const dashboard = location.pathname === "/" && shell.querySelector(":scope > main");
+    if (dashboard && !dashboard.querySelector(".dashboard-powered-by")) {
+      dashboard.insertAdjacentHTML("beforeend", poweredBy.replace('class="powered-by"', 'class="powered-by dashboard-powered-by"'));
+    }
 
     const collapsed = localStorage.getItem(COLLAPSE_KEY) === "true";
     shell.classList.toggle("sidebar-collapsed", collapsed);
@@ -169,6 +199,8 @@
     installHeader();
     installSidebar();
     installAccountMenu();
+    const reportSidebar = document.querySelector("body:not(.workflow-page) main > aside");
+    if (reportSidebar && !reportSidebar.querySelector(".powered-by")) reportSidebar.insertAdjacentHTML("beforeend", poweredBy);
     window.Appearance?.install();
   }
 
@@ -193,7 +225,7 @@
     });
   }
 
-  window.AppShell = { install, icons };
+  window.AppShell = { install, icons, updateUser };
   window.addEventListener("sln:tasks-changed", refreshSummary);
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", install);
   else install();

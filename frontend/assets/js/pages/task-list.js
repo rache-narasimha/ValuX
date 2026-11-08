@@ -25,6 +25,7 @@
   const GROUP_LABELS = {
     all: "All work",
     valuation: "Valuation",
+    revaluation: "Re-Valuation",
     estimation: "Estimation",
     progress: "Progress",
     completion: "Completion",
