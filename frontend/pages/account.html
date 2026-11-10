@@ -15,7 +15,7 @@
       <section class="page-intro"><div><p class="eyebrow">Your account</p><h1>My Account</h1><p>Manage your profile photo and password.</p></div></section>
       <div class="account-grid">
         <section class="work-card account-card" aria-labelledby="profile-heading">
-          <h2 id="profile-heading">Profile</h2>
+          <h2 id="profile-heading"><span class="app-inline-icon" data-app-icon="user" aria-hidden="true"></span>Profile</h2>
           <div class="account-photo-row"><span class="avatar account-photo" data-current-user-initials></span><div><label class="button-link secondary photo-file-label" for="profile-photo-file">Choose photo</label><input type="file" id="profile-photo-file" accept="image/jpeg,image/png,image/webp" hidden /><button class="quiet-link" id="remove-photo" type="button">Remove photo</button><p class="field-help">JPEG, PNG or WebP · up to 2 MB</p></div></div>
           <div id="photo-editor" class="photo-editor" hidden>
             <canvas id="photo-crop" width="384" height="384" aria-label="Square profile photo preview"></canvas>
@@ -26,7 +26,7 @@
           <p class="field-help">Your account details are read-only. Contact the account operator if they need correction.</p>
         </section>
         <section class="work-card account-card" aria-labelledby="security-heading">
-          <h2 id="security-heading">Security</h2>
+          <h2 id="security-heading"><span class="app-inline-icon" data-app-icon="lock" aria-hidden="true"></span>Security</h2>
           <form id="password-form" class="account-password-form">
             <h3>Change password</h3>
             <label>Current password<input id="current-password" type="password" autocomplete="current-password" required maxlength="128" /></label>
@@ -44,6 +44,7 @@
     </main>
     <script src="/assets/js/core/business-api.js"></script>
     <script src="/assets/js/core/time.js"></script>
+    <script src="/assets/js/components/report-calculator.js"></script>
     <script src="/assets/js/core/app-shell.js"></script>
     <script src="/assets/js/components/account-chrome.js"></script>
     <script src="/assets/js/core/workflow-access.js"></script>

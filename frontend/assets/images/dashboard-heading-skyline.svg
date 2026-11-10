@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 122" preserveAspectRatio="xMidYMax meet">
+  <defs>
+    <linearGradient id="hill" x2="0" y2="1">
+      <stop stop-color="#e9aa80" stop-opacity=".53"/>
+      <stop offset="1" stop-color="#f2c8a7" stop-opacity=".10"/>
+    </linearGradient>
+    <linearGradient id="horizon-fade">
+      <stop stop-color="#fff" stop-opacity="0"/>
+      <stop offset=".14" stop-color="#fff"/>
+      <stop offset=".86" stop-color="#fff"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <mask id="horizon">
+      <rect width="1080" height="122" fill="url(#horizon-fade)"/>
+    </mask>
+    <linearGradient id="beam" x2="0" y2="1">
+      <stop stop-color="#efc49f"/>
+      <stop offset="1" stop-color="#c78655"/>
+    </linearGradient>
+    <linearGradient id="wall" x2="0" y2="1">
+      <stop stop-color="#f4cfab"/>
+      <stop offset="1" stop-color="#e2a375"/>
+    </linearGradient>
+    <g id="slab" stroke="#b97443" stroke-width="1.1" stroke-linejoin="round">
+      <path fill="#efd0b3" d="M0 0h133l38-11H39Z"/>
+      <path fill="url(#beam)" d="M0 0h133v6H0z"/>
+      <path fill="#bf7b50" d="m133 0 38-11v6L133 6z"/>
+    </g>
+    <g id="post">
+      <path fill="url(#beam)" d="M0 0h8v22H0z"/>
+      <path fill="#ad6e45" d="m8 0 4-2v22l-4 2z"/>
+      <path fill="none" stroke="#f9dbbd" stroke-width="1.1" d="M1.5 1v20"/>
+    </g>
+    <g id="storey">
+      <path fill="#af7250" fill-opacity=".32" d="M19-11h129v19l-36 9H19Z"/>
+      <use href="#post" x="8"/>
+      <use href="#post" x="45"/>
+      <use href="#post" x="83"/>
+      <use href="#post" x="122"/>
+      <use href="#post" x="155" y="-9"/>
+      <path fill="#e4b38e" stroke="#ac6c46" stroke-width=".9" d="M51 5h24v17H51z"/>
+      <path fill="#cf9b75" d="M55 8h16v11H55z"/>
+    </g>
+    <g id="tree" fill="#d69b71" stroke="#b77951" stroke-width=".9" stroke-linecap="round">
+      <path d="M-8-5c-7 1-11-7-7-12 2-3 5-4 8-4 1-8 13-10 17-2 7-1 12 6 9 12-3 6-10 7-16 6z"/>
+      <path fill="none" d="M2 2v-20m0 8-6-5m6 8 8-8"/>
+    </g>
+    <g id="worker" stroke="#b67446" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="0" cy="-15" r="2.5" fill="#d9a274" stroke="none"/>
+      <path fill="#db9e71" d="M-2-11h4l1 8h-6z"/>
+      <path fill="none" d="m-2-10-4 5m8-5 4 5m-7 2-2 8m4-8 2 8"/>
+    </g>
+  </defs>
+
+  <g mask="url(#horizon)">
+    <path fill="url(#hill)" d="M0 82c88-3 124-43 209-43 61 0 90 31 153 31 88 0 132-31 195-31 70 0 105 28 172 28 81 0 113-24 177-24 70 0 110 28 174 18v61H0Z"/>
+    <path fill="#e6ae88" opacity=".33" d="M0 111c80-2 141-18 219-13 72 5 112 13 164 13 79 0 133-22 207-18 62 4 112 19 173 14 89-7 109-24 167-24 52 0 94 18 150 13v26H0Z"/>
+  </g>
+
+  <!-- Slabs and columns are drawn from the ground up to keep each open bay legible. -->
+  <g transform="translate(310 0)">
+    <use href="#slab" y="114"/>
+    <use href="#storey" y="92"/>
+    <use href="#slab" y="89"/>
+    <use href="#storey" y="67"/>
+    <use href="#slab" y="64"/>
+    <use href="#storey" y="42"/>
+    <use href="#slab" y="39"/>
+    <path fill="none" stroke="#bd7b4f" stroke-width="1.8" stroke-linecap="round" d="M10 39V20m6 19V16m31 23V16m6 23V13m32 26V17m6 22V11m33 28V17m6 22V14m27 17V12m6 17V10"/>
+  </g>
+
+  <g stroke="#b47649" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round">
+    <path fill="#e1ac83" fill-opacity=".55" d="M528 120V11h9v109zM486 30h178v7H486z"/>
+    <path fill="none" d="m528 17 9 10-9 10 9 10-9 10 9 10-9 10 9 10-9 10 9 10-9 10m-36-87 40-25 127 25m-127-25v25M492 37l8-7 8 7 8-7 8 7 8-7 8 7 8-7 8 7 8-7 8 7 8-7 8 7 8-7 8 7 8-7 8 7 8-7 8 7 8-7 8 7m-32 0v32m0 0-10 12m10-12 10 12"/>
+    <path fill="url(#beam)" d="M486 37h18v10h-18zM527 39h16v9h-16zM611 81h20v8h-20z"/>
+  </g>
+
+  <g stroke="#b7774a" stroke-width="1.25" stroke-linejoin="round">
+    <path fill="url(#wall)" d="M686 78l42-19 55 17v45h-97z"/>
+    <path fill="#d0966f" d="m728 59 55 17v45h-55z"/>
+    <path fill="#e8b68f" d="m680 78 48-24 61 20-5 5-56-18-42 20z"/>
+    <path fill="#ad724d" stroke="#f5caa6" stroke-width="1" d="m695 84 9-4v11l-9 4zm16-7 9-4v11l-9 4zm-16 24 9-4v11l-9 4zm16-7 9-4v11l-9 4zm25-18 11 4v11l-11-4zm20 7 11 4v11l-11-4zm-20 10 11 4v11l-11-4zm20 7 11 4v11l-11-4z"/>
+  </g>
+
+  <use href="#worker" transform="translate(508 115) scale(1.15)"/>
+  <use href="#worker" transform="translate(566 116) scale(.84)"/>
+  <g opacity=".79">
+    <use href="#tree" transform="translate(283 121) scale(.61)"/>
+    <use href="#tree" transform="translate(668 122) scale(.58)"/>
+    <use href="#tree" transform="translate(912 121) scale(.85)"/>
+    <use href="#tree" transform="translate(944 120) scale(1.15)"/>
+    <use href="#tree" transform="translate(984 122) scale(.61)"/>
+  </g>
+</svg>

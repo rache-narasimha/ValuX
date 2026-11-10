@@ -31,6 +31,17 @@
     add: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
     trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5"/></svg>',
     upload: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 15v5h14v-5"/></svg>',
+    activity: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 1 2.6 6.4M3 6v6h6m3-5v5l3 2"/></svg>',
+    search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 5 5"/></svg>',
+    calendar: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="16" height="14" rx="2"/><path d="M8 4v4m8-4v4M4 10h16"/></svg>',
+    income: '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>',
+    received: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m-4-4 4 4 4-4M5 15v5h14v-5"/></svg>',
+    clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></svg>',
+    user: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1"/></svg>',
+    lock: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3m-4 4v3"/></svg>',
+    filter: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16l-6 7v5l-4 2v-7z"/></svg>',
+    land: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 19h18M12 19v-7m0 1c-5 0-8-3-8-7 5 0 8 2 8 7Zm0-1c0-4 3-6 8-6 0 4-3 7-8 7"/></svg>',
+    calculator: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6h8M8 11h1m3 0h1m3 0h.1M8 15h1m3 0h1m3 0h.1M8 19h1m3 0h1m3 0h.1"/></svg>',
     bell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>',
   };
   icons.institutions = icons.institution;
@@ -84,36 +95,38 @@
 
   function assignmentSubmenu() {
     const statuses = ["Unassigned", "In Progress", "On Hold", "Completed", "Closed", "Cancelled"];
-    return `<div class="assignment-subnav">${statuses.map((status) => `<a href="/tasks?status=${encodeURIComponent(status)}"><span>${status}</span><strong>${count(status)}</strong></a>`).join("")}</div>`;
+    return `<div class="assignment-subnav"><a href="/tasks"><span>All tasks</span><strong>${count()}</strong></a>${statuses.map((status) => `<a href="/tasks?status=${encodeURIComponent(status)}"><span>${status}</span><strong>${count(status)}</strong></a>`).join("")}</div>`;
   }
 
   function headerShortcuts() {
     const path = location.pathname.replace(/\/$/, "") || "/";
-    if (path === "/") return '<a href="/tasks">All tasks</a>';
+    const dashboard = path === "/" ? "" : "/";
+    const shortcut = (icon, label, title, target) => `<a class="header-section-link" href="${dashboard}#${target}" aria-label="${label}" title="${title}"><span class="app-inline-icon">${icons[icon]}</span><span class="header-section-label">${label}</span></a>`;
+    let context = "";
     if (path === "/tasks") {
-      return '<a href="/">Dashboard</a><a class="header-primary-link" href="/tasks/new">＋ New assignment</a>';
+      context = `<a class="header-context-link header-dashboard-link" href="/">Dashboard</a><a class="header-context-link header-primary-link" href="/tasks/new"><span class="app-inline-icon">${icons.add}</span>New assignment</a>`;
+    } else if (path === "/tasks/new") {
+      context = '<a class="header-context-link" href="/tasks">Cancel and return</a>';
+    } else if (path === "/practice" || path.startsWith("/settings/")) {
+      context = '<a class="header-context-link" href="/">← Dashboard</a>';
     }
-    if (path === "/tasks/new") return '<a href="/tasks">Cancel and return</a>';
-    if (path === "/practice" || path.startsWith("/settings/")) return '<a href="/">← Dashboard</a>';
-    return `<a${location.pathname.startsWith("/tasks") ? ' class="active"' : ""} href="/tasks">All tasks</a>`;
+    return `${context}${shortcut("payment", "Payments", "Payment tracking", "payment-dashboard-card")}${shortcut("activity", "Activity", "Recent activity", "recent-activity-card")}`;
   }
 
-  function sidebarMarkup() {
+  function sidebarNavigation() {
     const assignmentActive = activeFor(location.pathname, location.search, "assignments");
-    return `<div class="sidebar-brand-mobile">${logo("sidebar")}${brandWordmark}</div>
-      <nav class="application-navigation" aria-label="Application navigation">
-        ${navLink({ key: "dashboard", label: "Dashboard", href: "/" })}
-        <details class="assignment-navigation"${assignmentActive ? " open" : ""}>
-          <summary class="app-nav-link${assignmentActive ? " active" : ""}"><span class="app-nav-icon">${icons.assignments}</span><span class="app-nav-label">Assignments</span><span class="nav-chevron">${icons.chevron}</span></summary>
-          ${assignmentSubmenu()}
-        </details>
-        ${navLink({ key: "practice", label: "Practice forms", href: "/practice" })}
-        ${navLink({ key: "institutions", label: "Institutions", href: "/tasks?view=institutions" })}
-        ${navLink({ key: "payments", label: "Payments", href: "/tasks?status=Completed", badge: count("Completed") })}
-        ${navLink({ key: "reports", label: "Reports", href: "/tasks?status=Closed" })}
-        ${navLink({ key: "settings", label: "Settings", href: "/settings/institutions", fatherOnly: true })}
-      </nav>
-      <button class="sidebar-collapse" id="sidebar-toggle" type="button" aria-label="Collapse application navigation" title="Collapse menu" aria-expanded="true"><span>${icons.chevron}</span></button>${poweredBy}`;
+    return `<nav class="application-navigation" aria-label="Application navigation">
+      ${navLink({ key: "dashboard", label: "Dashboard", href: "/" })}
+      <details class="assignment-navigation"${assignmentActive ? " open" : ""}>
+        <summary class="app-nav-link${assignmentActive ? " active" : ""}"><span class="app-nav-icon">${icons.assignments}</span><span class="app-nav-label">Assignments</span><span class="nav-chevron">${icons.chevron}</span></summary>
+        ${assignmentSubmenu()}
+      </details>
+      ${navLink({ key: "practice", label: "Practice forms", href: "/practice" })}
+      ${navLink({ key: "institutions", label: "Institutions", href: "/tasks?view=institutions" })}
+      ${navLink({ key: "payments", label: "Payments", href: "/tasks?status=Completed", badge: count("Completed") })}
+      ${navLink({ key: "reports", label: "Reports", href: "/tasks?status=Closed" })}
+      ${navLink({ key: "settings", label: "Settings", href: "/settings/institutions", fatherOnly: true })}
+    </nav>`;
   }
 
   function headerMarkup(report = null) {
@@ -122,7 +135,7 @@
       <a class="brand" href="/" aria-label="SLN Consultancy &amp; Engineering Services dashboard">${logo("header")}${brandWordmark}</a>
       ${report ? `<div class="report-shell-title"><strong>${report.title}</strong><small>${report.description}</small></div>` : ""}
       <nav class="header-shortcuts" aria-label="Quick navigation">${headerShortcuts()}</nav>
-      <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button>
+      <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle data-appearance-icon-only></button>
       <div class="notification-menu"><button class="notification-bell" type="button" aria-label="Notifications" aria-expanded="false" aria-controls="notification-panel">${icons.bell}<span class="notification-count" hidden></span></button>
         <section class="notification-panel" id="notification-panel" aria-label="Notifications" hidden><div class="notification-heading"><h2>Notifications</h2><button type="button" data-notifications-read-all>Mark all as read</button></div><div class="notification-list"></div><button type="button" class="notification-more" hidden>Load more</button><p class="notification-feedback" role="status"></p></section></div>
       ${report ? `<span id="status" class="report-status" aria-live="polite">${escape(report.status)}</span>` : ""}<details class="account-menu"><summary class="user-chip"><span class="avatar" data-current-user-initials>${avatar(identity)}</span><span><strong data-current-user-name>${escape(identity.name || "ValuX user")}</strong><small data-current-user-role>${escape(identity.roleLabel || "Authenticated user")}</small></span></summary><div class="account-menu-panel"><span>${escape(identity.userId)}</span>${identity.email ? `<small>${escape(identity.email)}</small>` : ""}<a class="account-link" href="/account">My Account</a><button type="button" data-sign-out>Sign out</button></div></details></div>`;
@@ -161,12 +174,30 @@
     }
     if (!shell) return;
     let sidebar = shell.querySelector(":scope > .app-sidebar");
+    const navigation = sidebar?.querySelector(".application-navigation");
+    if (navigation) {
+      navigation.outerHTML = sidebarNavigation();
+      window.WorkflowAccess?.installIdentity();
+      return;
+    }
     if (!sidebar) {
       sidebar = document.createElement("aside");
       sidebar.className = "app-sidebar";
       shell.prepend(sidebar);
     }
-    sidebar.innerHTML = sidebarMarkup();
+    sidebar.innerHTML = `<div class="sidebar-brand-mobile">${logo("sidebar")}${brandWordmark}</div>
+      ${sidebarNavigation()}<button class="sidebar-collapse" id="sidebar-toggle" type="button" aria-label="Collapse application navigation" title="Collapse menu" aria-expanded="true"><span>${icons.chevron}</span></button>${poweredBy}`;
+    const toggle = sidebar.querySelector("#sidebar-toggle");
+    const mobileButton = document.querySelector(".mobile-menu-button");
+    const scope = location.pathname.replace(/\/$/, "") === "/tasks/detail"
+      ? new URLSearchParams(location.search).get("id")
+      : null;
+    window.ReportCalculator?.install(sidebar, {
+      before: toggle,
+      scope: scope || "workspace",
+      onOpen: closeMobile,
+      focusAfterClose: () => mobileButton?.getClientRects().length ? mobileButton : null,
+    });
     const dashboard = location.pathname === "/" && shell.querySelector(":scope > main");
     if (dashboard && !dashboard.querySelector(".dashboard-powered-by")) {
       dashboard.insertAdjacentHTML("beforeend", poweredBy.replace('class="powered-by"', 'class="powered-by dashboard-powered-by"'));
@@ -174,7 +205,6 @@
 
     const collapsed = localStorage.getItem(COLLAPSE_KEY) === "true";
     shell.classList.toggle("sidebar-collapsed", collapsed);
-    const toggle = document.getElementById("sidebar-toggle");
     const describeToggle = (isCollapsed) => {
       toggle.setAttribute("aria-label", isCollapsed ? "Expand application navigation" : "Collapse application navigation");
       toggle.title = isCollapsed ? "Expand menu" : "Collapse menu";
@@ -188,17 +218,22 @@
       describeToggle(next);
     });
 
-    const mobileButton = document.querySelector(".mobile-menu-button");
-    const closeMobile = () => document.body.classList.remove("sidebar-mobile-open");
     mobileButton?.addEventListener("click", () => document.body.classList.toggle("sidebar-mobile-open"));
-    sidebar.querySelectorAll("a").forEach((link) => link.addEventListener("click", closeMobile));
+    sidebar.addEventListener("click", (event) => { if (event.target.closest("a")) closeMobile(); });
     document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeMobile(); });
+  }
+
+  function closeMobile() {
+    document.body.classList.remove("sidebar-mobile-open");
   }
 
   function install() {
     installHeader();
     installSidebar();
     installAccountMenu();
+    document.querySelectorAll("[data-app-icon]").forEach((placeholder) => {
+      placeholder.innerHTML = icons[placeholder.dataset.appIcon] || "";
+    });
     const reportSidebar = document.querySelector("body:not(.workflow-page) main > aside");
     if (reportSidebar && !reportSidebar.querySelector(".powered-by")) reportSidebar.insertAdjacentHTML("beforeend", poweredBy);
     window.Appearance?.install();

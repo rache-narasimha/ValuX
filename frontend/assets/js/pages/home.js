@@ -54,8 +54,8 @@
   // Static presentation icons; report keys and drill-down targets stay unchanged.
   function chartIcon(name) {
     const paths = {
-      bank: '<path d="m3 8 9-5 9 5M4 9h16M6 10v8m6-8v8m6-8v8M3 21h18M4 18h16"/>',
-      nbfc: '<path d="M5 21V5h10v16M15 10h4v11M3 21h18M8 8h1m2 0h1M8 12h1m2 0h1M8 16h1m2 0h1"/>',
+      bank: '<path d="M2.5 8 12 3l9.5 5v1h-19z" fill="currentColor" fill-opacity=".18"/><path d="M5.5 12v5m6.5-5v5m6.5-5v5M4 18.5h16M2.5 21h19"/>',
+      nbfc: '<path d="M4 21V4h10v17z" fill="currentColor" fill-opacity=".12"/><path d="M14 10h6v11M2.5 21h19M7.5 8h3m-3 4h3m-3 4h3m6.5-2h.1m-.1 3h.1"/>',
       institutions: '<path d="M3 21V9l6-3v15M9 21V3h8v18M17 12h4v9M1 21h22M12 7h2m-2 4h2m-2 4h2M5 12h1m-1 4h1"/>',
       valuation: '<path d="M6 3h9l4 4v14H6zM15 3v5h4M9 12h7M9 16h7"/>',
       estimation: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h1m3 0h1m3 0h.1M8 15h1m3 0h1m3 0h.1M8 18h1m3 0h1m3 0h.1"/>',
@@ -109,13 +109,13 @@
     ].map((entry) => ({...entry, count: workload.filter((row) => row.type === entry.type).reduce((sum, row) => sum + row.count, 0)}));
     const total = entries.reduce((sum, entry) => sum + entry.count, 0);
     document.getElementById("institution-workload-chart").innerHTML = ring(
-      entries.map((entry) => ({value: entry.count, color: entry.color})), total, total, total ? "Assignments" : "No assignments", true,
+      entries.map((entry) => ({value: entry.count, color: entry.color})), total, total, total ? "Assignments" : "No assignments",
     ) + `<div class="distribution-legend">${legendHeading()}${entries.map((entry) => `<a href="${buildQuery({view: "summary", institution: `type:${entry.type}`, period: selectedWorkloadPeriod})}" data-institution-type="${entry.type}"><i style="--state-color:${entry.color}"></i><span>${entry.label}</span><strong>${entry.count}</strong><small>${percent(entry.count, total)}%</small></a>`).join("")}</div>`;
   }
 
   function percent(value, total) { return total > 0 ? Math.round(value / total * 100) : 0; }
 
-  function ring(segments, total, label, caption, small = false) {
+  function ring(segments, total, label, caption) {
     const radius = 42;
     let offset = 0;
     const arcs = segments.filter((entry) => entry.value > 0).map((entry) => {
@@ -127,7 +127,13 @@
       const point = (angle) => `${50 + radius * Math.cos(angle)} ${50 + radius * Math.sin(angle)}`;
       return `<path d="M ${point(start)} A ${radius} ${radius} 0 ${fraction > .5 ? 1 : 0} 1 ${point(end)}" fill="none" stroke="${entry.color}" stroke-width="12" stroke-linecap="butt"/>`;
     }).join("");
-    return `<div class="dashboard-ring${small ? " dashboard-ring-small" : ""}" role="img" aria-label="${WorkflowUI.escape(label + " " + caption)}"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="42" fill="none" stroke="var(--line)" stroke-width="12"/>${arcs}</svg><div><strong>${WorkflowUI.escape(label)}</strong><span>${WorkflowUI.escape(caption)}</span></div></div>`;
+    const finish = arcs ? `
+      <g class="dashboard-ring-finish" fill="none">
+        <circle cx="50" cy="50" r="${radius}" stroke="url(#dashboard-satin-tone)" stroke-width="12"/>
+        <path d="M 11.15 30.20 A 43.6 43.6 0 0 1 63.47 8.53" stroke="url(#dashboard-satin-reflection)" stroke-width="1.05"/>
+        <path d="M 57.57 92.94 A 43.6 43.6 0 0 0 87.76 71.8" stroke="url(#dashboard-satin-reflection)" stroke-width=".8" opacity=".52"/>
+      </g>` : "";
+    return `<div class="dashboard-ring" role="img" aria-label="${WorkflowUI.escape(label + " " + caption)}"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="42" fill="none" stroke="var(--line)" stroke-width="12"/>${arcs}${finish}</svg><div><strong>${WorkflowUI.escape(label)}</strong><span>${WorkflowUI.escape(caption)}</span></div></div>`;
   }
 
   // The summary selector scopes the retained financial totals.
@@ -144,7 +150,7 @@
     document.getElementById("institution-finance-detail").innerHTML = `<strong>${WorkflowUI.escape(selected ? selected.code + " · " + selected.name : "All institutions")}</strong><span>${InstitutionMetrics.periodLabel(selectedWorkloadPeriod, selectedWorkloadReference)}</span>`;
     document.getElementById("payment-collection-chart").innerHTML = ring([
       {value: summary.received, color: "var(--green)"}, {value: summary.outstanding, color: "var(--amber)"},
-    ], summary.earned, summary.earned ? `${summary.outstanding ? Math.min(99.9, Math.round(summary.received / summary.earned * 1000) / 10) : 100}%` : "—", summary.earned ? "Collected" : "No fees recorded", true);
+    ], summary.earned, summary.earned ? `${summary.outstanding ? Math.min(99.9, Math.round(summary.received / summary.earned * 1000) / 10) : 100}%` : "—", summary.earned ? "Collected" : "No fees recorded");
     const scopedTasks = tasks.filter((task) => task.status !== "Cancelled" && (!selected || task.institutionCode === selected.code) && TaskStore.matchesPeriod(task, selectedWorkloadPeriod, "assignedDate", selectedWorkloadReference));
     const notSet = scopedTasks.filter((task) => TaskStore.paymentSummary(task).basis == null).length;
     setText("finance-summary-note", `Current payment position for assignments in this period.${notSet ? ` ${notSet} ${notSet === 1 ? "assignment has" : "assignments have"} no fee recorded.` : ""}`);
@@ -289,5 +295,11 @@
   document.getElementById("recent-status-filter").addEventListener("change", render);
   window.addEventListener("sln:tasks-changed", render);
   window.addEventListener("sln:payment-updated", render);
-  TaskStore.loadAll().then(render).catch((error) => WorkflowUI.fatal(error.message || "Assignments could not be loaded."));
+  TaskStore.loadAll().then(() => {
+    render();
+    const target = location.hash.slice(1);
+    if (target === "payment-dashboard-card" || target === "recent-activity-card") {
+      document.getElementById(target).scrollIntoView();
+    }
+  }).catch((error) => WorkflowUI.fatal(error.message || "Assignments could not be loaded."));
 })();

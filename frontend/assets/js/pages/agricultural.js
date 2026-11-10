@@ -197,7 +197,7 @@ function collectValues() {
             ? input.checked
               ? "Yes"
               : "No"
-            : input.value;
+            : NumericEntry.read(input);
     });
   values[window.ValuationCalculations.overridesKey] = calculations?.serialize() || "{}";
   return values;
@@ -451,7 +451,7 @@ function applyPreparationMode() {
 function validateRequiredFields(form) {
   if (form.checkValidity()) return true;
   const invalid = [...form.elements].find((control) => typeof control.checkValidity === "function" && !control.checkValidity());
-  const message = "Complete the highlighted required field before previewing the report.";
+  const message = NumericEntry.error(form) || "Complete the highlighted required field before previewing the report.";
   byId("status").textContent = message;
   if (invalid) {
     const panel = invalid.closest(".panel");

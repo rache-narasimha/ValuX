@@ -87,7 +87,7 @@
     let overrides = {}, previous = {}, nodes = [];
     const controls = () => [...form.querySelectorAll("input[name],select[name],textarea[name]")];
     function read() {
-      return Object.fromEntries(controls().map((input) => [input.name, input.value]));
+      return Object.fromEntries(controls().map((input) => [input.name, global.NumericEntry?.read(input) ?? input.value]));
     }
     function restore(values) {
       try {
@@ -113,7 +113,7 @@
       Object.keys(overrides).forEach((key) => { if (!validKeys.has(key)) delete overrides[key]; });
       nodes.forEach((node) => node.ids.forEach((id) => {
         const input = document.getElementById(id);
-        if (!input || !form.contains(input)) return;
+        if (!input || !form.contains(input) || global.NumericEntry?.pending(input)) return;
         input.dataset.calculation = node.id;
         input.inputMode = "decimal";
         // Preserve the entered representation in drafts, preview payloads and aliases.

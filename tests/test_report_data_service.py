@@ -299,6 +299,42 @@ try:
     )
     assert workflow.get_task(agricultural["id"])["reportFresh"] is False
 
+    industrial = workflow.create_task(task_payload("estimation", f"Industrial Centre Line {suffix}"), father)
+    industrial_state = {
+        "propertyType": "industrial",
+        "details": {"workMode": "offline", "measurementMethod": "centre_line", "uploadType": "retrospective"},
+    }
+    expect_report_error(lambda: reports.save_draft(
+        industrial["id"],
+        {"reportKey": "estimation", "schemaVersion": "3", "revision": 0,
+         "payload": {**industrial_state, "details": {**industrial_state["details"], "workMode": "online"}}},
+        father,
+    ), "invalid_request")
+    reports.save_draft(
+        industrial["id"],
+        {"reportKey": "estimation", "schemaVersion": "3", "revision": 0, "payload": industrial_state},
+        father,
+    )
+    workflow.record_template_download(industrial["id"], father)
+    expect_report_error(lambda: reports.register_artifact(
+        industrial["id"], father, content=b"industrial preview", filename="preview.pdf",
+        artifact_type="preview_pdf", source="generated", payload=industrial_state,
+        current=False, preview_token="industrial-centre-line",
+    ), "invalid_request")
+    expect_report_error(lambda: reports.register_artifact(
+        industrial["id"], father, content=b"filled industrial template", filename="estimate.xlsx",
+        artifact_type="estimation_xlsx", source="uploaded",
+        payload={"retrospective": True, "preparationSource": "template"},
+    ), "invalid_request")
+    industrial = reports.register_artifact(
+        industrial["id"], father, content=b"%PDF-1.4 industrial estimate", filename="estimate.pdf",
+        artifact_type="estimation_pdf", source="uploaded",
+        payload={"retrospective": True, "preparationSource": "retrospective"},
+        summary={"components": [{"label": "Production Hall", "estimatedCost": 125000}], "totalEstimatedCost": 125000},
+        work_note="Industrial Centre Line report prepared offline.",
+    )["task"]
+    assert industrial["retrospectiveReady"] and industrial["estimationSummary"]["totalEstimatedCost"] == 125000
+
     estimation = workflow.create_task(task_payload("estimation", f"Estimate {suffix}"), father)
     estimation_state = {
         "propertyType": "residential",

@@ -196,7 +196,9 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   lists.
 - “Payments” opens Completed reports requiring payment tracking.
 - “Reports” opens Closed reports.
-- Recent Activity can be filtered by state.
+- Recent Activity can be filtered by state. The signed-in header uses compact
+  Payments and Activity shortcuts to the dashboard sections, with SVG icons
+  and accessible names at narrow widths. Assignments remain in sidebar navigation.
 - Completed and Closed task rows with a retained report expose a direct
   download icon without requiring the task to be opened. The task detail view
   also exposes the retained report download. Completed uses the latest valid
@@ -227,7 +229,8 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   “All reports” as its category control and “Re-Valuation” as the linked
   valuation category label. The heading shares its desktop row with the period
   summary and New assignment. Its supporting line describes valuation and
-  construction reporting, assignment progress, fees and payments. Doughnut
+  construction reporting, assignment progress, fees and payments. A decorative
+  construction scene sits behind the dashboard heading on wider layouts. Doughnut
   legends separate Count and % columns, with clean flush
   segment boundaries. Institution section headings and report-type rows use
   decorative SVG icons; report labels use a compact shared column so the bars
@@ -240,7 +243,8 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   institution payment bars, analysis toggle or payment-view control. It defaults
   to all institutions within the shared period; its institution selector narrows
   the three amounts and collection doughnut, and All institutions resets it.
-  Financial views remain CEO-only.
+  Financial views remain CEO-only. The collection doughnut uses its compact
+  118px diameter and shares the satin finish of the two analysis doughnuts.
 - The dashboard places institution analysis beside assignment status, and
   payment summary beside report types on roomy desktop screens. The right
   panel stacks a compact Assignment Status chart above Workload by Institution
@@ -432,14 +436,24 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   including the total area of all floors represented on a typical sheet. Report
   Setup and both Abstract layouts have no Overall Plinth Area field or aggregate
   area wording. Legacy overall-area values are ignored in newly generated output;
-  individual areas populate worksheet headings and never drive cost calculations.
+  individual areas populate worksheet headings. They affect measurements only
+  when explicitly used as the basis for the sand filling area.
 - Every task-linked report form starts with its work-note composer collapsed.
   Add note/Hide note toggles it; Save note submits it. A required completion note
   reveals/focuses the composer, preserving all existing note and offline-note rules.
-- All report forms offer a compact draggable calculator at the end of the section
-  sidebar and hide numeric spinner arrows while preserving number validation.
-  Calculator history is local to the signed-in user, task (or practice report),
-  and tenant calendar day, surviving reload/dismissal in that browser only. It
+- All signed-in pages offer the compact draggable calculator in their left
+  sidebar. Report forms hide numeric spinner arrows while preserving number validation.
+  Mouse-wheel and trackpad scrolling leave numeric input values intact.
+- Editable numeric fields throughout the app accept basic arithmetic with
+  decimals, parentheses, addition, subtraction, multiplication and division.
+  Leaving the field commits the result through its existing validation and
+  calculations. Invalid expressions stay visible for correction and are
+  excluded from report and payment updates. Codes and identifiers use literal
+  entry.
+  Calculator history is local to the signed-in user and tenant calendar day.
+  Task detail and task reports share that task’s history, each practice report
+  has its own, and other workspace pages share a daily scratch history.
+  History survives reload/dismissal in that browser only. It
   supports Basic and Scientific modes, arithmetic, decimals, percentages, powers,
   roots, logarithms, factorial, trigonometric/hyperbolic and inverse functions,
   constants, scientific notation, random numbers and memory controls. Degrees
@@ -451,7 +465,10 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   generation. Complete offline and upload exposes attachment first, followed by
   extracted or manually entered component totals and one substantive upload note.
   Optional workbook-template configuration remains available without making it
-  mandatory for retrospective uploads. No photographs or map are required.
+  mandatory for retrospective uploads. Industrial Centre Line estimates use
+  Complete offline and upload with a completed retrospective report. The app
+  provides online entry and workbook templates for industrial Long Wall / Short
+  Wall estimates. No photographs or map are required.
 - New supported online estimation worksheets have a Dimensions & Defaults step
   between component selection and measurements. Each floor or independent component
   uses its own outside wall dimensions, applicable run and column counts, and editable
@@ -459,8 +476,66 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   rates, independent measurements, lump sums and custom entries. Older worksheets
   can use this step explicitly or continue with their saved manual measurements.
   Inputs share a baseline within each row when their labels wrap.
+  The lowest RCC floor's outside dimensions are entered manually. On an upper
+  worksheet, each outside dimension can default to the edge-to-edge roof slab
+  dimension of the physical floor immediately below in the same building.
+  Typical Floors use the slab below the first floor in the group as their
+  starting point. Users can override either axis and clear it to restore the
+  link. A revised slab updates linked dimensions only. Previously saved manual
+  dimensions and the upper worksheet's own wall runs and room schedule are
+  retained. Each RCC worksheet’s Building dimensions also provides shared roof
+  slab length and width. Applying them fills the slab, flooring, waterproofing,
+  slab-based ceiling plastering, and applicable sand filling. Individual
+  measurement overrides take precedence.
 - RCC uses long-wall and short-wall layer adjustments, or the perimeter and user-entered
-  centre-wall runs on Centre Line worksheets. Shed configurations offer Storage Shed
+  centre-wall runs on Centre Line worksheets. New commercial and residential
+  RCC Centre Line worksheets calculate the exterior perimeter from outside
+  dimensions and wall thickness, with optional overrides by layer. Existing
+  whole-perimeter overrides remain editable under Exterior perimeter overrides.
+  Counted crosswalls have layer selection and overrides. Matching-junction
+  width adjustments default on for new wall runs. Saved choices and manual
+  overrides take precedence. The foundation layout belongs to the lowest
+  worksheet in new RCC building setups. Walls and column
+  pits can use separate PCC thicknesses. Centre Line ceiling defaults to a
+  25% beam allowance and 0% opening deduction, with separate editable masonry
+  and wall-plaster opening deductions. Rooms & Finishes and Wall Runs are
+  available only in Centre Line setup. Existing Long Wall / Short Wall room
+  measurements remain in their saved worksheets. Centre Line uses one
+  per-worksheet room schedule for both plastering items. A measured room uses count × length × width for the
+  ceiling and count × perimeter × height for walls, with measured area overrides.
+  The worksheet-level ceiling checkbox defaults on. Clearing it uses the shared
+  slab dimensions for ceiling plastering while wall plastering still uses the
+  rooms. The ceiling also uses the slab when there are no measured rooms. The
+  worksheet and generated Excel show measured rooms before the applicable
+  allowance and final quantity. The Steel reinforcement settings expose each linked steel
+  factor and slab thickness. Both Centre Line types use 100 kg/m³ for columns
+  and 70 kg/m³ for slab steel on foundation worksheets, and 150 and 100 kg/m³
+  respectively on upper worksheets. Saved values take precedence.
+- For either measurement method, the worksheet copy options are Defaults only,
+  Dimensions only, and Dimensions and defaults. Dimensions only uses the
+  compatible destination worksheet's own defaults. Each measured row has one
+  editable Qty field showing the calculated quantity when available. A value
+  entered there takes precedence in the form, dependent calculations and
+  workbook. Clearing it restores the calculated quantity. Applying a setup
+  preserves entered quantities and rates. Measurements may also be entered
+  without first applying a dimensions setup. A standard item can be removed
+  or restored per worksheet. Removal excludes its rows and amount from the
+  completed workbook and renumbers subsequent standard items. RCC sand filling
+  defaults to roof slab length × width with the existing filling depth.
+  Users can override the plan dimensions or enter a measured area or an
+  editable percentage of the worksheet’s plinth area. A measured area takes
+  precedence over the percentage and plan dimensions.
+- A new Typical Floors group uses per-floor dimensions, rates and lump sums.
+  Each line amount multiplies by the number of floors once, and the Abstract
+  names every grouped floor and includes the group total once. The lowest
+  floor, with its foundation work, stays separate in a new group. Existing
+  combined-entry groups retain their saved basis. Calculated values and Excel
+  display at most two decimal places. Online estimates and their generated
+  workbooks price each line using its displayed quantity and unit rate, then
+  round the line amount to two decimal places. Measurement subtotals retain
+  their calculation precision before pricing. Previously retained reports
+  keep their original calculation basis.
+- Shed configurations offer Storage Shed
   separately from Machinery Hall and use the respective geometry, structural steel and
   roofing measurements. Shed brickwork uses gross quantity and wall plaster retains
   its editable opening deduction. Workbook quantities use the same applied measurements
@@ -546,9 +621,11 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Karnataka Bank reports include the bank-specific Format/Reference content
   and Branch Sanction page. Reports for other institutions omit those items.
 - Progress and Completion default to Fill online for a linked finalized estimate
-  with retained component costs. The CEO and assigned employee may choose Upload
-  retrospective report from Report Setup. Review the assessment, attach a DOCX or
-  PDF and record one work note, then mark the task Completed separately. The same
+  with retained component costs. The CEO and assigned employee can choose
+  Fill online or Upload retrospective report in Preparation Method, directly
+  after Report Setup. The retrospective route keeps the assessment and replaces
+  the online generation steps with a DOCX or PDF upload and one work note.
+  Mark the task Completed separately. The same
   linked-estimate and assessment rules apply. A changed assessment or revised
   linked estimation requires review and a fresh attachment. The task records its
   own preparation method while the CEO filter still uses the linked estimate's.
@@ -617,7 +694,9 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   colours. Collapsed sidebars display the original-colour ValuX logo instead;
   the dashboard also displays the full branding at its content footer while
   its application sidebar is collapsed.
-- The shared header has My Account and a notification bell beside appearance.
+- The shared top header uses a pale blue-grey background in light mode and
+  muted slate in dark mode. It has My Account and a notification bell beside
+  the icon-only appearance control, which is labelled for assistive technology.
   Notifications show task/customer, event, actor and tenant-local time, with
   links to assignment details, individual read controls and Mark all as read.
   Read state is durable per user; lists are bounded and load more on request.

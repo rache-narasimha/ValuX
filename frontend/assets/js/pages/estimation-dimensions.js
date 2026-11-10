@@ -5,31 +5,60 @@
   const storageKey = "storage_shed";
   const hallKeys = new Set([storageKey, "heavy_machinery_hall", "normal_machinery_hall", "commercial_shed_hall"]);
 
+  const geometryFields = new Set([
+    "long", "short", "longCount", "shortCount", "columns", "measuredPerimeter",
+    "fillArea", "fillAreaPercent", "fillLength", "fillWidth", "slabLength", "slabWidth",
+    "ceilingLength", "ceilingWidth", "coatLength", "coatWidth", "plasterRun", "floorLength", "floorWidth",
+  ]);
+
+  const wallLayers = [
+    ["excavation", "Wall excavation"], ["pcc", "Wall PCC"],
+    ["masonry-foundation", "Foundation masonry"], ["masonry-basement", "Basement masonry"],
+    ["concrete-plinth", "Plinth beams"], ["concrete-lintel", "Lintels"],
+    ["concrete-roof", "Roof beams"], ["brick", "Masonry"],
+  ];
+  const starterRooms = ["Hall", "Reception", "Kitchen", "Lift and Staircase Room", "Room", "Office Room", "Toilet", "Passage"];
+
   function profile(key, schema) {
     const ids = new Set(schema.items().flatMap((item) => item.rows.map((row) => row.id)));
     const shed = hallKeys.has(key);
     const storage = key === storageKey;
     const centre = ids.has("brick-centre-1");
+    const layers = centre ? wallLayers.filter(([id]) => ids.has(`${id}-centre-1`)) : [];
     const groups = [];
+    const lowest = ids.has("concrete-footings");
+    const centreSteel = centre ? {
+      "steel-columns": lowest ? 100 : 150,
+      "steel-roof-slab": lowest ? 70 : 100,
+    } : {};
     function group(label, definitions) {
       if (!definitions.length) return;
-      groups.push({ label, fields: definitions.map(([id, label, value, kind]) => ({ id, label, value, kind })) });
+      groups.push({ label, fields: definitions.map(([id, label, value, kind]) => ({ id, label, value, kind, geometry: geometryFields.has(id) || id.startsWith("perimeter-") })) });
     }
     const dims = (prefix, label, values) => values.map((value, index) => [
       prefix + ["Length", "Width", "Depth"][index], label + [" length (m)", " width (m)", " depth / height (m)"][index], value,
     ]);
     group("Building dimensions", [
-      ["long", "Long wall, outside to outside (m)", "", "required"],
-      ["short", "Short wall, outside to outside (m)", "", "required"],
+      ["long", centre ? "Outside length (m)" : "Long wall, outside to outside (m)", "", centre ? "" : "required"],
+      ["short", centre ? "Outside width (m)" : "Short wall, outside to outside (m)", "", centre ? "" : "required"],
       ...(!centre && !storage ? [["longCount", "Number of long walls", 2, "count"], ["shortCount", "Number of short walls", 2, "count"]] : []),
       ["columns", "Number of columns", "", "required-count"], ["wall", "Wall thickness (m)", 0.23],
       ...(shed ? [["brickHeight", "Measured average brickwork height (m)", "", "required"]] : []),
-      ...(centre ? Array.from({ length: 6 }, (_, index) => [`centre${index + 1}`, `Measured centre-wall run ${index + 1} (m)`, ""]) : []),
+      ...(ids.has("concrete-roof-slab") ? [
+        ["slabLength", "Roof slab length (m)", ""], ["slabWidth", "Roof slab width (m)", ""],
+      ] : []),
     ]);
+    group("Exterior perimeter overrides by layer", layers.map(([id, label]) =>
+      [`perimeter-${id}`, `${label} perimeter override (m)`, ""]));
     group("Excavation, foundation and filling", ids.has("excavation-total") ? [
       ["excWidth", "Wall excavation width (m)", 0.90], ["excDepth", "Wall excavation depth (m)", shed ? 2.10 : 1.15],
       ...dims("pit", "Column pit", [1.20, 1.20, shed ? 2.10 : 2.12]),
-      ["pccDepth", "PCC thickness (m)", shed ? 0.30 : 0.15],
+      ["pccDepth", centre ? "Wall PCC thickness (m)" : "PCC thickness (m)", shed ? 0.30 : 0.15],
+      ...(centre ? [["pitPccDepth", "Column-pit PCC thickness (m)", 0.30]] : []),
+      ...(!shed ? [
+        ["fillArea", "Measured filling area override (m²)", ""],
+        ["fillAreaPercent", "Filling area as % of plinth area", "", "percent"],
+      ] : []),
       ["foundationWidth", "Foundation masonry width (m)", 0.60], ["foundationDepth", "Foundation masonry depth (m)", shed ? 1.80 : 1],
       ["basementWidth", "Basement masonry width (m)", 0.45], ["basementDepth", "Basement masonry height (m)", shed ? 0.91 : 1],
       ["fillLength", "Filling length override (m)", ""], ["fillWidth", "Filling width override (m)", ""],
@@ -47,12 +76,12 @@
       ["lintelWidth", "Lintel width (m)", 0.23], ["lintelDepth", "Lintel depth (m)", shed ? 0.30 : 0.23],
       ["roofBeamWidth", "Roof beam width override (m)", ""], ["roofBeamDepth", "Roof beam depth (m)", 0.30],
       ...(shed ? [["roofLongCount", storage ? "Roof beam perimeter runs" : "Number of long roof beams", 0, "count"],
-        ...(!storage ? [["roofShortCount", "Number of short roof beams", 0, "count"]] : [])] : [
-        ["slabLength", "Roof slab length override (m)", ""], ["slabWidth", "Roof slab width override (m)", ""],
-        ["slabDepth", "Roof slab thickness for steel (m)", 0.125],
-      ]),
+        ...(!storage ? [["roofShortCount", "Number of short roof beams", 0, "count"]] : [])] : []),
+    ]);
+    group("Steel reinforcement", [
+      ...(ids.has("steel-roof-slab") ? [["slabDepth", "Roof slab thickness for steel (m)", 0.125]] : []),
       ...schema.items().flatMap((item) => item.rows).filter((row) => row.id.startsWith("steel-") && row.sourceId)
-        .map((row) => [row.id, `${row.label} steel (kg/m³)`, row.multiplier ?? 80]),
+        .map((row) => [row.id, `${row.label} steel (kg/m³)`, centreSteel[row.id] ?? row.multiplier ?? 80]),
     ]);
     group("Masonry, plaster and flooring", [
       ["brickWidth", "Brickwork thickness override (m)", ""],
@@ -62,9 +91,10 @@
       ...(ids.has("ceiling-beams") ? [
         ["ceilingLength", "Ceiling length override (m)", ""], ["ceilingWidth", "Ceiling width override (m)", ""],
         ["ceilingAllowance", "Ceiling beam allowance (%)", 25, "percent"],
-        ...(ids.has("ceiling-net") ? [["ceilingDeduction", "Ceiling opening deduction (%)", 10, "percent"]] : []),
+        ...(ids.has("ceiling-net") ? [["ceilingDeduction", "Ceiling opening deduction (%)", centre ? 0 : 10, "percent"]] : []),
         ["coatLength", "Roof coating length override (m)", ""], ["coatWidth", "Roof coating width override (m)", ""],
       ] : []),
+      ...(centre && ids.has("ceiling-inside") ? [["roomHeight", "Default room plaster height (m)", 3]] : []),
       ...(!centre ? [
         ["plasterRun", "Wall plaster run override (m)", ""], ["plasterFaces", "Wall plaster faces", 2, "count"],
         ["plasterHeight", shed ? "Wall plaster height override (m)" : "Wall plaster height (m)", shed ? "" : 3],
@@ -86,10 +116,10 @@
       ["roofAdditional", "Additional roof area (m²)", ""],
       ...(ids.has("heavy-foundation") ? [["machineArea", "Measured heavy machinery foundation area (m²)", ""]] : []),
     ]);
-    return { ids, groups, shed, storage, centre };
+    return { ids, groups, shed, storage, centre, layers };
   }
 
-  function derive(definition, values) {
+  function derive(definition, values, additions = {}) {
     const { ids, shed, storage, centre } = definition;
     const v = {};
     for (const { fields } of definition.groups) for (const { id, label, value, kind } of fields) {
@@ -102,10 +132,16 @@
     }
 
     const { long, short, wall, columns } = v;
-    const lc = long - wall;
-    const sc = short - wall;
-    const perimeter = 2 * (lc + sc);
-    if (wall <= 0 || short <= 2 * wall || long < short) throw new Error("Enter positive wall dimensions with the long side at least as long as the short side and the short side greater than twice the wall thickness.");
+    const slabLength = v.slabLength ?? long;
+    const slabWidth = v.slabWidth ?? short;
+    const lc = long == null ? null : long - wall;
+    const sc = short == null ? null : short - wall;
+    const measuredPerimeter = centre ? optionalNumber(values.measuredPerimeter, "the saved exterior perimeter") : null;
+    if (measuredPerimeter === 0) throw new Error("Enter a positive exterior perimeter override.");
+    if (measuredPerimeter == null && (wall <= 0 || long == null || short <= 2 * wall || long <= 2 * wall || (!centre && long < short))) {
+      throw new Error(centre ? "Enter outside length, outside width and wall thickness to calculate the centre-line perimeter." : "Enter positive wall dimensions with the long side at least as long as the short side and the short side greater than twice the wall thickness.");
+    }
+    const perimeter = measuredPerimeter ?? 2 * (lc + sc);
     const rows = {};
     function set(id, fields) { if (ids.has(id)) rows[id] = fields; }
     function measure(id, no, length, breadth, depth) {
@@ -119,16 +155,35 @@
     const lintelRun = v.lintelRun ?? basementRun - (plinthWidth - v.lintelWidth) - long;
     const brickRun = v.brickRun ?? perimeter - long;
     const brickWidth = v.brickWidth ?? wall;
+    const crosswalls = centre ? (values.wallRuns || legacyWallRuns(values)) : [];
+    const layerWidths = {
+      excavation: v.excWidth, pcc: v.excWidth, "masonry-foundation": v.foundationWidth,
+      "masonry-basement": v.basementWidth, "concrete-plinth": plinthWidth,
+      "concrete-lintel": v.lintelWidth, "concrete-roof": v.roofBeamWidth ?? v.lintelWidth, brick: brickWidth,
+    };
+    const wallSchedules = crosswalls.map((run) => wallSchedule(run, definition.layers, layerWidths));
+    function scheduledRow(prototype, index, id, label, fields, instanceBase = id) {
+      if (ids.has(prototype) && index <= 6) {
+        rows[prototype] = { ...fields, setupLabel: label };
+      } else if (ids.has(id)) {
+        const rowId = `setup-${instanceBase}-${index}`;
+        (additions[id] ||= []).push({ id: rowId, label });
+        rows[rowId] = fields;
+      }
+    }
 
     function runs(id, width, depth, allRound, longCount = v.longCount, shortCount = v.shortCount) {
       if (storage) {
         measure(`${id}-long`, longCount ?? 1, allRound, width, depth);
         measure(`${id}-short`, 0, 0, 0, 0);
       } else if (centre) {
-        measure(`${id}-centre-1`, 1, perimeter, width, depth);
-        for (let index = 1; index <= 6; index++) {
-          const length = v[`centre${index}`];
-          if (length !== null) measure(`${id}-centre-${index + 1}`, 1, length, width, depth);
+        if (!ids.has(`${id}-centre-1`)) return;
+        measure(`${id}-centre-1`, 1, v[`perimeter-${id}`] ?? perimeter, width, depth);
+        for (const run of wallSchedules) {
+          if (!run.lengths.has(id)) continue;
+          const length = run.lengths.get(id);
+          scheduledRow(`${id}-centre-${run.slot + 1}`, run.slot, `${id}-centre-2`, run.label,
+            { no: run.count, length, breadth: width, depth });
         }
       } else {
         measure(`${id}-long`, longCount, lc + width, width, depth);
@@ -139,12 +194,15 @@
       runs("excavation", v.excWidth, v.excDepth, perimeter);
       runs("pcc", v.excWidth, v.pccDepth, perimeter);
       measure(centre ? "excavation-centre-8" : "excavation-columns", columns, v.pitLength, v.pitWidth, v.pitDepth);
-      measure(centre ? "pcc-centre-8" : "pcc-columns", columns, v.pitLength, v.pitWidth, v.pccDepth);
+      measure(centre ? "pcc-centre-8" : "pcc-columns", columns, v.pitLength, v.pitWidth, centre ? v.pitPccDepth : v.pccDepth);
       runs("masonry-foundation", v.foundationWidth, v.foundationDepth, foundationRun);
       runs("masonry-basement", v.basementWidth, v.basementDepth, basementRun);
-      const fillLength = storage ? lc : shed ? long + v.excWidth - v.fillOffset : long - 2 * wall;
-      const fillWidth = storage ? sc : shed ? short - v.excWidth + v.fillOffset : short - 2 * wall;
-      measure("filling-basement", 1, v.fillLength ?? fillLength, v.fillWidth ?? fillWidth, v.fillDepth ?? v.basementDepth);
+      const fillLength = storage ? lc : shed ? long + v.excWidth - v.fillOffset : slabLength;
+      const fillWidth = storage ? sc : shed ? short - v.excWidth + v.fillOffset : slabWidth;
+      const fillDepth = v.fillDepth ?? v.basementDepth;
+      const fillArea = !shed ? fillingArea(v.fillArea, v.fillAreaPercent, values.plinthArea) : null;
+      if (fillArea != null) set("filling-basement", { no: null, length: null, breadth: null, depth: fillDepth, setupQuantity: fillArea * fillDepth });
+      else measure("filling-basement", 1, v.fillLength ?? fillLength, v.fillWidth ?? fillWidth, fillDepth);
     }
     measure("concrete-footings", columns, v.footingLength ?? v.pitLength, v.footingWidth ?? v.pitWidth, v.footingDepth);
     measure("concrete-pedestals", columns, v.pedestalLength, v.pedestalWidth, v.pedestalDepth);
@@ -155,20 +213,50 @@
     runs("concrete-roof", roofBeamWidth, v.roofBeamDepth, lintelRun,
       shed ? v.roofLongCount : v.longCount, shed ? v.roofShortCount : v.shortCount);
 
-    const slabLength = v.slabLength ?? long;
-    const slabWidth = v.slabWidth ?? short;
     measure("concrete-roof-slab", 1, slabLength, slabWidth);
     for (const { fields } of definition.groups) for (const { id } of fields) {
-      if (id.startsWith("steel-")) set(id, { factor: id === "steel-roof-slab" ? v[id] * v.slabDepth : v[id] });
+      if (id === "steel-roof-slab") {
+        set(id, { factor: v[id] * v.slabDepth, steelRate: v[id], slabDepth: v.slabDepth });
+      } else if (id.startsWith("steel-")) set(id, { factor: v[id] });
     }
     runs("brick", brickWidth, v.brickHeight, brickRun);
     set("brick-net", { factor: shed ? 1 : 1 - v.brickDeduction / 100 });
-    measure("ceiling-inside", 1, v.ceilingLength ?? slabLength, v.ceilingWidth ?? slabWidth);
+    const legacyBasis = values.ceilingBasis;
+    const rooms = ids.has("ceiling-inside")
+      ? (values.rooms || []).map((room) => roomQuantity(room, v.roomHeight ?? values.roomHeight ?? 3, values.roomCeiling !== false, legacyBasis, centre))
+      : [];
+    function addRoom(anchor, room, fields) {
+      const id = `setup-${anchor}-${room.slot}`;
+      (additions[anchor] ||= []).push({ id, label: room.label });
+      rows[id] = fields;
+    }
+
+    if (rooms.some((room) => room.ceiling)) {
+      set("ceiling-inside", { setupOmitted: true });
+      for (const room of rooms) if (room.ceiling) addRoom("ceiling-inside", room, room.ceiling);
+    } else {
+      measure("ceiling-inside", 1, v.ceilingLength ?? slabLength, v.ceilingWidth ?? slabWidth);
+    }
     set("ceiling-beams", { factor: v.ceilingAllowance / 100 });
     set("ceiling-net", { factor: 1 - v.ceilingDeduction / 100 });
     measure("waterproofing-roof", 1, v.coatLength ?? slabLength, v.coatWidth ?? slabWidth);
-    const wallRun = lc * v.longCount + sc * v.shortCount;
-    measure("plaster-gross", v.plasterFaces, v.plasterRun ?? (storage ? brickRun : shed ? wallRun / 2 : wallRun), null, v.plasterHeight ?? v.brickHeight);
+
+    const plasterRooms = rooms.filter((room) => room.plaster);
+    if (centre) {
+      if (plasterRooms.length && legacyBasis === undefined) {
+        for (let slot = 1; slot <= 6; slot += 1) set(`plaster-space-${slot}`, { setupOmitted: true });
+      }
+      for (const room of plasterRooms) {
+        const anchor = legacyBasis === undefined ? "plaster-space-6" : "plaster-space-1";
+        scheduledRow(`plaster-space-${room.slot}`, room.slot, anchor, room.label, room.plaster, "plaster-space-1");
+      }
+    } else if (plasterRooms.length) {
+      set("plaster-gross", { setupOmitted: true });
+      for (const room of plasterRooms) addRoom("plaster-gross", room, room.plaster);
+    } else {
+      const wallRun = lc * v.longCount + sc * v.shortCount;
+      measure("plaster-gross", v.plasterFaces, v.plasterRun ?? (storage ? brickRun : shed ? wallRun / 2 : wallRun), null, v.plasterHeight ?? v.brickHeight);
+    }
     set("plaster-net", { factor: 1 - v.plasterDeduction / 100 });
     measure("flooring", 1, v.floorLength ?? (shed ? long - 2 * wall : slabLength), v.floorWidth ?? (shed ? short - 2 * wall : slabWidth), v.floorDepth);
 
@@ -194,11 +282,85 @@
     return rows;
   }
 
+  function fillingArea(measuredArea, percent, plinthArea) {
+    if (measuredArea != null) return measuredArea;
+    if (percent == null) return null;
+    const area = optionalNumber(plinthArea, "the plinth area");
+    if (!(area > 0) && percent > 0) throw new Error("Enter the plinth area (sft.) to use a filling area percentage.");
+    return (area ?? 0) * 0.09290304 * percent / 100;
+  }
+
+  function optionalNumber(value, label, { count = false } = {}) {
+    if (value == null || value === "") return null;
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0 || (count && !Number.isInteger(number))) throw new Error(`Check ${label}.`);
+    return number;
+  }
+
+  function legacyWallRuns(values) {
+    return Array.from({ length: 6 }, (_, index) => ({
+      slot: index + 1, label: `CW${index + 1}`, count: values[`centre${index + 1}`] ? 1 : "",
+      length: values[`centre${index + 1}`] ?? "",
+    }));
+  }
+
+  function wallSchedule(run, layers, widths) {
+    const label = String(run.label || `CW${run.slot}`).trim() || `CW${run.slot}`;
+    const count = optionalNumber(run.count, `${label} count`, { count: true });
+    let length = optionalNumber(run.length, `${label} length`);
+    const lengths = new Map();
+    if (count == null && length == null && !Object.values(run.overrides || {}).some((value) => value !== "")) return { ...run, label, lengths };
+    if (!(count > 0) || !(length > 0)) throw new Error(`Enter a positive count and length for ${label}.`);
+    const linkedLayers = {
+      "masonry-foundation": ["pcc", "excavation"],
+      "masonry-basement": ["masonry-foundation"],
+      "concrete-lintel": ["concrete-plinth"],
+    };
+    let prior = "";
+    for (const [id, name] of layers) {
+      if (run.layers && !run.layers.includes(id)) continue;
+      const override = optionalNumber(run.overrides?.[id], `${label} ${name.toLowerCase()} length`);
+      if (override != null) length = override;
+      else if (run.adjust !== false && linkedLayers[id]?.includes(prior)) length += widths[prior] - widths[id];
+      if (length < 0) throw new Error(`Check the adjusted ${name.toLowerCase()} length for ${label}.`);
+      lengths.set(id, length);
+      prior = id;
+    }
+    return { ...run, label, count, lengths };
+  }
+
+  function roomQuantity(room, defaultHeight, roomCeiling, legacyBasis, centre) {
+    const label = String(room.label || `Space ${room.slot}`).trim() || `Space ${room.slot}`;
+    const count = optionalNumber(room.count, `${label} count`, { count: true });
+    const length = optionalNumber(room.length, `${label} length`);
+    const width = optionalNumber(room.width, `${label} width`);
+    const ceilingArea = optionalNumber(room.ceilingArea, `${label} ceiling area`);
+    const wallArea = optionalNumber(room.wallArea, `${label} wall area`);
+    const height = optionalNumber(room.height, `${label} plaster height`) ?? optionalNumber(defaultHeight, "the default room plaster height") ?? 3;
+    if ([count, length, width, ceilingArea, wallArea].every((value) => value == null)) return { ...room, label, ceiling: null, plaster: null };
+    if (!(count > 0)) throw new Error(`Enter the number of matching spaces for ${label}.`);
+    const rectangle = length != null && width != null;
+    const ceilingEnabled = roomCeiling && (legacyBasis === undefined || (legacyBasis === "rooms" && room.ceiling !== false));
+    const plasterEnabled = legacyBasis === undefined || (centre && room.plaster !== false);
+    if (ceilingEnabled && ceilingArea == null && !rectangle) throw new Error(`Enter dimensions or a ceiling area for ${label}.`);
+    if (plasterEnabled && wallArea == null && (!rectangle || height == null)) throw new Error(`Enter dimensions and plaster height, or a wall area for ${label}.`);
+    return {
+      ...room, label,
+      ceiling: !ceilingEnabled ? null : ceilingArea != null
+        ? { no: count, length: null, breadth: null, setupQuantity: count * ceilingArea }
+        : { no: count, length, breadth: width },
+      plaster: !plasterEnabled ? null : wallArea != null
+        ? { setupQuantity: count * wallArea }
+        : { no: count, length: 2 * (length + width), depth: height },
+    };
+  }
+
   function rowChanges(row, input, storage) {
     if (storage && (row.id === "truss-a" || row.id.endsWith("-short"))) return { hidden: true };
     const changes = storage && row.id.endsWith("-long")
       ? { label: row.id === "brick-long" ? "Measured brickwork run" : row.id === "concrete-lintel-long" ? "Measured lintel run" : "All-round building" }
       : {};
+    if (input?.setupLabel) changes.label = input.setupLabel;
     const factor = input?.factor ?? (storage && row.id === "brick-net" ? 1 : null);
     if (row.calculation === "percentage" && factor != null) {
       if (row.id === "ceiling-beams") changes.label = `Add ${percent(factor)}% for beams`;
@@ -213,5 +375,5 @@
 
   function percent(fraction) { return Number((fraction * 100).toFixed(4)); }
 
-  root.EstimationDimensions = { profile, derive, rowChanges };
+  root.EstimationDimensions = { profile, derive, rowChanges, legacyWallRuns, starterRooms };
 })(globalThis);

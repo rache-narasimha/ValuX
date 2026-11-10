@@ -93,6 +93,7 @@ script tags rather than imports. Their public names are integration boundaries:
 | `EmployeePicker` | `components/employee-picker.js` | Assignment/transfer employee selector |
 | `PaymentDialog` | `components/payment-dialog.js` | Completed-task payment popup |
 | `ValuationUI` | `core/shared.js` | Shared report-form controls, parsing, dates and file reading |
+| `NumericEntry` | `core/numeric-entry.js` | Arithmetic entry and validation for editable numeric controls |
 | `Appearance` | `core/appearance.js` | Persisted light/dark preference |
 | `AppShell` | `core/app-shell.js` | Header, sidebar and responsive navigation |
 

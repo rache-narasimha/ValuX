@@ -137,6 +137,36 @@ def assert_custom_rows_and_items(generate):
     assert f"L{custom_item_total}" in sheet.cell(totals["total"], 12).value
 
 
+def assert_standard_item_removal(generate):
+    state = controlled_industrial_state()
+    form = state["components"][0]["sheets"][0]["formData"]
+    form["omittedItems"] = {"standard-4": True}
+    form["rows"]["steel-total"]["rate"] = 65
+    form["rows"]["pcc-total"] = {"directQuantity": 42.0696, "rate": 3561.89}
+    form["finalAmount"] = 999999
+    form["customRows"] = {"concrete-plinth-long": [{"id": "removed-line", "label": "Removed plinth entry"}]}
+    workbook = workbook_from(generate(state))
+    sheet = workbook["RCC Building 1 - Ground Floor"]
+    totals = detail_totals(sheet)
+    serials = [sheet.cell(row, 1).value for row in range(17, totals["total"]) if sheet.cell(row, 1).data_type == "n" and sheet.cell(row, 1).value is not None]
+    assert serials == list(range(1, 24))
+    assert sheet.cell(38, 1).value == 5
+    assert not any("Removed plinth entry" in str(sheet.cell(row, 2).value or "") for row in range(17, totals["total"]))
+    steel = row_containing(sheet, "Footings @")
+    assert sheet.cell(steel, 10).value == '=IF(ISNUMBER($XFD$1),$XFD$1*75,"")'
+    pcc_total = next(cell.row for cell in sheet["J"] if cell.value == 42.0696)
+    assert sheet.cell(pcc_total, 12).value.endswith(f'ROUND(ROUND(J{pcc_total},2)*ROUND(K{pcc_total},2),2),"")')
+    assert sheet.cell(totals["estimated"], 12).data_type == "f"
+    assert "One Lakh Fifty One Thousand Four Hundred Seventy Four" in sheet.cell(totals["estimated"] + 1, 1).value
+    workbook.close()
+
+    del form["omittedItems"]
+    workbook = workbook_from(generate(state))
+    sheet = workbook["RCC Building 1 - Ground Floor"]
+    assert sheet.cell(row_containing(sheet, "Removed plinth entry"), 2).value == "Removed plinth entry"
+    workbook.close()
+
+
 def assert_centre_line_and_abstract(generate):
     state = {
         "propertyType": "commercial",
@@ -326,6 +356,142 @@ def assert_offline_summary_validation():
         raise AssertionError("Missing, blank and additional workbook content must be rejected")
 
 
+
+def assert_ceiling_room_schedule(generate):
+    from backend.app.estimation import generator
+
+    state = controlled_industrial_state()
+    state["propertyType"] = "commercial"
+    state["details"]["measurementMethod"] = "centre_line"
+    data = state["components"][0]["sheets"][0]["formData"]
+    data["dimensionSetup"] = {"additions": {"ceiling-inside": [
+        {"id": "setup-ceiling-inside-1", "label": "Room A"},
+        {"id": "setup-ceiling-inside-2", "label": "Room B"},
+    ]}}
+    data["rows"] = {
+        "ceiling-inside": {"setupOmitted": True},
+        "setup-ceiling-inside-1": {"no": 2, "length": 5, "breadth": 4},
+        "setup-ceiling-inside-2": {"no": 1, "setupQuantity": 10},
+        "ceiling-beams": {"factor": 0.25},
+        "ceiling-net": {"factor": 1, "rate": 100},
+        "concrete-roof-slab": {"no": 1, "length": 27.2, "breadth": 17.89},
+        "filling-basement": {"no": 1, "length": 27.2, "breadth": 17.89, "depth": 0.9},
+        "waterproofing-roof": {"no": 1, "length": 27.2, "breadth": 17.89},
+        "steel-roof-slab": {"factor": 8.75, "steelRate": 70, "slabDepth": 0.125},
+    }
+    manifest = generator._load_manifest()
+    spec = generator._detail_specs(state, manifest)[0]
+    assert generator._effective_final_amount(spec, manifest) == 6250
+    workbook = workbook_from(generate(state))
+    sheet = workbook[spec.name]
+    room_a = row_containing(sheet, "Room A")
+    room_b = row_containing(sheet, "Room B")
+    beams = row_containing(sheet, "Add 25% for beams")
+    assert room_a + 1 == room_b == beams - 1
+    assert sheet.row_dimensions[room_a - 1].hidden
+    assert [sheet.cell(room_a, col).value for col in (6, 7, 8)] == [2, 5, 4]
+    assert sheet.cell(room_b, 10).value == 10
+    assert all(f"J{row}" in sheet.cell(beams, 10).value for row in (room_a, room_b))
+    assert all(f"J{row}" in sheet.cell(beams + 1, 10).value for row in (room_a, room_b, beams))
+    assert "ROUND(ROUND(" in sheet.cell(beams + 1, 12).value
+    coat = next(cell.row for cell in sheet["B"] if str(cell.value).strip().lower() == "over roof slab")
+    assert [sheet.cell(coat, col).value for col in (6, 7, 8)] == [1, 27.2, 17.89]
+    slab_steel = row_containing(sheet, "70 kg/m³, 0.125 m thick")
+    assert "*0.125*70" in sheet.cell(slab_steel, 10).value
+    workbook.close()
+
+    items = manifest["worksheets"][spec.template_key]["items"]
+    ceiling_index = next(index for index, item in enumerate(items)
+                         if any(row["id"] == "ceiling-inside" for row in item["rows"]))
+    data["omittedItems"] = {f"standard-{ceiling_index}": True}
+    workbook = workbook_from(generate(state))
+    assert not any(cell.value in {"Room A", "Room B"} for cell in workbook[spec.name]["B"])
+    workbook.close()
+
+
+    # The same schedule also generates wall-room rows for Long Wall / Short Wall.
+    del data["omittedItems"]
+    state["details"]["measurementMethod"] = "long_wall_short_wall"
+    data["dimensionSetup"]["additions"]["plaster-gross"] = [
+        {"id": "setup-plaster-gross-1", "label": "Room A walls"},
+        {"id": "setup-plaster-gross-2", "label": "Room B walls"},
+    ]
+    data["rows"].update({
+        "plaster-gross": {"setupOmitted": True},
+        "setup-plaster-gross-1": {"no": 2, "length": 18, "depth": 3},
+        "setup-plaster-gross-2": {"no": 1, "length": 14, "depth": 3},
+        "plaster-net": {"rate": 100},
+    })
+    spec = generator._detail_specs(state, manifest)[0]
+    assert generator._effective_final_amount(spec, manifest) == 19750
+    workbook = workbook_from(generate(state))
+    sheet = workbook[spec.name]
+    wall_room = row_containing(sheet, "Room A walls")
+    assert sheet.cell(wall_room + 1, 2).value == "Room B walls"
+    assert not sheet.row_dimensions[wall_room - 1].hidden
+    assert sheet.cell(wall_room - 1, 10).value is None
+    assert [sheet.cell(wall_room, col).value for col in (6, 7, 9)] == [2, 18, 3]
+    assert f"F{wall_room}*G{wall_room}*I{wall_room}" in sheet.cell(wall_room, 10).value
+    assert all(f"J{row}" in sheet.cell(wall_room + 2, 10).value for row in (wall_room, wall_room + 1))
+    workbook.close()
+
+
+def assert_grouped_floor_amounts_and_direct_quantities(generate):
+    from backend.app.estimation import generator
+
+    assert generator._displayed_price(42.0696, 3561.89) == 149848.71
+
+    state = controlled_industrial_state()
+    state["propertyType"] = "commercial"
+    state["details"]["measurementMethod"] = "centre_line"
+    component = state["components"][0]
+    component["sheets"] = [
+        {"key": "stilt", "label": "Stilt Floor", "level": 0, "layoutVersion": 2},
+        {
+            "key": "ground", "label": "Typical GF, FF & SF", "level": 1, "layoutVersion": 2,
+            "typicalFloorKeys": ["ground", "first", "second"], "typicalBasis": "per-floor",
+            "formData": {"manualMeasurements": True, "dimensionsRequired": True, "rows": {
+                "concrete-columns": {"directQuantity": 12.5, "rate": 100},
+                "steel-columns": {"factor": 150},
+                "steel-total": {"rate": 1},
+                "whitewashing": {"amount": 250},
+            }},
+        },
+    ]
+    manifest = generator._load_manifest()
+    spec = generator._detail_specs(state, manifest)[1]
+    assert spec.template_key == "commercial_rcc_upper_centre_line"
+    assert generator._effective_final_amount(spec, manifest) == 10125
+    with_workbook = workbook_from(generate(state))
+    sheet = with_workbook[spec.name]
+    assert with_workbook["Abstract"]["B17"].value == "Cost of construction for GF, FF & SF"
+    column = row_containing(sheet, "Columns")
+    assert sheet.cell(column, 10).value == 12.5
+    assert sheet.cell(column, 10).number_format == "#,##0.00"
+    assert sheet.cell(column, 12).value.endswith('*3,"")')
+    assert f"ROUND(ROUND(J{column},2)*ROUND(K{column},2),2)" in sheet.cell(column, 12).value
+    assert sheet.cell(row_containing(sheet, "White washing"), 12).value == "=250*3"
+    with_workbook.close()
+
+    del component["sheets"][1]["typicalBasis"]
+    legacy = generator._detail_specs(state, manifest)[1]
+    assert legacy.floor_multiplier == 1
+    assert generator._effective_final_amount(legacy, manifest) == 3375
+
+def assert_industrial_centre_line_requires_upload(generate):
+    state = controlled_industrial_state()
+    state["details"]["measurementMethod"] = "centre_line"
+    for mode in ("completed", "offline"):
+        try:
+            generate(state, mode=mode)
+        except ValueError as error:
+            assert "industrial Centre Line estimate offline" in str(error)
+        else:
+            raise AssertionError("Industrial Centre Line must use an externally completed report")
+    state["details"]["measurementMethod"] = "long_wall_short_wall"
+    assert workbook_from(generate(state, mode="offline")).sheetnames
+
+
 def main():
     generate = load_generator()
     identity_book = workbook_from(generate(controlled_industrial_state()))
@@ -334,13 +500,17 @@ def main():
     assert "QA Address" not in identity_text
     identity_book.close()
     assert_controlled_steel(generate)
+    assert_industrial_centre_line_requires_upload(generate)
     assert_custom_rows_and_items(generate)
+    assert_standard_item_removal(generate)
     assert_centre_line_and_abstract(generate)
     assert_compact_typical_and_offline(generate)
     assert_every_master_variant_is_selectable(generate)
     assert_a4_print_layout(generate)
     assert_canara_panel_list(generate)
     assert_offline_summary_validation()
+    assert_grouped_floor_amounts_and_direct_quantities(generate)
+    assert_ceiling_room_schedule(generate)
     print("PASS: deployable Python estimation generation")
 
 

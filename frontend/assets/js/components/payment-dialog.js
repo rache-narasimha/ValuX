@@ -32,9 +32,9 @@
 
   function values() {
     return {
-      estimated: document.getElementById("shared-payment-estimated").value,
-      agreed: document.getElementById("shared-payment-agreed").value,
-      received: document.getElementById("shared-payment-received").value,
+      estimated: NumericEntry.read(document.getElementById("shared-payment-estimated")),
+      agreed: NumericEntry.read(document.getElementById("shared-payment-agreed")),
+      received: NumericEntry.read(document.getElementById("shared-payment-received")),
       dueDate: document.getElementById("shared-payment-due").value,
       note: document.getElementById("shared-payment-note").value,
     };
@@ -80,12 +80,14 @@
   }
 
   function bindModal(element) {
+    const form = element.querySelector("#shared-payment-form");
     element.querySelectorAll("[data-close-shared-payment]").forEach((button) => button.addEventListener("click", close));
     element.addEventListener("click", (event) => { if (event.target === element) close(); });
     ["shared-payment-estimated", "shared-payment-agreed", "shared-payment-received", "shared-payment-due"].forEach((id) => document.getElementById(id).addEventListener("input", refreshSummary));
-    document.getElementById("shared-payment-form").addEventListener("submit", async (event) => {
+    form.addEventListener("submit", async (event) => {
       event.preventDefault();
       try {
+        if (!form.reportValidity()) return;
         await TaskStore.updatePayment(activeTaskId, values());
         close();
         notify();
@@ -93,6 +95,7 @@
     });
     document.getElementById("shared-close-request").addEventListener("click", async () => {
       try {
+        if (!form.reportValidity()) return;
         await TaskStore.updatePayment(activeTaskId, values());
         await TaskStore.close(activeTaskId, "Payment settled and request closed.");
         window.location.replace("/");
@@ -106,9 +109,11 @@
     activeTaskId = task.id;
     const element = modal();
     document.getElementById("shared-payment-task").textContent = `${task.id} · ${task.reportName}`;
-    document.getElementById("shared-payment-estimated").value = task.payment.estimated || "";
-    document.getElementById("shared-payment-agreed").value = task.payment.agreed || "";
-    document.getElementById("shared-payment-received").value = task.payment.received || "";
+    for (const key of ["estimated", "agreed", "received"]) {
+      const input = document.getElementById(`shared-payment-${key}`);
+      NumericEntry.reset(input);
+      input.value = task.payment[key] || "";
+    }
     document.getElementById("shared-payment-due").value = task.payment.dueDate || "";
     document.getElementById("shared-payment-note").value = "";
     document.getElementById("shared-payment-error").hidden = true;

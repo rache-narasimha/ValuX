@@ -69,3 +69,8 @@ body .estimation-picker-row .picker-dates small { font-size: .75rem; }
   body .estimation-picker-row > span { grid-column: 1; }
   body .estimation-picker-row > em { grid-column: 2; grid-row: 1 / span 3; }
 }
+
+input[data-arithmetic-error] {
+  outline: 2px solid var(--wf-danger, #a63c20);
+  outline-offset: -2px;
+}

@@ -4,11 +4,13 @@
   if (!window.ReportData?.readOnly) return;
   document.body.classList.add("report-readonly");
   const navigation = new Set(["previous", "next"]);
+  const readOnlyAction = (control) => navigation.has(control.id)
+    || control.matches('button[type="button"][data-action="toggle-calculation-info"]');
   function protect() {
     const form = document.querySelector("main form");
     if (!form) return;
     form.querySelectorAll("input, textarea, select, button").forEach((control) => {
-      if (navigation.has(control.id)) return;
+      if (readOnlyAction(control)) return;
       if (control.matches('textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="file"])')) {
         if (!control.readOnly) control.readOnly = true;
       } else if (!control.disabled) control.disabled = true;
@@ -20,7 +22,7 @@
   }
   document.addEventListener("click", (event) => {
     const button = event.target.closest("main form button");
-    if (button && !navigation.has(button.id)) { event.preventDefault(); event.stopImmediatePropagation(); }
+    if (button && !readOnlyAction(button)) { event.preventDefault(); event.stopImmediatePropagation(); }
   }, true);
   for (const type of ["input", "change", "dblclick", "submit"]) document.addEventListener(type, (event) => {
     if (event.target.closest("main form")) { event.preventDefault(); event.stopImmediatePropagation(); }

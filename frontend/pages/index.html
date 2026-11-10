@@ -14,7 +14,7 @@
     <header class="app-header">
       <a class="brand" href="/" aria-label="SLN Consultancy &amp; Engineering Services dashboard"><span class="brand-mark" aria-hidden="true">SLN</span><span class="sln-wordmark">Consultancy &amp; <span class="sln-wordmark-accent">Engineering Services</span></span></a>
       <nav class="top-actions" aria-label="Account navigation">
-        <a href="/practice">Practice forms</a><a href="/tasks">All tasks</a><a href="/settings/institutions" data-father-only>Institutions</a>
+        <a href="/practice">Practice forms</a><a href="/settings/institutions" data-father-only>Institutions</a>
         <button class="appearance-toggle" type="button" data-appearance-toggle></button>
         <div data-role-switcher></div>
         <span class="user-chip"><span class="avatar" data-current-user-initials>KS</span><span><strong data-current-user-name>K. Sivaprasad</strong><small data-current-user-role>CEO</small></span></span>
@@ -23,10 +23,25 @@
     <div class="app-shell">
       <aside class="app-sidebar"></aside>
       <main class="dashboard" id="dashboard">
+        <svg class="dashboard-ring-defs" width="0" height="0" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="dashboard-satin-tone" gradientUnits="userSpaceOnUse" x1="10" y1="5" x2="86" y2="94">
+              <stop stop-color="#fff" stop-opacity=".16"/>
+              <stop offset=".52" stop-color="#fff" stop-opacity=".04"/>
+              <stop offset=".72" stop-color="#fff" stop-opacity="0"/>
+              <stop offset="1" stop-color="#000" stop-opacity=".045"/>
+            </linearGradient>
+            <linearGradient id="dashboard-satin-reflection">
+              <stop stop-color="#fff" stop-opacity="0"/>
+              <stop offset=".45" stop-color="#fff" stop-opacity=".28"/>
+              <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+        </svg>
         <section class="dashboard-heading">
           <h1 id="dashboard-title">Property Reports</h1>
           <p id="dashboard-description">An overview of valuation and construction reporting, from assignment progress to fees and payments.</p>
-          <div class="dashboard-heading-actions"><div id="dashboard-period-summary" class="date-summary"></div><a class="button-link primary new-assignment" href="/tasks/new"><span aria-hidden="true">＋</span> New assignment</a></div>
+          <div class="dashboard-heading-actions"><div id="dashboard-period-summary" class="date-summary"></div><a class="button-link primary new-assignment" href="/tasks/new"><span class="app-inline-icon" data-app-icon="add" aria-hidden="true"></span> New assignment</a></div>
         </section>
         <section class="dashboard-filters" aria-label="Dashboard filters">
           <section class="report-category-tabs" id="report-navigation" aria-label="Report workspaces">
@@ -52,19 +67,19 @@
         </section>
         <section class="dashboard-analysis-grid" id="dashboard-analysis" aria-label="Assignment and institution analysis">
           <article class="work-card institution-overview" id="father-business" hidden>
-            <div class="analysis-heading"><h2><svg class="dashboard-chart-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 8 9-5 9 5M4 9h16M6 10v8m6-8v8m6-8v8M3 21h18M4 18h16"/></svg>Institution Workload</h2><span id="workload-period-label" class="soft-badge"></span></div>
+            <div class="analysis-heading"><h2><svg class="dashboard-chart-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 8 12 3l9.5 5v1h-19z" fill="currentColor" fill-opacity=".18"/><path d="M5.5 12v5m6.5-5v5m6.5-5v5M4 18.5h16M2.5 21h19"/></svg>Institution Workload</h2><span id="workload-period-label" class="soft-badge"></span></div>
             <p class="analysis-subtitle">Assignment count by institution.</p>
             <a id="workload-overall-total" class="quiet-link" href="/tasks?view=summary">Selected Period Total: 0 reports</a>
             <div id="institution-workload" class="institution-chart"></div>
           </article>
           <article class="work-card assignment-status-card">
             <section class="dashboard-distribution-section" aria-labelledby="assignment-status-heading">
-              <div class="analysis-heading"><h2 id="assignment-status-heading">Assignment Status</h2><span id="assignment-status-total" class="soft-badge"></span></div>
+              <div class="analysis-heading"><h2 id="assignment-status-heading"><svg class="dashboard-chart-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 11h6m-6 4h6"/></svg>Assignment Status</h2><span id="assignment-status-total" class="soft-badge"></span></div>
               <p class="analysis-subtitle" id="status-period-label"></p>
               <div id="assignment-status-chart" class="distribution-content"></div>
             </section>
             <section class="dashboard-distribution-section institution-type-section" id="institution-type-section" aria-labelledby="institution-type-heading" hidden>
-              <div class="analysis-heading"><h3 id="institution-type-heading">Workload by Institution Type</h3></div>
+              <div class="analysis-heading"><h3 id="institution-type-heading"><svg class="dashboard-chart-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 8 9-5 9 5-9 5zM3 12l9 5 9-5M3 16l9 5 9-5"/></svg>Workload by Institution Type</h3></div>
               <div id="institution-workload-chart" class="distribution-content"></div>
             </section>
           </article>
@@ -87,17 +102,19 @@
           </article>
         </section>
         <section class="dashboard-grid dashboard-grid-wide">
-          <article class="work-card recent-card dashboard-span-two" id="payment-dashboard-card">
-            <div class="section-heading"><div><h2>Completed reports: payment tracking</h2><p>Update payment and close settled requests without opening the full assignment.</p></div><a href="/tasks?status=Completed" id="view-all-payments">View all</a></div>
+          <article class="work-card recent-card dashboard-span-two" id="payment-dashboard-card" tabindex="-1" aria-labelledby="payment-dashboard-heading">
+            <div class="section-heading"><div><h2 id="payment-dashboard-heading"><span class="app-inline-icon" data-app-icon="payment" aria-hidden="true"></span>Completed reports: payment tracking</h2><p>Update payment and close settled requests without opening the full assignment.</p></div><a href="/tasks?status=Completed" id="view-all-payments">View all</a></div>
             <div class="task-stack" id="payment-tracking"></div>
           </article>
-          <article class="work-card recent-card dashboard-span-two">
-            <div class="section-heading"><div><h2>Recent activity</h2><p>Updated assignments with useful details visible before opening.</p></div><div class="section-tools"><select id="recent-status-filter" aria-label="Filter recent activity by state"><option value="">All states</option><option>Unassigned</option><option>In Progress</option><option>On Hold</option><option>Completed</option><option>Closed</option><option>Cancelled</option></select><a href="/tasks" id="view-all-recent">View all</a></div></div>
+          <article class="work-card recent-card dashboard-span-two" id="recent-activity-card" tabindex="-1" aria-labelledby="recent-activity-heading">
+            <div class="section-heading"><div><h2 id="recent-activity-heading"><span class="app-inline-icon" data-app-icon="activity" aria-hidden="true"></span>Recent activity</h2><p>Updated assignments with useful details visible before opening.</p></div><div class="section-tools"><select id="recent-status-filter" aria-label="Filter recent activity by state"><option value="">All states</option><option>Unassigned</option><option>In Progress</option><option>On Hold</option><option>Completed</option><option>Closed</option><option>Cancelled</option></select><a href="/tasks" id="view-all-recent">View all</a></div></div>
             <div class="task-stack" id="recent-activity"></div>
           </article>
         </section>
       </main>
     </div>
+    <script src="/assets/js/components/report-calculator.js"></script>
+    <script src="/assets/js/core/numeric-entry.js"></script>
     <script src="/assets/js/core/business-api.js"></script>
     <script src="/assets/js/core/time.js"></script>
     <script src="/assets/js/core/app-shell.js"></script>

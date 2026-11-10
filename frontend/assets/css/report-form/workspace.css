@@ -35,7 +35,7 @@ button.secondary, .button-link.secondary { background: #f7e8df; color: #673123; 
 .practice-banner, .report-task-context, .report-task-notes { border-color: #efd8cb !important; }
 
 html[data-theme="dark"] body:not(.workflow-page) { background: #1c1411; color: #f7ded0; }
-html[data-theme="dark"] body:not(.workflow-page) .shared-app-header,
+html[data-theme="dark"] body:not(.workflow-page) .shared-app-header { background: var(--app-header-background); border-color: #604237; color: #f7ded0; }
 html[data-theme="dark"] body:not(.workflow-page) .panel,
 html[data-theme="dark"] body:not(.workflow-page) footer,
 html[data-theme="dark"] body:not(.workflow-page) .processing-card,
@@ -53,12 +53,12 @@ html[data-theme="dark"] body:not(.workflow-page) #status { background: #513025; 
 @media (max-width: 900px) {
   .report-shell-title { margin-left: 10px; padding-left: 10px; }
   .report-shell-title small { display: none; }
-  body:not(.workflow-page) .shared-app-header .header-shortcuts,
   body:not(.workflow-page) .shared-app-header [data-role-switcher] { display: none; }
   body:not(.workflow-page) main { grid-template-columns: 230px minmax(0, 1fr); }
 }
 
 @media (max-width: 700px) {
+  body:not(.workflow-page) .shared-app-header { padding-inline: 10px; }
   .report-shell-title { display: none; }
   body:not(.workflow-page) main { grid-template-columns: 1fr; }
   body:not(.workflow-page) main > aside { position: static; padding: 10px; }

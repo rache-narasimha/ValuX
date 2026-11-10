@@ -256,6 +256,7 @@ function addSubgroup(panel, label, fields) {
     const control = f.calculated && f.id !== "abstract.machinery"
       ? calculatedField(f.id, f.label)
       : fieldControl(f, state.schema.defaults);
+    if (fillablePrefix && f.id.startsWith(fillablePrefix)) control.querySelector("input")?.setAttribute("data-arithmetic-optional", "");
     block.querySelector(".grid").append(control);
   });
   block.querySelector(".fill-included")?.addEventListener("click", () => {
@@ -280,7 +281,7 @@ function addLandCalculator(panel) {
     '<h3>Land calculation</h3><p class="hint">The extent is converted into the selected rate unit before multiplication.</p><div class="grid"></div>';
   const grid = block.querySelector(".grid");
   grid.append(
-    customField("land.extent_value", "Extent considered for valuation"),
+    customField("land.extent_value", "Extent considered for valuation", "number"),
   );
   grid.append(
     fieldControl({
@@ -321,7 +322,7 @@ function collectValues() {
     .forEach((i) => {
       if (!i.name || i.type === "file" || i.dataset.preparationMethod) return;
       values[i.name] =
-        i.type === "checkbox" ? (i.checked ? "Yes" : "No") : i.value;
+        i.type === "checkbox" ? (i.checked ? "Yes" : "No") : NumericEntry.read(i);
     });
   values[window.ValuationCalculations.overridesKey] = calculations?.serialize() || "{}";
   return values;
@@ -372,7 +373,9 @@ function renderFloors(saved = {}) {
       { key: "replacement_rate", label: "Replacement rate per sq.ft" },
     ].forEach((f) => {
       const id = `building.floors.${i}.${f.key}`;
-      grid.append(customField(id, f.label, "text", existing[id] ?? ""));
+      const control = customField(id, f.label, "text", existing[id] ?? "");
+      if (f.key !== "name") control.querySelector("input").setAttribute("data-arithmetic-optional", "");
+      grid.append(control);
     });
     const structureId = `building.floors.${i}.structure_type`;
     grid.append(
@@ -584,7 +587,7 @@ function moveSection(offset) {
 function validateRequiredFields(form) {
   if (form.checkValidity()) return true;
   const invalid = [...form.elements].find((control) => typeof control.checkValidity === "function" && !control.checkValidity());
-  const message = "Complete the highlighted required field before previewing the report.";
+  const message = NumericEntry.error(form) || "Complete the highlighted required field before previewing the report.";
   byId("status").textContent = message;
   if (invalid) {
     const panel = invalid.closest(".panel");

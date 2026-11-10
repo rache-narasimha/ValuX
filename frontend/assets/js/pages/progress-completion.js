@@ -9,7 +9,7 @@
   const draftScope = practice ? "practice" : `task-${taskId || "standalone"}`;
   const DRAFT_KEY = `sln.progress-completion.form.draft.v1-${draftScope}`;
   const TODAY = localToday();
-  const sectionLabels = { setup: "Report Setup", assessment: "Work Assessment", bank: "Bank Sanction", photos: "Photos & Generate", offline: "Upload retrospective report" };
+  const sectionLabels = { setup: "Report Setup", preparation: "Preparation Method", assessment: "Work Assessment", bank: "Bank Sanction", photos: "Photos & Generate", offline: "Upload retrospective report" };
   const state = { linkedEstimationId: task?.linkedEstimationId || "", current: 0, preparationMethod: "online", details: {}, components: [], bank: { releases: [] }, photos: [] };
   let saveTimer = null;
   let previousReports = [];
@@ -166,8 +166,15 @@
     element("bank-calculations").innerHTML = cards.map(([label, value]) => `<article><span>${escape(label)}</span><strong>${value === null ? "—" : escape(currency(value))}</strong></article>`).join("");
   }
 
+  function canChoosePreparation() {
+    return !practice && ["progress", "completion"].includes(task?.reportGroup)
+      && !ReportData.readOnly && WorkflowAccess.can("changeWorkflow", currentTask());
+  }
+
   function sections() {
-    const keys = ["setup", "assessment"];
+    const keys = ["setup"];
+    if (canChoosePreparation()) keys.push("preparation");
+    keys.push("assessment");
     if (state.preparationMethod === "offline") keys.push("offline");
     else {
       if (isKarnataka()) keys.push("bank");
@@ -237,9 +244,8 @@
   function renderPreparation() {
     const offline = state.preparationMethod === "offline";
     document.body.dataset.progressPreparation = offline ? "offline" : "online";
-    element("progress-preparation").hidden = !task || ReportData.readOnly || !WorkflowAccess.can("changeWorkflow", currentTask());
-    element("progress-preparation-switch").textContent = offline ? "Fill online" : "Upload retrospective report";
-    element("progress-preparation-label").textContent = offline ? "Retrospective upload selected" : "Fill online selected";
+    element("preview-report").hidden = offline;
+    element("generate-docx").hidden = offline;
     window.dispatchEvent(new CustomEvent("sln:valuation-preparation-changed"));
   }
 
@@ -327,6 +333,8 @@
 
   function validate({ offline = false } = {}) {
     const issues = [];
+    const arithmeticError = NumericEntry.error(element("progress-form"));
+    if (arithmeticError) issues.push(arithmeticError);
     const current = currentTask();
     if (current?.estimationCorrectionPending) issues.push("Finalize the revised estimation first, then reload this report.");
     if (current?.estimationReviewRequired && state.details.estimationRevisionReviewed !== current.linkedEstimationSnapshotId) issues.push("Confirm that you reviewed the revised estimation and completion amounts.");
@@ -459,29 +467,35 @@
     element("photo-upload").addEventListener("change", async (event) => { if (!confirmReportInvalidation()) { event.target.value = ""; return; } const added = await Promise.all([...event.target.files].map(fileToData)); const existing = new Set(state.photos.map((photo) => photo.key)); state.photos.push(...added.filter((photo) => !existing.has(photo.key))); event.target.value = ""; renderPhotos(); reportInputChanged(); });
     element("previous").addEventListener("click", () => showSection(state.current - 1, true));
     element("next").addEventListener("click", () => showSection(state.current + 1, true));
-    element("progress-preparation-switch").addEventListener("click", async (event) => {
-      const previous = state.preparationMethod;
-      if (currentTask()?.reportGeneratedAt && !window.confirm("Changing preparation method makes the retained report outdated. Continue?")) return;
-      const button = event.currentTarget;
-      button.disabled = true;
-      try {
-        state.preparationMethod = previous === "offline" ? "online" : "offline";
-        await persistDraftNow();
-        await ReportData.refreshTask();
-        markDirty();
-        render();
-        if (state.preparationMethod === "offline") showSection(sections().indexOf("assessment"), true);
-      } catch (error) {
-        state.preparationMethod = previous;
-        render();
-        window.alert(reportErrorMessage(error, "The preparation method could not be saved."));
-      } finally { button.disabled = false; }
-    });
     element("preview-report").addEventListener("click", () => requestReport("preview"));
     element("generate-docx").addEventListener("click", () => requestReport("generate"));
     element("close-preview").addEventListener("click", () => { element("preview-modal").hidden = true; });
     element("preview-modal").addEventListener("click", (event) => { if (event.target === element("preview-modal")) element("preview-modal").hidden = true; });
     element("discard-draft").addEventListener("click", async () => { if (!window.confirm("Discard this progress/completion draft? The retained report will become outdated and must be previewed and generated again.")) return; try { markDirty(); await ReportData.discard(DRAFT_KEY); state.details = {}; state.bank = { releases: [] }; state.photos = []; loadLinkedEstimate(state.linkedEstimationId); element("status").textContent = "Draft discarded"; renderPhotos(); } catch (error) { element("status").textContent = error.message || "Draft could not be discarded"; } });
+  }
+
+  async function setPreparationMethod(method) {
+    if (!canChoosePreparation()) return false;
+    const previous = state.preparationMethod;
+    if (method === previous) return true;
+    if (currentTask()?.reportGeneratedAt && !window.confirm("Changing preparation method makes the retained report outdated. Continue?")) return false;
+    const controls = element("progress-preparation").querySelectorAll("[data-preparation-method]");
+    controls.forEach((control) => { control.disabled = true; });
+    state.preparationMethod = method;
+    try {
+      await persistDraftNow();
+    } catch (error) {
+      state.preparationMethod = previous;
+      window.alert(reportErrorMessage(error, "The preparation method could not be saved."));
+      return false;
+    } finally {
+      controls.forEach((control) => { control.disabled = false; });
+    }
+    markDirty();
+    renderPreparation();
+    element("bank-panel").hidden = !isKarnataka() || method === "offline";
+    showSection(state.current);
+    return true;
   }
 
   async function initialize() {
@@ -492,6 +506,12 @@
       element("preview-report").disabled = true;
     }
     await restoreDraft();
+    if (canChoosePreparation()) {
+      const panel = RetrospectiveValuation.preparationPanel(task.reportKey, state.preparationMethod, setPreparationMethod);
+      panel.id = "progress-preparation";
+      panel.dataset.section = "preparation";
+      element("progress-preparation").replaceWith(panel);
+    }
     if (task && ["progress", "completion"].includes(task.reportGroup)) {
       const panel = RetrospectiveValuation.offlinePanel(task.reportKey, "retrospective", prepareRetrospectiveUpload);
       if (panel) {

@@ -16,10 +16,17 @@
     const buildings = state.components.filter((item) => item.sheets?.length).length;
     return buildings > 1 ? `${name(component)} ${sheet.typicalFloorKeys?.length > 1 ? sheet.label : abbreviations[sheet.key] || sheet.label}` : sheet.label;
   }
+  function abstractLabel(state, component, sheet) {
+    const floors = sheet?.typicalFloorKeys || [];
+    if (floors.length < 2) return label(state, component, sheet);
+    const names = floors.map((key) => abbreviations[key] || key.replace(/^upper_(\d+)$/, (_, index) => `${Number(index) + 1}F`));
+    const prefix = state.components.filter((item) => item.sheets?.length).length > 1 ? `${name(component)}: ` : "";
+    return `Cost of construction for ${prefix}${names.slice(0, -1).join(", ")} & ${names.at(-1)}`;
+  }
   function compact(state) {
     if (state.propertyType !== "residential" || state.components.length !== 1) return false;
     const sheets = state.components[0].sheets || [];
     return sheets.length > 0 && sheets.every((sheet) => Math.max(Number(sheet.level || 0), ...(sheet.typicalFloorKeys || []).map((key) => floorKeys.includes(key) ? floorKeys.indexOf(key) - 1 : 99)) <= 3);
   }
-  global.EstimationNaming = {label, compact};
+  global.EstimationNaming = {label, abstractLabel, compact};
 })(window);

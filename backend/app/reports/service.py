@@ -15,6 +15,7 @@ from typing import Any
 from psycopg.types.json import Jsonb
 
 from ..auth.database import connection
+from ..estimation.presentation import industrial_centre_line
 from ..valuation.config import OUTPUT_DIR
 from ..valuation.config import AGRICULTURAL_TEMPLATE, APP_ROOT, TEMPLATE
 from ..workflow import service as workflow_service
@@ -390,6 +391,8 @@ def save_draft(task_code: str, values: dict[str, Any], session: dict[str, Any]) 
             mode = details.get("workMode") if report_key == "estimation" else normalized.get("preparationMethod")
             upload_type = details.get("uploadType") if report_key == "estimation" else normalized.get("uploadType")
             if report_key == "estimation":
+                if mode == "online" and industrial_centre_line(normalized):
+                    raise ReportDataError("Choose Complete offline and upload for an industrial Centre Line estimate.")
                 previous = ((current or {}).get("payload") or {}).get("details") or {}
                 previous_mode = previous.get("workMode")
                 method_switched = bool(previous_mode and mode != previous_mode)
@@ -815,6 +818,11 @@ def register_artifact(
                 ).fetchone()
                 if draft_meta:
                     schema_version = draft_meta["schema_version"]
+            if task["report_key"] == "estimation" and industrial_centre_line((draft_meta or {}).get("payload") or {}):
+                if source == "generated":
+                    raise ReportDataError("Prepare the industrial Centre Line estimate offline and upload the completed report.")
+                if selected_source == "template":
+                    raise ReportDataError("Choose Retrospective report for an industrial Centre Line estimate.")
             if task["report_group"] in {"progress", "completion"} and retrospective:
                 from ..progress.generator import retrospective_summary
 

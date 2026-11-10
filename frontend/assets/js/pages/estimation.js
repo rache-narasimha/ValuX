@@ -8,13 +8,16 @@
   const DRAFT_KEY = `sln.estimation.form.draft.v3-${draftScope}`;
   const TODAY = localToday();
   const state = { propertyType: "", construction: "", subtype: "", current: 0, details: {}, components: [], editingComponentId: null };
-  const offlineEntry = window.EstimationOffline.create({ state, currentTask, setupComplete: reportSetupComplete, persist: persistDraftNow, save: () => scheduleSave({ reportDirty: false }), render: () => renderAll({sectionKey: "offline"}), dirty: markReportDirty, confirmUploadType: (previous, next) => confirmPreparationChange("upload type", previous, next), preparationChanged, downloadTemplate: async () => {
+  const offlineEntry = window.EstimationOffline.create({ state, currentTask, externalReportOnly: industrialCentreLine, setupComplete: reportSetupComplete, persist: persistDraftNow, save: () => scheduleSave({ reportDirty: false }), render: () => renderAll({sectionKey: "offline"}), dirty: markReportDirty, confirmUploadType: (previous, next) => confirmPreparationChange("upload type", previous, next), preparationChanged, downloadTemplate: async () => {
+    if (industrialCentreLine()) return;
     if (!propertyConfigurationComplete() || !state.components.length) { state.details.templateSetup = true; renderAll({sectionKey: "configuration"}); return; }
     await downloadWorkbook("offline");
     if (ReportData.taskCode) await TaskStore.refresh(ReportData.taskCode);
   }});
   const dimensionEdits = new Map();
   let dimensionSelection = "";
+  let measurementLayoutDirty = false;
+  const outsideAxes = ["long", "short"];
   let saveTimer = null;
   let editVersion = 0;
   let generatedChangeAcknowledged = false;
@@ -121,7 +124,15 @@
 
   function newMeasurementSheet(floor, existing) {
     const sheet = makeSheetState(floor, existing);
-    if (!existing) sheet.formData.dimensionsRequired = true;
+    if (!existing) {
+      sheet.formData.dimensionsRequired = true;
+      sheet.layoutVersion = 2;
+    }
+    if (sheet.typicalFloorKeys.length > 1 && !(existing?.typicalFloorKeys?.length > 1)) {
+      sheet.typicalBasis = "per-floor";
+      sheet.layoutVersion = 2;
+    }
+    if (sheet.typicalFloorKeys.length < 2) delete sheet.typicalBasis;
     return sheet;
   }
 
@@ -196,7 +207,7 @@
       <section class="subgroup"><h3>Property type</h3><div class="setup-choice-grid">${[["industrial", "Industrial"], ["commercial", "Commercial"], ["residential", "Residential"]].map(([value, label]) => choiceCard("property-type", value, label, PROPERTY_TYPES[value].description, state.propertyType === value)).join("")}</div></section>
       ${profile ? `<section class="subgroup construction-section"><h3>Construction configuration</h3><div class="setup-choice-grid construction-choice-grid">${constructionChoices.map(([value, label, help]) => choiceCard("construction", value, label, help, state.construction === value, !profile.construction.includes(value))).join("")}</div>${state.propertyType === "residential" ? `<p class="residential-construction-note">Residential templates currently use the approved RCC format only. Shed roof and Hybrid are unavailable for this property type.</p>` : ""}</section>` : ""}
       ${profile ? `<section class="subgroup"><h3>Property subtype</h3><div class="field"><label class="required" for="property-subtype">Subtype</label><select id="property-subtype" required><option value="">Select subtype</option>${profile.subtypes.map((type) => `<option value="${type.value}" ${state.subtype === type.value ? "selected" : ""}>${escapeHtml(type.label)}</option>`).join("")}</select></div></section>` : ""}
-      ${supportsCentreLineMethod() ? `<section class="subgroup"><h3>Measurement method for RCC components</h3><p class="hint">This changes only detailed measurement rows. Main estimate items and final report sections remain the same.</p><div class="setup-choice-grid measurement-method-grid">${choiceCard("measurement-method", "long_wall_short_wall", "Long Wall / Short Wall", "Enter separate long-wall and short-wall measurements.", selectedMeasurementMethod() === "long_wall_short_wall")}${choiceCard("measurement-method", "centre_line", "Centre Line", "Enter all-round and centre-wall measurement segments.", selectedMeasurementMethod() === "centre_line")}</div></section>` : ""}
+      ${supportsCentreLineMethod() ? `<section class="subgroup"><h3>Measurement method for RCC components</h3><p class="hint">This changes only detailed measurement rows. Main estimate items and final report sections remain the same.</p><div class="setup-choice-grid measurement-method-grid">${choiceCard("measurement-method", "long_wall_short_wall", "Long Wall / Short Wall", "Enter separate long-wall and short-wall measurements.", selectedMeasurementMethod() === "long_wall_short_wall")}${choiceCard("measurement-method", "centre_line", "Centre Line", state.propertyType === "industrial" ? "Prepare the estimate offline and upload the completed report." : "Enter all-round and centre-wall measurement segments.", selectedMeasurementMethod() === "centre_line")}</div></section>` : ""}
       <div class="configuration-summary"><p>${profile && state.construction && state.subtype ? `<strong>Selected:</strong> ${escapeHtml(profile.label)} · ${escapeHtml(state.construction.toUpperCase())} · ${escapeHtml(profile.subtypes.find((type) => type.value === state.subtype)?.label || "")}` : "Select property type, construction configuration, and subtype before adding components."}</p></div>
     </div>`;
   }
@@ -215,11 +226,13 @@
 
   function reportModePanel() {
     const mode = state.details.workMode || "";
-    return `<section class="subgroup report-mode-panel"><h3>Choose preparation method</h3><p class="hint">Choose how the report will be prepared. Your entered component data is retained when changing methods.</p><div class="setup-choice-grid"><label class="choice-card"><input type="radio" name="work-mode" value="online" ${mode === "online" ? "checked" : ""}><span><strong>Fill online</strong><small>Enter measurements here, preview the rendered workbook, then generate the completed Excel report.</small></span></label><label class="choice-card"><input type="radio" name="work-mode" value="offline" ${mode === "offline" ? "checked" : ""}><span><strong>Complete offline and upload</strong><small>Attach a completed template or an existing report, review component totals, then submit it.</small></span></label></div></section>`;
+    const offlineOnly = industrialCentreLine();
+    return `<section class="subgroup report-mode-panel"><h3>Choose preparation method</h3><p class="hint">Choose how the report will be prepared. Your entered component data is retained when changing methods.</p><div class="setup-choice-grid">${choiceCard("work-mode", "online", "Fill online", offlineOnly ? "Industrial Centre Line estimates must be prepared offline." : "Enter measurements here, preview the rendered workbook, then generate the completed Excel report.", mode === "online" && !offlineOnly, offlineOnly)}${choiceCard("work-mode", "offline", "Complete offline and upload", offlineOnly ? "Attach your completed industrial Centre Line report and review its component totals." : "Attach a completed template or an existing report, review component totals, then submit it.", mode === "offline")}</div></section>`;
   }
 
-  async function setWorkMode(mode) {
-    if (!['online', 'offline'].includes(mode)) return;
+  async function setWorkMode(mode, measurementMethod = selectedMeasurementMethod()) {
+    const offlineOnly = industrialCentreLine(measurementMethod);
+    if (!["online", "offline"].includes(mode) || (mode === "online" && offlineOnly)) return;
     if (state.details.workMode === mode) return;
     const label = mode === "online" ? "Fill online" : "Complete offline and upload";
     if (!confirmPreparationChange("preparation method", state.details.workMode, mode)) {
@@ -228,6 +241,10 @@
     }
     const previous = state.details.workMode;
     state.details.workMode = mode;
+    if (offlineOnly) {
+      state.details.measurementMethod = measurementMethod;
+      if (state.details.uploadType === "template") delete state.details.uploadType;
+    }
     preparationChanged(previous);
     renderAll({ sectionKey: mode === "online" ? "configuration" : "offline" });
     try {
@@ -263,7 +280,7 @@
     const floors = configuredFloors(configuration).filter((floor) => floor.level >= 1);
     const selected = new Set(validTypicalFloorKeys(configuration, floors));
     if (floors.length < 2) return `<p class="typical-floor-help">Add at least one upper floor to group two or more matching floors into one Typical Floors worksheet.</p>`;
-    return `<fieldset class="typical-floor-picker" data-typical-floor-picker="${component.id}"><legend>Typical Floors <span class="optional-label">Optional</span></legend><p>Tick matching Ground/upper floors to prepare them together on one worksheet. Enter their combined quantities in that worksheet; no automatic multiplier is applied.</p><div class="typical-floor-options">${floors.map((floor) => `<label><input type="checkbox" data-building-typical="${component.id}" value="${floor.key}" ${selected.has(floor.key) ? "checked" : ""}><span>${escapeHtml(floor.label)}</span></label>`).join("")}</div></fieldset>`;
+    return `<fieldset class="typical-floor-picker" data-typical-floor-picker="${component.id}"><legend>Typical Floors <span class="optional-label">Optional</span></legend><p>Select floors with matching layouts to use one worksheet. New groups use one-floor inputs and multiply each amount by the number of floors. Existing combined groups keep their original entry basis.</p><div class="typical-floor-options">${floors.map((floor) => `<label><input type="checkbox" data-building-typical="${component.id}" value="${floor.key}" ${selected.has(floor.key) ? "checked" : ""}><span>${escapeHtml(floor.label)}</span></label>`).join("")}</div></fieldset>`;
   }
 
   function buildingConfigurationEditor(component) {
@@ -329,7 +346,12 @@
   }
 
   function supportsCentreLineMethod() {
-    return ["commercial", "residential"].includes(state.propertyType) && ["rcc", "hybrid"].includes(state.construction);
+    return state.propertyType === "industrial" ? Boolean(state.construction)
+      : ["commercial", "residential"].includes(state.propertyType) && ["rcc", "hybrid"].includes(state.construction);
+  }
+
+  function industrialCentreLine(method = selectedMeasurementMethod()) {
+    return state.propertyType === "industrial" && method === "centre_line";
   }
 
   function selectedMeasurementMethod() {
@@ -347,6 +369,12 @@
 
   function setMeasurementMethod(method) {
     if (!["long_wall_short_wall", "centre_line"].includes(method) || method === selectedMeasurementMethod()) return;
+    if (industrialCentreLine(method) && state.details.workMode !== "offline") {
+      void setWorkMode("offline", method);
+      return;
+    }
+    const returningToOnlineChoice = industrialCentreLine() && method === "long_wall_short_wall" && state.details.workMode === "offline";
+    if (industrialCentreLine(method) && state.details.uploadType === "template") delete state.details.uploadType;
     const affected = state.components.filter(componentUsesRccMeasurements);
     const entered = affected.filter(componentHasMeasurementData);
     if (entered.length && !window.confirm(`Changing the measurement method removes entered measurement data for ${entered.length} RCC component${entered.length === 1 ? "" : "s"}. Continue?`)) {
@@ -363,7 +391,8 @@
     state.details.measurementMethod = method;
     state.details.finalReport = null;
     state.details.prototypeCompletion = false;
-    renderAll({ sectionKey: "configuration" });
+    const nextSection = industrialCentreLine() ? "offline" : returningToOnlineChoice ? "preparation" : "configuration";
+    renderAll({ sectionKey: nextSection });
     scheduleSave();
   }
 
@@ -436,10 +465,20 @@
     const proposal = proposedBuildingConfiguration(componentId);
     if (!component || !proposal) return window.alert("Enter a whole number of upper floors, zero or more.");
     const impact = configurationImpact(component, proposal);
+    const foundation = configuredFloors(proposal)[0];
+    const originalGroup = component.sheets.find((sheet) => sheet.typicalFloorKeys?.length > 1);
+    const futureGroup = sheetPlan(proposal).find((sheet) => sheet.typicalFloorKeys?.length > 1);
+    const sameGroup = JSON.stringify(originalGroup?.typicalFloorKeys || []) === JSON.stringify(futureGroup?.typicalFloorKeys || []);
+    if (futureGroup?.typicalFloorKeys.includes(foundation?.key) && !sameGroup) {
+      return window.alert("Keep the lowest floor separate so its foundation work is counted once.");
+    }
+    if (!sameGroup && originalGroup && originalGroup.typicalBasis !== "per-floor"
+      && !window.confirm("This changes a saved combined-quantity group. Review the retained worksheet quantities and amounts before preparing a new report. Continue?")) return;
     if (impact.removed.length && !window.confirm(`This change removes ${impact.removed.map((sheet) => sheet.label).join(", ")} and all data entered on those sheet${impact.removed.length === 1 ? "" : "s"}. Continue?`)) return;
     const existing = new Map((component.sheets || []).map((sheet) => [sheet.key, sheet]));
     component.buildingConfig = proposal;
     component.sheets = sheetPlan(proposal).map((floor) => newMeasurementSheet(floor, existing.get(floor.key)));
+    refreshInheritedMeasurements(component);
     state.editingComponentId = null;
     renderAll({ sectionKey: "components" });
     scheduleSave();
@@ -466,11 +505,18 @@
     return `<section class="output-grid"><div class="output-card ${ready ? "is-complete" : "is-pending"}"><div class="report-output-record"><span class="report-output-icon" aria-hidden="true">${ready ? "✓" : outdated ? "!" : "↓"}</span><div class="report-output-copy"><h3>${ready ? "Excel report ready" : outdated ? "Report outdated—generate again" : "Prepare Excel report"}</h3>${fileName ? `<p class="report-output-filename" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</p>` : ""}<p>${ready ? task?.status === "In Progress" ? "Saved to this report. Mark the task Completed when your review is finished." : "Generated from the current workbook inputs." : "Preview the current workbook, then generate a fresh Excel report."}</p></div><div class="output-actions"><button type="button" class="primary" id="generate-from-review" ${previewReady ? "" : "disabled"}>${ready ? "Generate again" : "Generate Excel"}</button>${retainedDownload}</div></div></div></section>`;
   }
 
+  function typicalMultiplier(sheet) {
+    return sheet?.typicalBasis === "per-floor" ? Math.max(1, sheet.typicalFloorKeys?.length || 0) : 1;
+  }
+
   function measurementTemplateKey(component, sheet) {
+    const aboveFoundation = sheet?.layoutVersion === 2
+      && (component.sheets || []).some((floor) => floor.level < sheet.level);
     if (component.kind === "storage_shed") return "storage_shed";
     if (component.kind === "heavy_machinery_hall") return "heavy_machinery_hall";
     if (component.kind === "normal_machinery_hall") return "normal_machinery_hall";
     if (state.propertyType === "industrial" && ["rcc_building", "office_amenity", "utility_structure"].includes(component.kind)) {
+      if (aboveFoundation) return "rcc_upper";
       if (sheet?.key === "cellar") return "industrial_cellar";
       if (sheet?.key === "stilt") return "industrial_stilt";
       if (sheet?.key === "ground") return "rcc_ground";
@@ -479,6 +525,7 @@
     if (component.kind === "shed_hall") return "commercial_shed_hall";
     if (component.kind === "rcc_building" && state.propertyType === "commercial") {
       const suffix = selectedMeasurementMethod() === "centre_line" ? "_centre_line" : "";
+      if (aboveFoundation) return `commercial_rcc_upper${suffix}`;
       if (sheet?.key === "cellar") return `commercial_rcc_cellar${suffix}`;
       if (sheet?.key === "stilt") return `commercial_rcc_stilt${suffix}`;
       if (sheet?.key === "ground") return `commercial_rcc_ground${suffix}`;
@@ -486,6 +533,7 @@
     }
     if (component.kind === "residential_building") {
       const suffix = selectedMeasurementMethod() === "centre_line" ? "_centre_line" : "";
+      if (aboveFoundation) return `residential_upper${suffix}`;
       if (sheet?.key === "cellar") return `residential_cellar${suffix}`;
       if (sheet?.key === "stilt") return `residential_stilt${suffix}`;
       if (sheet?.key === "ground") return `residential_ground${suffix}`;
@@ -520,7 +568,9 @@
       if (schema === ESTIMATION_WORKSHEETS.storage_shed && base.rows.every((row) => row.id === "truss-a")) return;
       const itemKey = `standard-${index}`;
       const storage = schema === ESTIMATION_WORKSHEETS.storage_shed;
-      items.push({ ...base, storage, itemKey, displaySno: base.sno == null ? null : nextSno++ });
+      if (!data.omittedItems?.[itemKey]) {
+        items.push({ ...base, storage, itemKey, displaySno: base.sno == null ? null : nextSno++ });
+      }
       (data.customItems[itemKey] || []).forEach((custom) => {
         items.push({
           ...base,
@@ -529,7 +579,8 @@
           parentItemKey: itemKey,
           instanceKey: custom.id,
           isCustomItem: true,
-          label: custom.shortDescription || `Custom: ${base.label}`,
+          label: custom.shortDescription?.trim() || "Custom item",
+          originalLabel: base.label,
           detailedDescription: custom.detailedDescription || "",
           displaySno: nextSno++,
         });
@@ -541,13 +592,25 @@
   function templateRows(item, data) {
     const rows = [];
     const scopedId = (id) => item.instanceKey ? `${item.instanceKey}:${id}` : id;
+    const singleMeasurement = item.rows.filter((row) => row.calculation !== "heading").length === 1;
     item.rows.forEach((base) => {
+      const usesItemLabel = item.isCustomItem && (base.label === item.originalLabel || (singleMeasurement && base.calculation !== "heading"));
       const baseId = scopedId(base.id);
       const inputs = data.rows[baseId];
       const changes = EstimationDimensions.rowChanges(base, inputs, item.storage);
       if (changes.hidden) return;
-      rows.push({ ...base, ...changes, instanceId: baseId, baseId, sourceId: base.sourceId ? scopedId(base.sourceId) : undefined, isCustom: false });
-      (data.customRows[baseId] || []).forEach((custom) => rows.push({ ...base, id: custom.id, instanceId: custom.id, baseId, sourceId: base.sourceId ? scopedId(base.sourceId) : undefined, isCustom: true, label: custom.label || `Custom: ${base.label}` }));
+      if (!inputs?.setupOmitted) rows.push({
+        ...base, ...changes, instanceId: baseId, baseId,
+        label: usesItemLabel ? item.label : changes.label ?? base.label, usesItemLabel,
+        sourceId: base.sourceId ? scopedId(base.sourceId) : undefined, isCustom: false,
+      });
+      const customRows = data.customRows[baseId] || [];
+      const setupRows = data.dimensionSetup?.additions?.[baseId] || [];
+      [...customRows, ...setupRows].forEach((custom) => rows.push({
+        ...base, id: custom.id, instanceId: custom.id, baseId,
+        sourceId: base.sourceId ? scopedId(base.sourceId) : undefined,
+        isCustom: true, setupRow: setupRows.includes(custom), label: custom.label || `Custom: ${base.label}`,
+      }));
     });
     return rows;
   }
@@ -562,8 +625,9 @@
   function cleanNumber(value) { return Number.isFinite(value) ? value : null; }
   function formatNumber(value) { return value == null ? "" : new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value); }
 
-  function sheetCalculations(schema, data) {
+  function sheetCalculations(schema, data, multiplier = 1) {
     const items = templateItems(schema, data);
+    const roundPricing = !ReportData.readOnly || state.details.pricingBasis === "displayed";
     // A source such as concrete-footings lives in a different numbered item
     // from steel-footings. Keep one value map for the whole floor worksheet,
     // not a separate map for each numbered item.
@@ -611,18 +675,31 @@
           const hasValue = sourceGroups.some((group) => groupHasValue(entry, group));
           quantity = hasValue ? sourceGroups.reduce((total, group) => total + groupQuantity(entry, group), 0) * entry.percentage : null;
         }
-        values[entry.instanceId].quantity = cleanNumber(quantity);
-        if (entry.rate) {
-          const rate = numberOrBlank(input.rate);
-          values[entry.instanceId].amount = quantity != null && rate != null ? quantity * rate : null;
+        if (!["heading", "lump_sum"].includes(entry.calculation)) {
+          quantity = numberOrBlank(input.directQuantity) ?? numberOrBlank(input.setupQuantity) ?? quantity;
         }
+        values[entry.instanceId].quantity = cleanNumber(quantity);
       });
     }
 
+    rows.forEach((entry) => {
+      const value = values[entry.instanceId];
+      if (entry.rate) {
+        const rate = numberOrBlank(directInputs(entry).rate);
+        const quantity = value.quantity;
+        if (quantity != null && rate != null) {
+          value.amount = roundPricing
+            ? displayedPrice(quantity, rate)
+            : quantity * rate;
+        }
+      }
+      if (value.amount != null) value.amount *= multiplier;
+    });
     const calculations = prepared.map(({ item, rows: itemRows }) => {
       const calculatedAmount = itemRows.reduce((total, entry) => total + (values[entry.instanceId].amount || 0), 0);
-      const overrideAmount = numberOrBlank(data.itemOverrides[item.itemKey]);
-      return { item, calculation: { rows: itemRows, values, calculatedAmount, overrideAmount, amount: overrideAmount ?? calculatedAmount } };
+      const perFloorOverride = numberOrBlank(data.itemOverrides[item.itemKey]);
+      const overrideAmount = perFloorOverride == null ? null : perFloorOverride * multiplier;
+      return { item, calculation: { rows: itemRows, values, calculatedAmount, overrideAmount, perFloorOverride, amount: overrideAmount ?? calculatedAmount } };
     });
     const calculatedAmount = calculations.reduce((sum, entry) => sum + entry.calculation.amount, 0);
     const overrideAmount = numberOrBlank(data.sheetTotalOverride);
@@ -631,8 +708,8 @@
 
   function inputControl(entry, field, data, component, sheet) {
     const value = data.rows[entry.instanceId]?.[field] ?? "";
-    const labels = { no: "No.", length: "L", breadth: "B", depth: "D", quantity: "Qty", rate: "Rate", amount: "Amount" };
-    return `<input aria-label="${escapeHtml(`${entry.label} ${labels[field]}`)}" type="number" step="any" inputmode="decimal" value="${escapeHtml(value)}" data-measurement-input="1" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}" data-field="${field}">`;
+    const labels = { no: "No.", length: "L", breadth: "B", depth: "D", rate: "Rate", amount: "Amount" };
+    return `<input aria-label="${escapeHtml(`${entry.label} ${labels[field]}`)}" type="number" step="any" inputmode="decimal" value="${escapeHtml(decimalInput(value))}" data-measurement-input="1" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}" data-field="${field}">`;
   }
 
   function rowInputFields(calculation) {
@@ -640,40 +717,68 @@
     if (calculation === "three_factor_fgh") return ["no", "length", "breadth"];
     if (calculation === "three_factor_fgi") return ["no", "length", "depth"];
     if (calculation === "count_rate") return ["no"];
-    if (calculation === "manual_quantity_rate") return ["quantity"];
     return [];
   }
 
-  function derivedQuantityControl(entry, value, data, component, sheet) {
-    const entered = data.rows[entry.instanceId]?.quantity;
-    const displayValue = numberOrBlank(entered) ?? value.quantity;
-    return `<input class="derived-quantity-input" aria-label="${escapeHtml(`${entry.label} calculated quantity; edit to adjust`)}" type="number" step="any" inputmode="decimal" value="${escapeHtml(displayValue ?? "")}" data-measurement-input="1" data-derived-quantity="1" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}" data-field="quantity">`;
+  const decimalFormatter = new Intl.NumberFormat("en-US", { useGrouping: false, maximumFractionDigits: 2 });
+
+  function decimalInput(value) {
+    const number = numberOrBlank(value);
+    return number == null ? "" : decimalFormatter.format(number);
   }
 
-  function calculationInfo(entry, data) {
+  function displayedNumber(value) {
+    return Number(decimalInput(value));
+  }
+
+  function displayedPrice(quantity, rate) {
+    const displayQuantity = displayedNumber(quantity);
+    const displayRate = displayedNumber(rate);
+    const product = Math.round(displayQuantity * 100) * Math.round(displayRate * 100);
+    if (Number.isSafeInteger(product)) {
+      return Math.sign(product) * Math.round(Math.abs(product) / 100) / 100;
+    }
+    const amount = cleanNumber(displayQuantity * displayRate);
+    return amount == null ? null : displayedNumber(amount);
+  }
+
+  function quantityControl(entry, value, component, sheet) {
+    const derived = ["derived", "derived_expression"].includes(entry.calculation);
+    const manual = entry.calculation === "manual_quantity_rate"
+      && !["galvalume-roofing", "heavy-foundation"].includes(entry.baseId);
+    const field = derived || manual ? "quantity" : "directQuantity";
+    return `<input aria-label="${escapeHtml(`${entry.label} Qty`)}" type="number" step="any" inputmode="decimal" value="${decimalInput(value.quantity)}"${field === "directQuantity" ? ' min="0"' : ""} data-measurement-input="1" data-quantity-input data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}" data-field="${field}">`;
+  }
+
+  function calculationInfo(entry, data, component, sheet) {
     const factor = numberOrBlank(data.rows[entry.instanceId]?.factor);
+    const { slabDepth, steelRate } = data.rows[entry.instanceId] || {};
     const message = entry.calculation === "derived"
-      ? `Calculated from the matching RCC concrete quantity × ${factor ?? entry.multiplier} kg/cum.`
-      : `Calculated from Roof Slab area × ${factor ?? 10} kg/m².`;
-    return `<span class="calculation-info"><button type="button" class="info-button" aria-label="How ${escapeHtml(entry.label)} is calculated" aria-expanded="false" data-action="toggle-calculation-info">i</button><span class="calculation-info-popover" hidden>${escapeHtml(message)}</span></span>`;
+      ? `Matching RCC concrete volume × ${factor ?? entry.multiplier} kg/m³. Edit the factor in Dimensions & Defaults.`
+      : slabDepth != null && steelRate != null
+        ? `Roof slab area × ${slabDepth} m thickness × ${steelRate} kg/m³. Edit the thickness or factor in Dimensions & Defaults.`
+        : `Roof slab area × ${factor ?? 10} kg/m². Edit the thickness or factor in Dimensions & Defaults.`;
+    const id = escapeHtml(`calc-info-${component.id}-${sheet?.id || "component"}-${entry.instanceId}`);
+    return `<span class="calculation-info"><button type="button" class="info-button" aria-label="How ${escapeHtml(entry.label)} is calculated" aria-describedby="${id}" aria-pressed="false" data-action="toggle-calculation-info">i</button><span class="calculation-info-popover" id="${id}" role="tooltip">${escapeHtml(message)}</span></span>`;
   }
 
   function measurementRowHtml(entry, calculation, data, component, sheet) {
     const value = calculation.values[entry.instanceId] || {};
-    if (entry.calculation === "heading") return `<tr class="worksheet-heading-row"><td></td><td colspan="8">${escapeHtml(entry.label)}</td><td></td></tr>`;
     const inputs = rowInputFields(entry.calculation);
-    const label = entry.isCustom
+    const label = entry.isCustom && !entry.setupRow
       ? `<input class="custom-row-label" aria-label="Custom row description" value="${escapeHtml(entry.label)}" data-row-label="1" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}">`
-      : escapeHtml(entry.label);
+      : entry.usesItemLabel ? `<span data-custom-item-display>${escapeHtml(entry.label)}</span>` : escapeHtml(entry.label);
+    if (entry.calculation === "heading") return `<tr class="worksheet-heading-row"><td></td><td colspan="8">${label}</td><td></td></tr>`;
     const cells = ["no", "length", "breadth", "depth"].map((field) => `<td>${inputs.includes(field) ? inputControl(entry, field, data, component, sheet) : ""}</td>`).join("");
-    const quantityInput = inputs.includes("quantity") ? inputControl(entry, "quantity", data, component, sheet) : "";
+    const quantityInput = entry.calculation === "lump_sum" ? "" : quantityControl(entry, value, component, sheet);
     const amountInput = entry.calculation === "lump_sum" ? inputControl(entry, "amount", data, component, sheet) : "";
     const quantity = ["derived", "derived_expression"].includes(entry.calculation)
-      ? `<span class="derived-quantity-wrap">${derivedQuantityControl(entry, value, data, component, sheet)}${calculationInfo(entry, data)}</span>`
-      : quantityInput || `<span class="calculated-value" data-calculated-value="quantity" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}">${formatNumber(value.quantity)}</span>`;
+      ? `<span class="derived-quantity-wrap">${quantityInput}${calculationInfo(entry, data, component, sheet)}</span>`
+      : quantityInput;
     const rate = entry.rate ? inputControl(entry, "rate", data, component, sheet) : (entry.calculation === "lump_sum" ? "LS" : "");
-    const amount = amountInput || `<span class="calculated-value" data-calculated-value="amount" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}">${formatNumber(value.amount)}</span>`;
-    const action = entry.isCustom
+    const displayedAmount = `<span class="calculated-value" data-calculated-value="amount" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}">${formatNumber(value.amount)}</span>`;
+    const amount = amountInput ? `${amountInput}${typicalMultiplier(sheet) > 1 ? displayedAmount : ""}` : displayedAmount;
+    const action = entry.setupRow ? "" : entry.isCustom
       ? `<button type="button" class="row-icon-button" title="Remove custom row" data-action="remove-custom-row" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}" data-parent-row="${entry.baseId}">×</button>`
       : entry.customizable
         ? `<button type="button" class="row-icon-button" title="Add a matching custom row" data-action="add-custom-row" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-parent-row="${entry.baseId}">+</button>`
@@ -684,7 +789,7 @@
 
   function editableFinalAmount(value, calculatedValue, attributes, resetAttributes, label, calculatedAttributes) {
     const finalValue = value ?? calculatedValue;
-    return `<label class="final-amount-control"><span>${escapeHtml(label)}</span><input type="number" step="any" inputmode="decimal" value="${finalValue ?? ""}" ${attributes}><small>Calculated: ₹ <span ${calculatedAttributes}>${formatNumber(calculatedValue)}</span></small>${value != null ? `<button type="button" class="text-button" ${resetAttributes}>Use calculated</button>` : ""}</label>`;
+    return `<label class="final-amount-control"><span>${escapeHtml(label)}</span><input type="number" step="any" inputmode="decimal" value="${decimalInput(finalValue)}" ${attributes}><small>Calculated: ₹ <span ${calculatedAttributes}>${formatNumber(calculatedValue)}</span></small>${value != null ? `<button type="button" class="text-button" ${resetAttributes}>Use calculated</button>` : ""}</label>`;
   }
 
   function customItemDetails(item, component, sheet) {
@@ -696,60 +801,408 @@
     return componentMeasurementEntries().filter((entry) => measurementTemplateKey(entry.component, entry.sheet));
   }
 
+  function floorSlabBelow(entry) {
+    const { component, sheet } = entry;
+    if (!sheet || !component.buildingConfig) return null;
+    const floors = configuredFloors(component.buildingConfig);
+    const lowerFloor = floors[floors.findIndex((floor) => floor.key === sheet.key) - 1];
+    if (!lowerFloor) return null;
+    const lowerSheet = component.sheets.find((floor) => floor.key === lowerFloor.key || floor.typicalFloorKeys?.includes(lowerFloor.key));
+    const slab = lowerSheet?.formData?.rows?.["concrete-roof-slab"];
+    const positive = (value) => Number(value) > 0 ? numberOrBlank(value) : null;
+    return { label: lowerFloor.label, long: positive(slab?.length), short: positive(slab?.breadth) };
+  }
+
+  function slabDimensions(entry, values, below = floorSlabBelow(entry)) {
+    return Object.fromEntries(outsideAxes.filter((axis) => values.slabLinked?.[axis])
+      .map((axis) => [axis, below?.[axis] ?? null]));
+  }
+
+  function inheritedDimensionsChanged(entry, setup) {
+    if (!setup?.values?.slabLinked) return false;
+    return Object.entries(slabDimensions(entry, setup.values))
+      .some(([axis, value]) => setup.slabDimensions?.[axis] !== value);
+  }
+
   function needsDimensions(entry) {
     const data = measurementData(entry.component, entry.sheet);
-    return data.dimensionsRequired && !data.dimensionSetup;
+    return !data.manualMeasurements && (data.dimensionSetup
+      ? inheritedDimensionsChanged(entry, data.dimensionSetup)
+      : data.dimensionsRequired);
+  }
+
+  function dimensionProfile(entry) {
+    const key = measurementTemplateKey(entry.component, entry.sheet);
+    return EstimationDimensions.profile(key, ESTIMATION_WORKSHEETS[key]);
+  }
+
+  function pendingDimensions(entry, profile) {
+    const data = measurementData(entry.component, entry.sheet);
+    const values = { ...data.dimensionSetup?.values, ...data.dimensionInputs, ...dimensionEdits.get(entry.key) };
+    if (!values.slabLinked && !data.dimensionSetup && !data.manualMeasurements && floorSlabBelow(entry)) {
+      values.slabLinked = Object.fromEntries(outsideAxes.map((axis) => [axis, numberOrBlank(values[axis]) == null]));
+    }
+    if (profile.centre) {
+      values.wallRuns ??= EstimationDimensions.legacyWallRuns(values);
+    }
+    if (profile.centre && profile.ids.has("ceiling-inside")) {
+      values.roomCeiling ??= values.ceilingBasis !== "slab";
+      values.rooms ??= EstimationDimensions.starterRooms.map((label, index) => ({ slot: index + 1, label }));
+    }
+    values.plinthArea ??= data.plinthArea ?? "";
+    return values;
+  }
+
+  function scheduleField(key, label, value, type = "number", step = "any") {
+    return `<label class="field"><span>${escapeHtml(label)}</span><input type="${type}" data-schedule-field="${key}" value="${escapeHtml(type === "number" ? decimalInput(value) : value ?? "")}"${type === "number" ? ` min="0" step="${step}" data-precise-value="${escapeHtml(value ?? "")}"` : ""}></label>`;
+  }
+
+  function wallRunFields(run, layers) {
+    const included = run.layers || layers.map(([key]) => key);
+    return `<fieldset class="dimension-schedule-entry" data-dimension-schedule="wallRuns" data-slot="${run.slot}">
+      <legend>${escapeHtml(run.label || `CW${run.slot}`)}</legend>
+      <div class="dimension-fields">
+        ${scheduleField("label", "Wall run name", run.label, "text")}
+        ${scheduleField("count", "Count", run.count, "number", "1")}
+        ${scheduleField("length", "Length per run (m)", run.length)}
+      </div>
+      <details class="schedule-layer-options"><summary>Applicable layers and length overrides</summary>
+        <label class="schedule-check"><input type="checkbox" data-schedule-field="adjust"${run.adjust !== false ? " checked" : ""}> Adjust for width changes at matching junctions</label>
+        <div class="schedule-layer-grid">${layers.map(([key, label]) => `<div>
+          <label class="schedule-check"><input type="checkbox" data-schedule-layer="${key}"${included.includes(key) ? " checked" : ""}> ${escapeHtml(label)}</label>
+          ${scheduleField(`layer-${key}`, "Length override (m)", run.overrides?.[key])}
+        </div>`).join("")}</div>
+      </details>
+      <button type="button" class="text-button" data-action="remove-dimension-row">Remove wall run</button>
+    </fieldset>`;
+  }
+
+  function roomFields(room) {
+    return `<fieldset class="dimension-schedule-entry" data-dimension-schedule="rooms" data-slot="${room.slot}">
+      <legend>${escapeHtml(room.label || `Space ${room.slot}`)}</legend>
+      <div class="dimension-fields">
+        ${scheduleField("label", "Room or space name", room.label, "text")}
+        ${scheduleField("count", "Count", room.count, "number", "1")}
+        ${scheduleField("length", "Internal length (m)", room.length)}
+        ${scheduleField("width", "Internal width (m)", room.width)}
+        ${scheduleField("height", "Wall plaster height override (m)", room.height)}
+      </div>
+      <details class="schedule-layer-options"><summary>Measured area overrides</summary>
+        <div class="schedule-layer-grid">
+          ${scheduleField("ceilingArea", "Ceiling area per room override (m²)", room.ceilingArea)}
+          ${scheduleField("wallArea", "Wall plaster area per room override (m²)", room.wallArea)}
+        </div>
+      </details>
+      <button type="button" class="text-button" data-action="remove-dimension-row">Remove space</button>
+    </fieldset>`;
+  }
+
+  function copyTargets(entry) {
+    const profile = dimensionProfile(entry);
+    return dimensionEntries().filter((other) => {
+      if (other.key === entry.key || !other.sheet) return false;
+      const target = dimensionProfile(other);
+      return Boolean(entry.sheet) && profile.centre === target.centre && !target.shed;
+    });
+  }
+
+  function matchingFoundation(source, target) {
+    return source.ids.has("excavation-total") === target.ids.has("excavation-total")
+      && source.ids.has("excavation-centre-9") === target.ids.has("excavation-centre-9")
+      && source.ids.has("excavation-cellar") === target.ids.has("excavation-cellar");
+  }
+
+  function dimensionCopyControls(entry) {
+    const targets = copyTargets(entry);
+    if (!targets.length) return "";
+    const sourceProfile = dimensionProfile(entry);
+    return `<details class="dimension-group"><summary>Copy to worksheets</summary>
+      <div class="dimension-fields"><div class="field"><label for="dimension-copy-mode">What to copy</label><select id="dimension-copy-mode" data-dimension-option>
+        <option value="defaults">Defaults only</option><option value="dimensions">Dimensions only</option><option value="all">Dimensions and defaults</option>
+      </select></div></div>
+      <label class="schedule-check"><input type="checkbox" id="dimension-copy-all" data-dimension-option> Select all compatible worksheets</label>
+      <div class="schedule-layer-grid">${targets.map((target) => `<label class="schedule-check"><input type="checkbox" data-dimension-copy-target="${escapeHtml(target.key)}" data-copy-full-compatible="${matchingFoundation(sourceProfile, dimensionProfile(target))}" data-dimension-option> ${escapeHtml(target.label)}</label>`).join("")}</div>
+      <button type="button" class="secondary" data-action="copy-dimensions">Copy to selected worksheets</button>
+      <p class="hint" id="dimension-copy-status" role="status"></p>
+    </details>`;
   }
 
   function dimensionsPanel(entries) {
-    const entry = entries.find((item) => item.key === dimensionSelection)
-      || entries.find(needsDimensions) || entries[0];
+    const entry = entries.find((item) => item.key === dimensionSelection) || entries.find(needsDimensions) || entries[0];
     dimensionSelection = entry.key;
-    const key = measurementTemplateKey(entry.component, entry.sheet);
-    const profile = EstimationDimensions.profile(key, ESTIMATION_WORKSHEETS[key]);
-    const data = measurementData(entry.component, entry.sheet);
-    const values = { ...data.dimensionSetup?.values, ...dimensionEdits.get(entry.key) };
-    const options = entries.map((item) => `<option value="${escapeHtml(item.key)}"${entry.key === item.key ? " selected" : ""}>${escapeHtml(item.label)}${needsDimensions(item) ? " · Setup needed" : ""}</option>`).join("");
-    const groups = profile.groups.map(({ label, fields }, index) => `<details class="dimension-group"${index === 0 ? " open" : ""}><summary>${escapeHtml(label)}</summary><div class="dimension-fields">${fields.map(({ id, label, value, kind }) => `<div class="field"><label for="dimension-${id}">${escapeHtml(label)}${kind?.startsWith("required") ? ' <span aria-hidden="true">*</span>' : ""}</label><input id="dimension-${id}" data-dimension-field="${id}" type="number" min="0" ${kind === "percent" ? 'max="100"' : ""} step="${kind?.endsWith("count") ? "1" : "any"}" value="${escapeHtml(values[id] ?? value)}"${kind?.startsWith("required") ? ' aria-required="true"' : ""}></div>`).join("")}</div></details>`).join("");
-    const note = profile.centre ? "Enter the measured centre-wall runs where they apply. The outside walls supply the perimeter. Enter room-by-room plaster measurements in the worksheet." : profile.storage ? "The perimeter supplies the foundation runs. The brickwork and lintel defaults exclude one long side. Enter an override if the measured runs differ." : "";
-    return `<div class="panel" data-key="dimensions"><h2>Dimensions &amp; Defaults</h2><p class="hint">Review the dimensions for each worksheet. Applying them fills the linked measurement rows and keeps the rates and separate entries you already entered.</p><div class="field dimension-worksheet"><label for="dimension-worksheet">Worksheet</label><select id="dimension-worksheet">${options}</select></div>${note ? `<p class="hint">${escapeHtml(note)}</p>` : ""}<p class="hint">Leave linked overrides blank to use their source dimensions. Fill in any optional shed measurements you want to calculate here.</p>${groups}<p class="dimension-error" role="alert" hidden></p><button type="button" class="primary" data-action="apply-dimensions">Apply dimensions and continue</button></div>`;
+    const profile = dimensionProfile(entry);
+    const values = pendingDimensions(entry, profile);
+    const below = floorSlabBelow(entry);
+    const inherited = ReportData.readOnly
+      ? measurementData(entry.component, entry.sheet).dimensionSetup?.slabDimensions || {}
+      : slabDimensions(entry, values, below);
+    const options = entries.map((item) => `<option value="${escapeHtml(item.key)}"${entry.key === item.key ? " selected" : ""}>${escapeHtml(item.label)}${!ReportData.readOnly && needsDimensions(item) ? " · Setup needed" : ""}</option>`).join("");
+    const groups = profile.groups.map((group) => {
+      // Keep the old whole-perimeter override editable only on drafts that used it.
+      if (group.label === "Exterior perimeter overrides by layer" && numberOrBlank(values.measuredPerimeter) != null) {
+        return { ...group, fields: [{ id: "measuredPerimeter", label: "Saved exterior perimeter override (m)", value: "" }, ...group.fields] };
+      }
+      return group;
+    }).map(({ label, fields }, index) => `<details class="dimension-group"${index === 0 ? " open" : ""}><summary>${escapeHtml(label)}</summary><div class="dimension-fields">${fields.map(({ id, label, value, kind }) => {
+      const stored = values[id] ?? value;
+      const displayed = Object.hasOwn(inherited, id) ? inherited[id] : stored;
+      const fallback = below && outsideAxes.includes(id) ? ` data-slab-default="${escapeHtml(below[id] ?? "")}"${values.slabLinked?.[id] ? " data-slab-linked" : ""}` : "";
+      return `<div class="field"><label for="dimension-${id}">${escapeHtml(label)}${kind?.startsWith("required") ? ' <span aria-hidden="true">*</span>' : ""}</label><input id="dimension-${id}" data-dimension-field="${id}" type="number" min="0" ${kind === "percent" ? 'max="100"' : ""} step="${kind?.endsWith("count") ? "1" : "any"}" value="${escapeHtml(id === "slabDepth" ? displayed : decimalInput(displayed))}" data-precise-value="${escapeHtml(stored)}"${fallback}${kind?.startsWith("required") ? ' aria-required="true"' : ""}></div>`;
+    }).join("")}${fields.some(({ id }) => id === "fillAreaPercent") ? `<div class="field"><label for="dimension-plinth-area">Plinth Area (sft.)</label><input id="dimension-plinth-area" type="number" min="0" step="any" data-dimension-field="plinthArea" value="${escapeHtml(decimalInput(values.plinthArea))}" data-precise-value="${escapeHtml(values.plinthArea)}"></div>` : ""}</div>${fields.some(({ id }) => id === "fillAreaPercent") ? '<p class="hint">Sand filling defaults to the roof slab area. A measured area takes precedence over a percentage of the plinth area or separate filling dimensions.</p>' : ""}</details>`).join("");
+    const slabNote = below && !ReportData.readOnly
+      ? `<p class="hint">Outside dimensions default to the ${escapeHtml(below.label)} roof slab. Edit either dimension to override it, or clear it to use the slab again. Apply the lower floor’s slab dimensions first if they are missing.</p>`
+      : "";
+    const wallRuns = !profile.centre ? "" : `
+      <details class="dimension-group" data-schedule-group="wallRuns"><summary>Wall Runs</summary>
+        <p class="hint">Enter each group of matching crosswalls. Length is per run at the first applicable layer. Enable adjustments only where the same junction applies.</p>
+        ${values.wallRuns.map((run) => wallRunFields(run, profile.layers)).join("")}
+        <button type="button" class="secondary" data-action="add-dimension-row" data-schedule="wallRuns">Add wall run</button>
+        <button type="button" class="secondary" data-action="review-wall-runs">Review layer lengths</button>
+        <div class="worksheet-table-wrap" id="dimension-run-review"></div>
+      </details>`;
+    const rooms = !profile.centre || !profile.ids.has("ceiling-inside") ? "" : `
+      <details class="dimension-group" data-schedule-group="rooms"><summary>Rooms &amp; Finishes</summary>
+        <label class="schedule-check"><input type="checkbox" data-dimension-field="roomCeiling"${values.roomCeiling ? " checked" : ""}> Use room dimensions for ceiling plastering</label>
+        <p class="hint">Wall plastering always uses the measured rooms. Clear the checkbox to use the shared slab dimensions for ornamental ceiling plastering. The ceiling also uses the slab when there are no measured rooms.</p>
+        ${values.rooms.map(roomFields).join("")}
+        <button type="button" class="secondary" data-action="add-dimension-row" data-schedule="rooms">Add room or space</button>
+      </details>`;
+    const sharedSlab = profile.ids.has("concrete-roof-slab")
+      ? '<p class="hint">Roof slab length and width are shared by flooring, waterproofing, slab-based ceiling plastering and, where applicable, sand filling. Leave either dimension blank to use its outside building dimension. Set individual overrides only when those measurements differ.</p>'
+      : "";
+    const note = profile.centre ? "Outside dimensions and wall thickness calculate the centre-line perimeter. Use Exterior perimeter overrides by layer for exceptions." : profile.storage ? "The perimeter supplies the foundation runs. The brickwork and lintel defaults exclude one long side. Enter an override if the measured runs differ." : "";
+    return `<div class="panel" data-key="dimensions"><h2>Dimensions &amp; Defaults</h2><p class="hint">Review the dimensions for each worksheet. Applying them fills the linked rows and preserves direct quantities and rates.</p><div class="field dimension-worksheet"><label for="dimension-worksheet">Worksheet</label><select id="dimension-worksheet">${options}</select></div>${note ? `<p class="hint">${escapeHtml(note)}</p>` : ""}${slabNote}${sharedSlab}${groups}${wallRuns}${rooms}${dimensionCopyControls(entry)}<p class="dimension-error" role="alert" hidden></p><button type="button" class="primary" data-action="apply-dimensions">Apply dimensions and continue</button> <button type="button" class="secondary" data-action="manual-measurements">Enter measurements manually</button></div>`;
   }
 
-  function applyDimensions() {
-    const entry = dimensionEntries().find((item) => item.key === dimensionSelection);
-    if (!entry || ReportData.readOnly) return;
-    const key = measurementTemplateKey(entry.component, entry.sheet);
-    const data = measurementData(entry.component, entry.sheet);
-    const values = Object.fromEntries([...document.querySelectorAll("[data-dimension-field]")].map((input) => [input.dataset.dimensionField, input.value]));
-    let rows;
-    try {
-      rows = EstimationDimensions.derive(EstimationDimensions.profile(key, ESTIMATION_WORKSHEETS[key]), values);
-    } catch (error) {
-      const message = document.querySelector(".dimension-error");
-      message.textContent = error.message;
-      message.hidden = false;
-      return;
+  function dimensionError(message) {
+    const target = document.querySelector(".dimension-error");
+    target.textContent = message;
+    target.hidden = false;
+  }
+
+  function selectedDimensionEntry() {
+    return dimensionEntries().find((item) => item.key === dimensionSelection);
+  }
+
+  function readDimensionValues(entry, profile) {
+    const fields = Object.fromEntries([...document.querySelectorAll("[data-dimension-field]")].map((input) => [
+      input.dataset.dimensionField, input.type === "checkbox" ? input.checked : input.dataset.preciseValue ?? input.value,
+    ]));
+    const values = { ...pendingDimensions(entry, profile), ...fields };
+    if (profile.centre) delete values.ceilingBasis;
+    return values;
+  }
+
+  function readSchedule() {
+    const result = { wallRuns: [], rooms: [] };
+    document.querySelectorAll("[data-dimension-schedule]").forEach((row) => {
+      const fields = { slot: Number(row.dataset.slot) };
+      for (const control of row.querySelectorAll("[data-schedule-field]")) {
+        const key = control.dataset.scheduleField;
+        const value = control.dataset.preciseValue ?? control.value;
+        if (key.startsWith("layer-")) {
+          (fields.overrides ||= {})[key.slice(6)] = value;
+        } else {
+          fields[key] = control.type === "checkbox" ? control.checked : value;
+        }
+      }
+      if (row.dataset.dimensionSchedule === "wallRuns") {
+        fields.layers = [...row.querySelectorAll("[data-schedule-layer]:checked")].map((input) => input.dataset.scheduleLayer);
+      }
+      result[row.dataset.dimensionSchedule].push(fields);
+    });
+    return result;
+  }
+
+  function editDimensionSchedule(button, add) {
+    const entry = selectedDimensionEntry();
+    const group = add ? button.dataset.schedule : button.closest("[data-dimension-schedule]").dataset.dimensionSchedule;
+    const values = readDimensionValues(entry, dimensionProfile(entry));
+    Object.assign(values, readSchedule());
+    if (add) {
+      const counter = `${group}NextSlot`;
+      const slot = Math.max(values[counter] || 1, ...values[group].map((item) => item.slot + 1));
+      values[group].push({ slot, label: group === "wallRuns" ? `CW${slot}` : `Space ${slot}` });
+      values[counter] = slot + 1;
+    } else {
+      const slot = Number(button.closest("[data-dimension-schedule]").dataset.slot);
+      values[`${group}NextSlot`] = Math.max(values[`${group}NextSlot`] || 1, slot + 1);
+      values[group] = values[group].filter((item) => item.slot !== slot);
     }
-    if (!data.dimensionSetup && Object.entries(rows).some(([id, fields]) => Object.keys(fields).some((field) => numberOrBlank(data.rows[id]?.[field]) != null))
-      && !window.confirm("Apply these dimensions to the existing linked measurements? Rates and separate entries will be kept.")) return;
-    if (!confirmReportInvalidation()) return;
+    dimensionEdits.set(entry.key, values);
+    renderAll({ sectionKey: "dimensions" });
+    document.querySelector(`[data-schedule-group="${group}"]`).open = true;
+  }
+
+  function makeDimensionUpdate(entry, values) {
+    const additions = {};
+    const inherited = slabDimensions(entry, values);
+    const data = measurementData(entry.component, entry.sheet);
+    const { plinthArea = data.plinthArea, ...setupValues } = values;
+    const rows = EstimationDimensions.derive(dimensionProfile(entry), { ...setupValues, ...inherited, plinthArea }, additions);
+    return { values: setupValues, rows, additions, plinthArea, ...(Object.keys(inherited).length ? { slabDimensions: inherited } : {}) };
+  }
+
+  function applyDimensionUpdate(entry, update, inheritedRefresh = false) {
+    const data = measurementData(entry.component, entry.sheet);
     for (const [id, fields] of Object.entries(data.dimensionSetup?.rows || {})) {
+      if (fields.setupLabel && !update.rows[id] && data.rows[id]) data.rows[id].setupOmitted = true;
       for (const [field, applied] of Object.entries(fields)) {
-        if (!(field in (rows[id] || {})) && data.rows[id]?.[field] === applied) delete data.rows[id][field];
+        if (!(field in (update.rows[id] || {})) && data.rows[id]?.[field] === applied) delete data.rows[id][field];
       }
     }
-    for (const [id, fields] of Object.entries(rows)) {
+    for (const [id, fields] of Object.entries(update.rows)) {
       const previous = data.dimensionSetup?.rows?.[id];
       data.rows[id] ||= {};
+      if (fields.setupOmitted) data.rows[id].setupOmitted = true;
+      else delete data.rows[id].setupOmitted;
       for (const [field, value] of Object.entries(fields)) {
+        if (inheritedRefresh && previous && data.rows[id][field] !== previous[field]) continue;
         if (!previous || previous[field] !== value) data.rows[id][field] = value;
       }
     }
-    data.dimensionSetup = { values, rows };
+    const { plinthArea, ...setup } = update;
+    if (plinthArea !== undefined) data.plinthArea = plinthArea;
+    data.dimensionSetup = setup;
+    if (inheritedRefresh) return;
+    delete data.dimensionInputs;
+    delete data.manualMeasurements;
     dimensionEdits.delete(entry.key);
+  }
+
+  function refreshInheritedMeasurements(component) {
+    for (const entry of dimensionEntries().filter((candidate) => candidate.component === component)) {
+      const data = measurementData(entry.component, entry.sheet);
+      const setup = data.dimensionSetup;
+      if (data.manualMeasurements || !inheritedDimensionsChanged(entry, setup)) continue;
+      const inherited = slabDimensions(entry, setup.values);
+      if (Object.values(inherited).includes(null)) continue;
+      let update;
+      try {
+        update = makeDimensionUpdate(entry, setup.values);
+      } catch (_error) {
+        // Retain the previous measurements and require this worksheet to be reviewed.
+        continue;
+      }
+      applyDimensionUpdate(entry, update, true);
+    }
+  }
+
+  function applyDimensions() {
+    const entry = selectedDimensionEntry();
+    if (!entry || ReportData.readOnly) return;
+    const arithmeticError = NumericEntry.error(document.querySelector('[data-key="dimensions"]'));
+    if (arithmeticError) return dimensionError(arithmeticError);
+    const data = measurementData(entry.component, entry.sheet);
+    let update;
+    try {
+      update = makeDimensionUpdate(entry, readDimensionValues(entry, dimensionProfile(entry)));
+    } catch (error) {
+      dimensionError(error.message);
+      return;
+    }
+    if (!data.dimensionSetup && Object.entries(update.rows).some(([id, fields]) => Object.keys(fields).some((field) => numberOrBlank(data.rows[id]?.[field]) != null))
+      && !window.confirm("Apply these dimensions to the existing linked measurements? Rates and direct quantities will be kept.")) return;
+    if (!confirmReportInvalidation()) return;
+    applyDimensionUpdate(entry, update);
+    refreshInheritedMeasurements(entry.component);
     scheduleSave();
     renderAll({ sectionKey: entry.key });
     window.scrollTo(0, 0);
+  }
+
+  function copyDimensions() {
+    const source = selectedDimensionEntry();
+    if (!source || ReportData.readOnly) return;
+    const arithmeticError = NumericEntry.error(document.querySelector('[data-key="dimensions"]'));
+    if (arithmeticError) return dimensionError(arithmeticError);
+    const sourceProfile = dimensionProfile(source);
+    const sourceValues = readDimensionValues(source, sourceProfile);
+    const values = { ...sourceValues, ...slabDimensions(source, sourceValues) };
+    const mode = $("dimension-copy-mode").value;
+    const copyGeometry = mode !== "defaults";
+    const sourceFields = new Map(sourceProfile.groups.flatMap(({ fields }) => fields).map((field) => [field.id, field]));
+    const selected = new Set([...document.querySelectorAll("[data-dimension-copy-target]:checked")].map((input) => input.dataset.dimensionCopyTarget));
+    const targets = copyTargets(source).filter((entry) => selected.has(entry.key));
+    if (!targets.length) return dimensionError("Select at least one worksheet to copy to.");
+    let updates;
+    try {
+      updates = targets.map((entry) => {
+        const profile = dimensionProfile(entry);
+        const next = pendingDimensions(entry, profile);
+        for (const { id } of profile.groups.flatMap(({ fields }) => fields)) {
+          const field = sourceFields.get(id);
+          if (!field || !Object.hasOwn(values, id)) continue;
+          if (mode === "all" || (copyGeometry ? field.geometry : field.value !== "" && !field.geometry)) {
+            next[id] = values[id];
+            if (outsideAxes.includes(id) && next.slabLinked) {
+              next.slabLinked = { ...next.slabLinked, [id]: false };
+            }
+          }
+        }
+        if (!copyGeometry) return { entry, inputs: next };
+        if (!matchingFoundation(sourceProfile, profile)) {
+          throw new Error(`Use Defaults only for ${entry.label}. Its foundation work differs from the source worksheet.`);
+        }
+        const scheduleKeys = [
+          ...(profile.centre ? ["wallRuns", "wallRunsNextSlot"] : []),
+          ...(profile.centre && profile.ids.has("ceiling-inside") ? ["rooms", "roomsNextSlot", "roomCeiling"] : []),
+        ];
+        for (const key of scheduleKeys) {
+          if (Object.hasOwn(values, key)) next[key] = structuredClone(values[key]);
+        }
+        if (profile.centre) delete next.ceilingBasis;
+        return { entry, update: makeDimensionUpdate(entry, next) };
+      });
+    } catch (error) {
+      return dimensionError(error.message);
+    }
+    if (targets.some((entry) => {
+      const data = measurementData(entry.component, entry.sheet);
+      return data.dimensionSetup || data.dimensionInputs || Object.keys(data.rows).length;
+    }) && !window.confirm("Some selected worksheets already have measurements. Copy these settings and keep their rates and direct quantities?")) return;
+    if (!confirmReportInvalidation()) return;
+    for (const { entry, update, inputs } of updates) {
+      if (update) applyDimensionUpdate(entry, update);
+      else {
+        measurementData(entry.component, entry.sheet).dimensionInputs = structuredClone(inputs);
+        dimensionEdits.delete(entry.key);
+      }
+    }
+    if (copyGeometry) new Set(targets.map((entry) => entry.component)).forEach(refreshInheritedMeasurements);
+    $("dimension-copy-status").textContent = copyGeometry
+      ? mode === "dimensions" ? "Dimensions applied using the selected worksheets’ own defaults." : "Dimensions and defaults applied to selected worksheets."
+      : "Defaults copied. Review and apply them on each selected worksheet.";
+    scheduleSave();
+  }
+
+  function reviewWallRuns() {
+    const entry = selectedDimensionEntry();
+    if (!entry) return;
+    const profile = dimensionProfile(entry);
+    try {
+      const { rows, additions } = makeDimensionUpdate(entry, readDimensionValues(entry, profile));
+      const lines = profile.layers.map(([id, label]) => {
+        const values = Object.entries(rows).filter(([key]) => key.startsWith(`${id}-centre-`) && Number(key.split("-").at(-1)) <= 7);
+        const extra = additions[`${id}-centre-2`] || [];
+        const measurements = [...values.map(([key, row]) => [row.setupLabel || (key.endsWith("-1") ? "Exterior" : key), row]),
+          ...extra.map(({ id, label }) => [label, rows[id]])];
+        return `<tr><th>${escapeHtml(label)}</th><td>${measurements.map(([name, row]) => `${escapeHtml(name)}: ${row.no} × ${formatNumber(row.length)} m`).join(" · ")}</td></tr>`;
+      });
+      $("dimension-run-review").innerHTML = `<table class="worksheet-table"><tbody>${lines.join("")}</tbody></table>`;
+    } catch (error) {
+      dimensionError(error.message);
+    }
+  }
+
+  function omittedItemsControl(schema, data, componentId, sheetId) {
+    if (ReportData.readOnly) return "";
+    const removed = schema.items().flatMap((item, index) => {
+      const key = `standard-${index}`;
+      if (!data.omittedItems?.[key]) return [];
+      return [`<li>${escapeHtml(item.label)} <button type="button" class="text-button" data-action="restore-standard-item" data-component="${componentId}" data-sheet="${sheetId}" data-item="${key}">Restore</button></li>`];
+    });
+    return removed.length ? `<details class="dimension-group"><summary>Removed items (${removed.length})</summary><ul>${removed.join("")}</ul></details>` : "";
   }
 
   function measurementPanel(entry) {
@@ -757,18 +1210,23 @@
     if (!templateKey) return `<div class="panel" data-key="${entry.key}"><h2>${escapeHtml(entry.label)}</h2><div class="notice"><strong>Online measurements are not available for this component yet.</strong> Select a finalized Industrial component or use the future offline workbook route for a custom component.</div></div>`;
     const schema = ESTIMATION_WORKSHEETS[templateKey];
     const data = measurementData(entry.component, entry.sheet);
-    const totals = sheetCalculations(schema, data);
-    return `<div class="panel" data-key="${entry.key}"><h2>${escapeHtml(entry.label)}</h2><p class="hint">Enter the white measurement cells. Derived quantities fill automatically and can be adjusted when needed. Quantity and Amount follow the finalized worksheet formulas. Use + for a matching custom subfield or Add custom field for a full numbered item.</p><div class="worksheet-summary"><button type="button" class="text-button" data-action="edit-dimensions" data-section-key="${escapeHtml(entry.key)}">Edit dimensions &amp; defaults</button><span>Approved template: <strong>${escapeHtml(schema.label)}</strong></span>${editableFinalAmount(totals.overrideAmount, totals.calculatedAmount, `data-sheet-final-input="1" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, `data-action="reset-sheet-total" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, "Final sheet total", `data-sheet-calculated data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`)}</div><div class="field worksheet-plinth-area"><label for="plinth-${entry.key}">Plinth Area (sft.)</label><input id="plinth-${entry.key}" type="number" min="0" step="any" value="${escapeHtml(data.plinthArea ?? "")}" data-plinth-area data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"><small class="hint">Optional. Enter the area for all floors represented on this sheet. It does not alter measurement or cost calculations.</small></div><div class="worksheet-item-list">${totals.calculations.map(({ item, calculation }) => {
-      const heading = `${item.displaySno == null ? "" : `${item.displaySno}. `}${item.label}`;
+    const multiplier = typicalMultiplier(entry.sheet);
+    const totals = sheetCalculations(schema, data, multiplier);
+    return `<div class="panel" data-key="${entry.key}"><h2>${escapeHtml(entry.label)}</h2><p class="hint">Qty calculates from the dimensions. Edit Qty to enter or adjust it directly, or clear it to restore the calculation. For grouped measurements within an item, use its total quantity row to price the entire item.${multiplier > 1 ? ` Enter quantities, rates and lump sums for one floor. Line amounts shown include all ${multiplier} floors.` : ""}</p><div class="worksheet-summary"><button type="button" class="text-button" data-action="edit-dimensions" data-section-key="${escapeHtml(entry.key)}">Edit dimensions &amp; defaults</button><span>Approved template: <strong>${escapeHtml(schema.label)}</strong></span>${editableFinalAmount(totals.overrideAmount, totals.calculatedAmount, `data-sheet-final-input="1" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, `data-action="reset-sheet-total" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, "Final sheet total", `data-sheet-calculated data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`)}</div><div class="field worksheet-plinth-area"><label for="plinth-${entry.key}">Plinth Area (sft.)</label><input id="plinth-${entry.key}" type="number" min="0" step="any" value="${escapeHtml(data.plinthArea ?? "")}" data-plinth-area data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"><small class="hint">Enter the area for all floors represented on this sheet. It is optional unless used as the basis for sand filling.</small></div>${omittedItemsControl(schema, data, entry.component.id, entry.sheet?.id || "component")}<div class="worksheet-item-list">${totals.calculations.map(({ item, calculation }) => {
+      const serial = item.displaySno == null ? "" : `${item.displaySno}. `;
+      const label = item.isCustomItem ? `<span data-custom-item-display>${escapeHtml(item.label)}</span>` : escapeHtml(item.label);
       const actions = item.isCustomItem
         ? `<button type="button" class="text-button danger-text" data-action="remove-custom-item" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}" data-item="${item.itemKey}">Remove custom field</button>`
         : item.displaySno != null
           ? `<button type="button" class="text-button" data-action="add-custom-item" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}" data-parent-item="${item.itemKey}">Add custom field</button>`
           : "";
-      const itemFinalAmount = item.displaySno != null
-        ? editableFinalAmount(calculation.overrideAmount, calculation.calculatedAmount, `data-item-final-input="1" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}" data-item="${item.itemKey}"`, `data-action="reset-item-total" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}" data-item="${item.itemKey}"`, "Final amount", `data-item-calculated="${item.itemKey}" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`)
+      const remove = !ReportData.readOnly && !item.isCustomItem
+        ? `<button type="button" class="text-button danger-text" data-action="remove-standard-item" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}" data-item="${item.itemKey}">Remove item</button>`
         : "";
-      return `<section class="worksheet-item"><div class="worksheet-item-title"><span>${escapeHtml(heading)}</span><div class="item-title-actions">${itemFinalAmount}${actions}</div></div>${customItemDetails(item, entry.component, entry.sheet)}<div class="worksheet-table-wrap"><table class="worksheet-table"><thead><tr><th>S.No.</th><th>Description of Item</th><th>No.</th><th>L (m)</th><th>B (m)</th><th>D (m)</th><th>Qty<br>(cum/sqm)</th><th>Unit Rate<br>(Rs.)</th><th>Amount<br>(Rs.)</th><th aria-label="Custom row"></th></tr></thead><tbody>${calculation.rows.map((rowEntry) => measurementRowHtml(rowEntry, calculation, data, entry.component, entry.sheet)).join("")}</tbody></table></div></section>`;
+      const itemFinalAmount = item.displaySno != null
+        ? editableFinalAmount(calculation.perFloorOverride, calculation.calculatedAmount / multiplier, `data-item-final-input="1" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}" data-item="${item.itemKey}"`, `data-action="reset-item-total" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}" data-item="${item.itemKey}"`, multiplier > 1 ? "Final amount per floor" : "Final amount", `data-item-calculated="${item.itemKey}" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`)
+        : "";
+      return `<section class="worksheet-item"><div class="worksheet-item-title"><span>${serial}${label}</span><div class="item-title-actions">${itemFinalAmount}${actions}${remove}</div></div>${customItemDetails(item, entry.component, entry.sheet)}<div class="worksheet-table-wrap"><table class="worksheet-table"><thead><tr><th>S.No.</th><th>Description of Item</th><th>No.</th><th>L (m)</th><th>B (m)</th><th>D (m)</th><th>Qty<br>(cum/sqm)</th><th>Unit Rate<br>(Rs.)</th><th>${multiplier > 1 ? "Group amount" : "Amount"}<br>(Rs.)</th><th aria-label="Custom row"></th></tr></thead><tbody>${calculation.rows.map((rowEntry) => measurementRowHtml(rowEntry, calculation, data, entry.component, entry.sheet)).join("")}</tbody></table></div></section>`;
     }).join("")}</div></div>`;
   }
 
@@ -790,7 +1248,7 @@
     const templateKey = measurementTemplateKey(entry.component, entry.sheet);
     if (!templateKey) return null;
     const data = measurementData(entry.component, entry.sheet);
-    return sheetCalculations(ESTIMATION_WORKSHEETS[templateKey], data);
+    return sheetCalculations(ESTIMATION_WORKSHEETS[templateKey], data, typicalMultiplier(entry.sheet));
   }
 
   function abstractIncludesCommonWorks() { return state.propertyType !== "residential" || requiresSeparateAbstract(); }
@@ -822,7 +1280,7 @@
     return `<div class="panel" data-key="abstract"><h2>${compact ? "Compact Abstract" : "Abstract"}</h2><p class="hint">This is the final online-form section. Component values remain linked to their source sheets. Editing a component amount here changes the same final sheet total after confirmation.</p><section class="abstract-section"><div class="abstract-section-heading"><h3>Component estimates</h3><button type="button" class="text-button" data-action="add-abstract-custom" data-abstract-custom-type="component">Add custom field</button></div><div class="abstract-table-wrap"><table class="abstract-table abstract-edit-table"><thead><tr><th>S.No.</th><th>Component / Work</th><th>Calculated amount (Rs.)</th><th>Final amount (Rs.)</th><th aria-label="Remove custom field"></th></tr></thead><tbody>${componentRows.length ? componentRows.map(({ entry, totals }, index) => {
       if (!totals) return `<tr><td>${index + 1}</td><td>${escapeHtml(entry.label)}</td><td>—</td><td>Online template not available</td></tr>`;
       const value = totals.amount;
-      return `<tr><td>${index + 1}</td><td>${escapeHtml(entry.label)}</td><td>${formatNumber(totals.calculatedAmount)}</td><td><input type="number" step="any" inputmode="decimal" value="${value}" data-abstract-component-final="1" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"></td><td></td></tr>`;
+      return `<tr><td>${index + 1}</td><td>${escapeHtml(EstimationNaming.abstractLabel(state, entry.component, entry.sheet))}</td><td>${formatNumber(totals.calculatedAmount)}</td><td><input type="number" step="any" inputmode="decimal" value="${decimalInput(value)}" data-abstract-component-final="1" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"></td><td></td></tr>`;
     }).join("") : `<tr><td colspan="5">Add property components before completing the Abstract.</td></tr>`}${customAbstractRows(customComponents, componentRows.length, "component")}</tbody><tfoot><tr><th colspan="2">Total component estimates</th><th colspan="3">₹ ${formatNumber(componentTotal)}</th></tr></tfoot></table></div></section>${commonWorksSection}</div>`;
   }
 
@@ -866,7 +1324,12 @@
     const setup = [{key: "setup", label: "Report Setup", html: setupPanel()},
       {key: "preparation", label: "Preparation Method", html: `<div class="panel" data-key="preparation"><h2>Preparation Method</h2>${reportModePanel()}</div>`}];
     const configuration = [{key: "configuration", label: "Property Configuration", html: configurationPanel()}, {key: "components", label: "Component Selection", html: componentSelectionPanel()}];
-    if (state.details.workMode === "offline") return [...setup, ...(state.details.templateSetup ? configuration : []), {key: "offline", label: "Complete & Upload Report", html: offlineEntry.panel()}];
+    const offlineOnly = industrialCentreLine() && !ReportData.readOnly;
+    if (state.details.workMode === "offline") {
+      const offlineConfiguration = offlineOnly ? configuration.slice(0, 1) : state.details.templateSetup ? configuration : [];
+      return [...setup, ...offlineConfiguration, {key: "offline", label: "Complete & Upload Report", html: offlineEntry.panel()}];
+    }
+    if (offlineOnly) return [...setup, configuration[0]];
     if (state.details.workMode !== "online") return setup;
     const dimensionSheets = dimensionEntries();
     const dimensions = dimensionSheets.length ? [{ key: "dimensions", label: "Dimensions & Defaults", html: dimensionsPanel(dimensionSheets) }] : [];
@@ -881,6 +1344,7 @@
   function currentKey() { return document.querySelector(".panel.active")?.dataset.key || "setup"; }
 
   function renderAll(options = {}) {
+    measurementLayoutDirty = false;
     const desiredKey = options.sectionKey || currentKey();
     const scrollPosition = window.scrollY;
     const sections = sectionDefinitions();
@@ -902,6 +1366,11 @@
     const panels = [...document.querySelectorAll(".panel")];
     state.current = Math.max(0, Math.min(index, panels.length - 1));
     const targetKey = panels[state.current]?.dataset.key;
+    if (measurementLayoutDirty) {
+      renderAll({ sectionKey: targetKey });
+      if (options.scroll) window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     if (panels[state.current]?.classList.contains("locked-panel") && sectionGate(targetKey).allowed) {
       renderAll({sectionKey: targetKey});
       return;
@@ -938,7 +1407,10 @@
   }
 
   function workbookIssues() {
+    if (industrialCentreLine()) return ["Prepare the industrial Centre Line estimate offline and upload the completed report."];
     const issues = validationIssues();
+    const arithmeticError = NumericEntry.error($("estimation-form"));
+    if (arithmeticError) issues.push(arithmeticError);
     componentMeasurementEntries().forEach((entry) => {
       if (!measurementTemplateKey(entry.component, entry.sheet)) issues.push(`${entry.label} does not yet have an approved workbook template.`);
       else if (state.details.workMode === "online" && needsDimensions(entry)) issues.push(`Apply dimensions and defaults for ${entry.label}.`);
@@ -951,9 +1423,10 @@
     const currentPreview = Boolean(ReportData.preview()?.id);
     $("generate-xlsx").disabled = !enabled || state.details.workMode !== "online" || !currentPreview;
     $("download-offline").disabled = !enabled || state.details.workMode !== "offline";
-    $("generate-xlsx").hidden = state.details.workMode !== "online";
+    const online = state.details.workMode === "online" && !industrialCentreLine();
+    $("generate-xlsx").hidden = !online;
     $("download-offline").hidden = true;
-    $("review-report").hidden = state.details.workMode !== "online";
+    $("review-report").hidden = !online;
   }
 
   function workbookErrorMessage(error) {
@@ -1171,6 +1644,7 @@
     // server-normalized media, so keep the current browser state rather than
     // replacing newer edits with the earlier request's payload.
     state.details.identityVersion = 2;
+    if (state.details.workMode === "online") state.details.pricingBasis = "displayed";
     const saved = await ReportData.save(DRAFT_KEY, "estimation", state, "3");
     if (savedVersion !== editVersion || saveTimer !== null) return;
     if (saved?.details?.preparationRevision != null) state.details.preparationRevision = saved.details.preparationRevision;
@@ -1188,6 +1662,9 @@
       Object.assign(state, draft);
       state.components = (Array.isArray(draft.components) ? draft.components : []).map(normaliseComponent);
       state.editingComponentId = null;
+      if (!ReportData.readOnly && state.details.workMode === "online" && state.details.pricingBasis !== "displayed") {
+        ReportData.setPreview(null);
+      }
       if (state.propertyType === "residential" && !state.construction) state.construction = "rcc";
       const retained = currentTask()?.latestXlsx;
       if (retained?.url && currentTask()?.reportFresh !== false && !state.details.finalReport) {
@@ -1225,9 +1702,17 @@
     const found = locateMeasurement(input.dataset.component, input.dataset.sheet);
     if (!found) return;
     const row = found.data.rows[input.dataset.row] || {};
+    if (input.dataset.field === "directQuantity" && Number(input.value) < 0) {
+      refreshMeasurementCalculations(found.component, found.sheet);
+      return;
+    }
     row[input.dataset.field] = input.value;
     found.data.rows[input.dataset.row] = row;
-    refreshMeasurementCalculations(found.component, found.sheet);
+    if (found.sheet && input.dataset.row === "concrete-roof-slab" && ["length", "breadth"].includes(input.dataset.field)) {
+      refreshInheritedMeasurements(found.component);
+      measurementLayoutDirty = true;
+    }
+    refreshMeasurementCalculations(found.component, found.sheet, input);
     scheduleSave();
   }
 
@@ -1246,32 +1731,31 @@
     return key ? ESTIMATION_WORKSHEETS[key] : null;
   }
 
-  function refreshMeasurementCalculations(component, sheet) {
+  function refreshMeasurementCalculations(component, sheet, editingInput) {
     const schema = measurementSchema(component, sheet);
     if (!schema) return;
     const data = measurementData(component, sheet);
-    const totals = sheetCalculations(schema, data);
+    const totals = sheetCalculations(schema, data, typicalMultiplier(sheet));
     const values = Object.assign({}, ...totals.calculations.map(({ calculation }) => calculation.values));
     const scope = `[data-component="${CSS.escape(component.id)}"][data-sheet="${CSS.escape(sheet?.id || "component")}"]`;
     document.querySelectorAll(`[data-calculated-value]${scope}`).forEach((target) => {
       const result = values[target.dataset.row];
       if (result) target.textContent = formatNumber(result[target.dataset.calculatedValue]);
     });
-    document.querySelectorAll(`[data-derived-quantity]${scope}`).forEach((target) => {
+    document.querySelectorAll(`[data-quantity-input]${scope}`).forEach((target) => {
       const result = values[target.dataset.row];
-      const entered = numberOrBlank(data.rows[target.dataset.row]?.quantity);
-      if (result && entered == null) target.value = result.quantity ?? "";
+      if (result && target !== editingInput && !NumericEntry.pending(target)) target.value = decimalInput(result.quantity);
     });
     document.querySelectorAll(`[data-item-calculated]${scope}`).forEach((target) => {
       const current = totals.calculations.find(({ item }) => item.itemKey === target.dataset.itemCalculated);
-      if (current) target.textContent = formatNumber(current.calculation.calculatedAmount);
+      if (current) target.textContent = formatNumber(current.calculation.calculatedAmount / typicalMultiplier(sheet));
     });
     document.querySelectorAll(`[data-item-final-input]${scope}`).forEach((target) => {
       const current = totals.calculations.find(({ item }) => item.itemKey === target.dataset.item);
-      if (current && current.calculation.overrideAmount == null) target.value = current.calculation.calculatedAmount || "";
+      if (current && current.calculation.overrideAmount == null) target.value = decimalInput(current.calculation.calculatedAmount / typicalMultiplier(sheet));
     });
     document.querySelectorAll(`[data-sheet-calculated]${scope}`).forEach((target) => { target.textContent = formatNumber(totals.calculatedAmount); });
-    document.querySelectorAll(`[data-sheet-final-input]${scope}`).forEach((target) => { if (totals.overrideAmount == null) target.value = totals.calculatedAmount || ""; });
+    document.querySelectorAll(`[data-sheet-final-input]${scope}`).forEach((target) => { if (totals.overrideAmount == null) target.value = decimalInput(totals.calculatedAmount); });
   }
 
   function updateItemFinalAmount(input) {
@@ -1311,6 +1795,20 @@
     scheduleSave();
   }
 
+  function setStandardItemOmitted(componentId, sheetId, itemKey, omitted) {
+    const found = locateMeasurement(componentId, sheetId);
+    if (!found || ReportData.readOnly || !customItemSource(itemKey, measurementSchema(found.component, found.sheet))) return;
+    if (omitted) {
+      found.data.omittedItems ||= {};
+      found.data.omittedItems[itemKey] = true;
+    } else if (found.data.omittedItems) {
+      delete found.data.omittedItems[itemKey];
+      if (!Object.keys(found.data.omittedItems).length) delete found.data.omittedItems;
+    }
+    renderAll({ sectionKey: `measure-${componentId}${sheetId === "component" ? "" : `-${sheetId}`}` });
+    scheduleSave();
+  }
+
   function removeCustomItem(componentId, sheetId, itemKey) {
     const found = locateMeasurement(componentId, sheetId);
     if (!found) return;
@@ -1327,9 +1825,14 @@
   function updateCustomItemText(input, field) {
     const found = locateMeasurement(input.dataset.component, input.dataset.sheet);
     if (!found) return;
-    for (const items of Object.values(found.data.customItems)) {
-      const item = items.find((entry) => entry.id === input.dataset.item);
-      if (item) item[field] = input.value;
+    const item = Object.values(found.data.customItems).flat().find((entry) => entry.id === input.dataset.item);
+    if (!item) return;
+    item[field] = input.value;
+    if (field === "shortDescription") {
+      const label = item.shortDescription.trim() || "Custom item";
+      input.closest(".worksheet-item").querySelectorAll("[data-custom-item-display]").forEach((target) => {
+        target.textContent = label;
+      });
     }
     scheduleSave();
   }
@@ -1375,10 +1878,11 @@
     const found = locateMeasurement(input.dataset.component, input.dataset.sheet);
     const schema = found && measurementSchema(found.component, found.sheet);
     if (!found || !schema) return;
-    const before = sheetCalculations(schema, found.data).amount;
+    const current = sheetCalculations(schema, found.data, typicalMultiplier(found.sheet));
+    const before = current.amount;
     const next = numberOrBlank(input.value);
     const description = next == null ? "restore the calculated sheet total" : `set the final sheet total to ₹ ${formatNumber(next)}`;
-    if (before !== (next ?? sheetCalculations(schema, found.data).calculatedAmount) && !window.confirm(`This will ${description} on both the Abstract and the source component sheet. Continue?`)) {
+    if (before !== (next ?? current.calculatedAmount) && !window.confirm(`This will ${description} on both the Abstract and the source component sheet. Continue?`)) {
       renderAll({ sectionKey: "abstract" });
       return;
     }
@@ -1416,7 +1920,8 @@
         input.dataset.previousValue = input.value;
         input.dataset.previousChecked = String(input.checked);
       });
-      if (input.name === "work-mode" || input.id === "estimation-upload-type" || input.id === "dimension-worksheet" || input.dataset.dimensionField) return;
+      const switchesToOffline = input.name === "measurement-method" && industrialCentreLine(input.value) && state.details.workMode === "online";
+      if (switchesToOffline || input.name === "work-mode" || input.id === "estimation-upload-type" || input.id === "dimension-worksheet" || input.closest("[data-dimension-schedule]") || input.hasAttribute("data-dimension-option") || input.dataset.dimensionField) return;
       if (input.type === "checkbox" || input.type === "radio") {
         input.addEventListener("click", (event) => {
           if (!confirmReportInvalidation()) event.preventDefault();
@@ -1444,9 +1949,42 @@
     });
     document.querySelectorAll("[data-dimension-field]").forEach((input) => input.addEventListener("input", () => {
       const values = dimensionEdits.get(dimensionSelection) || {};
-      values[input.dataset.dimensionField] = input.value;
+      if (input.hasAttribute("data-precise-value")) input.dataset.preciseValue = input.value;
+      const field = input.dataset.dimensionField;
+      values[field] = input.type === "checkbox" ? input.checked : input.value;
+      if (input.hasAttribute("data-slab-default")) {
+        const entry = selectedDimensionEntry();
+        const links = pendingDimensions(entry, dimensionProfile(entry)).slabLinked;
+        values.slabLinked = { ...links, [field]: input.value === "" };
+        input.toggleAttribute("data-slab-linked", values.slabLinked[field]);
+      }
       dimensionEdits.set(dimensionSelection, values);
     }));
+    document.querySelectorAll("[data-dimension-schedule] input").forEach((input) => {
+      input.addEventListener("input", () => {
+        if (input.hasAttribute("data-precise-value")) input.dataset.preciseValue = input.value;
+        const values = dimensionEdits.get(dimensionSelection) || {};
+        Object.assign(values, readSchedule());
+        dimensionEdits.set(dimensionSelection, values);
+      });
+    });
+    document.querySelectorAll("input[data-precise-value]").forEach((input) => {
+      input.addEventListener("blur", () => {
+        if (NumericEntry.pending(input)) return;
+        const value = input.hasAttribute("data-slab-linked") ? input.dataset.slabDefault : input.dataset.preciseValue;
+        input.value = input.dataset.dimensionField === "slabDepth" ? value : decimalInput(value);
+      });
+    });
+    $("dimension-copy-mode")?.addEventListener("change", (event) => {
+      $("dimension-copy-all").checked = false;
+      for (const target of document.querySelectorAll("[data-dimension-copy-target]")) {
+        target.disabled = event.target.value !== "defaults" && target.dataset.copyFullCompatible !== "true";
+        if (target.disabled) target.checked = false;
+      }
+    });
+    $("dimension-copy-all")?.addEventListener("change", (event) => {
+      document.querySelectorAll("[data-dimension-copy-target]:not(:disabled)").forEach((target) => { target.checked = event.target.checked; });
+    });
     document.querySelectorAll("#nav button").forEach((button) => button.addEventListener("click", () => showSection(Number(button.dataset.sectionIndex), { scroll: true })));
     document.querySelectorAll('[name="property-type"]').forEach((input) => input.addEventListener("change", () => setPropertyType(input.value)));
     document.querySelectorAll('[name="construction"]').forEach((input) => input.addEventListener("change", () => setConstruction(input.value)));
@@ -1454,12 +1992,39 @@
     document.querySelectorAll('[name="work-mode"]').forEach((input) => input.addEventListener("change", () => setWorkMode(input.value)));
     $("property-subtype")?.addEventListener("change", (event) => { state.subtype = event.target.value; renderAll({ sectionKey: "configuration" }); scheduleSave(); });
     document.querySelectorAll("[data-detail]").forEach((input) => input.addEventListener("input", () => { state.details[input.dataset.detail] = input.value; if (input.type === "date") dateError(input); scheduleSave(); }));
-    document.querySelectorAll("[data-plinth-area]").forEach((input) => input.addEventListener("input", () => {
+    document.querySelectorAll("[data-plinth-area]").forEach((input) => {
       const found = locateMeasurement(input.dataset.component, input.dataset.sheet);
-      if (found) found.data.plinthArea = input.value;
-      scheduleSave();
-    }));
-    document.querySelectorAll("[data-measurement-input]").forEach((input) => input.addEventListener("input", () => updateMeasurementInput(input)));
+      const values = found?.data.dimensionSetup?.values;
+      const linked = numberOrBlank(values?.fillAreaPercent) > 0 && numberOrBlank(values?.fillArea) == null;
+      input.addEventListener(linked ? "change" : "input", () => {
+        if (!found) return;
+        if (linked) {
+          const entry = dimensionEntries().find((candidate) => candidate.component === found.component && candidate.sheet === found.sheet);
+          try {
+            applyDimensionUpdate(entry, makeDimensionUpdate(entry, { ...values, plinthArea: input.value }), true);
+          } catch (error) {
+            input.value = found.data.plinthArea ?? "";
+            window.alert(error.message);
+            return;
+          }
+          refreshMeasurementCalculations(found.component, found.sheet);
+          measurementLayoutDirty = true;
+        } else found.data.plinthArea = input.value;
+        scheduleSave();
+      });
+    });
+    document.querySelectorAll("[data-measurement-input]").forEach((input) => {
+      input.addEventListener("input", () => updateMeasurementInput(input));
+      input.addEventListener("blur", () => {
+        if (NumericEntry.pending(input)) return;
+        if (!input.hasAttribute("data-quantity-input")) {
+          input.value = decimalInput(input.value);
+          return;
+        }
+        const found = locateMeasurement(input.dataset.component, input.dataset.sheet);
+        if (found) refreshMeasurementCalculations(found.component, found.sheet);
+      });
+    });
     document.querySelectorAll("[data-row-label]").forEach((input) => input.addEventListener("input", () => updateCustomRowLabel(input)));
     document.querySelectorAll("[data-item-final-input]").forEach((input) => input.addEventListener("change", () => updateItemFinalAmount(input)));
     document.querySelectorAll("[data-sheet-final-input]").forEach((input) => input.addEventListener("change", () => updateSheetFinalAmount(input)));
@@ -1481,12 +2046,22 @@
     document.querySelectorAll("[data-building-typical]").forEach((input) => input.addEventListener("change", () => updateBuildingImpact(input.dataset.buildingTypical)));
     document.querySelectorAll("[data-action]").forEach((button) => button.addEventListener("click", () => {
       const { action, component } = button.dataset;
-      const mutatingActions = new Set(["remove-component", "add-abstract-custom", "remove-abstract-custom", "move-component-up", "move-component-down", "save-building-config", "add-custom-row", "remove-custom-row", "add-custom-item", "remove-custom-item", "reset-item-total", "reset-sheet-total"]);
+      const mutatingActions = new Set(["remove-component", "add-abstract-custom", "remove-abstract-custom", "move-component-up", "move-component-down", "save-building-config", "add-custom-row", "remove-custom-row", "add-custom-item", "remove-custom-item", "remove-standard-item", "restore-standard-item", "reset-item-total", "reset-sheet-total"]);
       if (mutatingActions.has(action) && !confirmReportInvalidation()) return;
       if (action === "remove-component") removeComponent(component);
       if (action === "add-abstract-custom") addAbstractCustom(button.dataset.abstractCustomType);
       if (action === "remove-abstract-custom") removeAbstractCustom(button.dataset.abstractCustomType, button.dataset.abstractCustomId);
       if (action === "apply-dimensions") applyDimensions();
+      if (action === "add-dimension-row" || action === "remove-dimension-row") editDimensionSchedule(button, action === "add-dimension-row");
+      if (action === "review-wall-runs") reviewWallRuns();
+      if (action === "copy-dimensions") copyDimensions();
+      if (action === "manual-measurements") {
+        const entry = dimensionEntries().find((item) => item.key === dimensionSelection);
+        if (!entry || ReportData.readOnly || !confirmReportInvalidation()) return;
+        measurementData(entry.component, entry.sheet).manualMeasurements = true;
+        scheduleSave();
+        renderAll({ sectionKey: entry.key });
+      }
       if (action === "edit-dimensions") {
         dimensionSelection = button.dataset.sectionKey;
         renderAll({ sectionKey: "dimensions" });
@@ -1511,6 +2086,9 @@
       if (action === "remove-custom-row") removeCustomMeasurementRow(component, button.dataset.sheet, button.dataset.parentRow, button.dataset.row);
       if (action === "add-custom-item") addCustomItem(component, button.dataset.sheet, button.dataset.parentItem);
       if (action === "remove-custom-item") removeCustomItem(component, button.dataset.sheet, button.dataset.item);
+      if (action === "remove-standard-item" || action === "restore-standard-item") {
+        setStandardItemOmitted(component, button.dataset.sheet, button.dataset.item, action === "remove-standard-item");
+      }
       if (action === "reset-item-total") {
         const found = locateMeasurement(component, button.dataset.sheet);
         if (found) { delete found.data.itemOverrides[button.dataset.item]; renderAll({ sectionKey: `measure-${component}${button.dataset.sheet === "component" ? "" : `-${button.dataset.sheet}`}` }); scheduleSave(); }
@@ -1520,11 +2098,7 @@
         if (found) { delete found.data.sheetTotalOverride; renderAll({ sectionKey: `measure-${component}${button.dataset.sheet === "component" ? "" : `-${button.dataset.sheet}`}` }); scheduleSave(); }
       }
       if (action === "toggle-calculation-info") {
-        const popover = button.parentElement?.querySelector(".calculation-info-popover");
-        if (popover) {
-          popover.hidden = !popover.hidden;
-          button.setAttribute("aria-expanded", String(!popover.hidden));
-        }
+        button.setAttribute("aria-pressed", String(button.getAttribute("aria-pressed") !== "true"));
       }
     }));
   }

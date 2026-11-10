@@ -87,11 +87,11 @@
     return Number(result.toPrecision(15));
   }
 
-  function install(aside) {
+  function install(aside, { before = null, scope, onOpen, focusAfterClose } = {}) {
     if (document.getElementById("report-calculator")) return;
     const tools = document.createElement("div"); tools.className = "report-tools";
-    tools.innerHTML = `<button type="button" class="report-calculator-launch" aria-controls="report-calculator" aria-expanded="false" title="Calculator"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6h8M8 11h1m3 0h1m3 0h0M8 15h1m3 0h1m3 0h0M8 19h1m3 0h1m3 0h0"/></svg><span>Calculator</span></button>`;
-    aside.append(tools);
+    tools.innerHTML = `<button type="button" class="report-calculator-launch" aria-controls="report-calculator" aria-expanded="false" title="Calculator" aria-label="Calculator"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6h8M8 11h1m3 0h1m3 0h0M8 15h1m3 0h1m3 0h0M8 19h1m3 0h1m3 0h0"/></svg><span>Calculator</span></button>`;
+    aside.insertBefore(tools, before);
     const launch = tools.querySelector("button"), panel = document.createElement("section");
     panel.id = "report-calculator"; panel.className = "report-calculator"; panel.hidden = true;
     panel.setAttribute("role", "dialog"); panel.setAttribute("aria-modal", "false"); panel.setAttribute("aria-labelledby", "calculator-title"); panel.tabIndex = -1;
@@ -104,7 +104,7 @@
     document.body.append(panel);
     const expressionBox = panel.querySelector("#calculator-expression"), output = panel.querySelector("output"), feedback = panel.querySelector("#calculator-feedback"), historyBox = panel.querySelector(".calculator-history");
     const user = encodeURIComponent(global.__VALUX_AUTH_CONTEXT__?.user?.userId || "practice");
-    const task = new URLSearchParams(location.search).get("task") || `practice:${location.pathname}`;
+    const task = scope || new URLSearchParams(location.search).get("task") || `practice:${location.pathname}`;
     const prefix = `${namespace}${user}:`, storageKey = () => `${prefix}${encodeURIComponent(task)}:${global.ValuxTime.today()}`;
     const freshState = () => ({expression: "", result: 0, history: [], mode: "basic", angleMode: "deg", secondary: false, memory: 0, memorySet: false});
     let activeKey = "", state = freshState(), justCalculated = false;
@@ -172,7 +172,11 @@
       panel.style.left = `${Math.max(8, Math.min(left, innerWidth - panel.offsetWidth - 8))}px`;
       panel.style.top = `${Math.max(8, Math.min(top, innerHeight - Math.min(panel.offsetHeight, innerHeight - 16) - 8))}px`;
     }
-    function close() { panel.hidden = true; launch.setAttribute("aria-expanded", "false"); launch.focus(); }
+    function close() {
+      panel.hidden = true;
+      launch.setAttribute("aria-expanded", "false");
+      (focusAfterClose?.() || launch).focus();
+    }
     async function action(key) {
       load(); feedback.textContent = "";
       if (key === "close") { close(); return; }
@@ -233,6 +237,7 @@
       load(); render(); panel.hidden = false; launch.setAttribute("aria-expanded", "true");
       if (!panel.style.left) clamp(innerWidth - panel.offsetWidth - 24, 90);
       else { const rect = panel.getBoundingClientRect(); clamp(rect.left, rect.top); }
+      onOpen?.();
       panel.focus();
     });
     panel.addEventListener("click", (event) => {

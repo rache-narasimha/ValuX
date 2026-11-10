@@ -12,7 +12,7 @@
   <body class="workflow-page">
     <header class="app-header">
       <a class="brand" href="/" aria-label="SLN Consultancy &amp; Engineering Services dashboard"><span class="brand-mark" aria-hidden="true">SLN</span><span class="sln-wordmark">Consultancy &amp; <span class="sln-wordmark-accent">Engineering Services</span></span></a>
-      <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button><div data-role-switcher></div><a class="quiet-link" href="/tasks">← All tasks</a></div>
+      <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button><div data-role-switcher></div></div>
     </header>
     <main class="page-frame" id="task-workspace">
       <div id="task-not-found" class="empty-state" hidden><strong>Task not found</strong><p>The requested assignment is unavailable or you no longer have access to it.</p><a class="button-link primary" href="/tasks">Return to tasks</a></div>
@@ -24,7 +24,7 @@
         <section class="detail-layout">
           <div class="detail-main">
             <article class="work-card">
-              <div class="section-heading"><div><h2>Assignment details</h2></div></div>
+              <div class="section-heading"><div><h2><span class="app-inline-icon" data-app-icon="assignments" aria-hidden="true"></span>Assignment details</h2></div></div>
               <dl class="detail-grid" id="assignment-details"></dl>
             </article>
             <article class="work-card" id="revaluation-links" hidden>
@@ -32,7 +32,7 @@
               <div id="revaluation-links-list"></div>
             </article>
             <article class="work-card" id="activity-card">
-              <div class="section-heading"><div><h2>Work notes and activity</h2><p>Use this one work-note field for progress and for any action requiring context.</p></div></div>
+              <div class="section-heading"><div><h2><span class="app-inline-icon" data-app-icon="activity" aria-hidden="true"></span>Work notes and activity</h2><p>Use this one work-note field for progress and for any action requiring context.</p></div></div>
               <form id="note-form" class="inline-form"><label for="work-note">Add work note</label><textarea id="work-note" placeholder="Record acknowledgement, routing justification, progress, ambiguity or review context"></textarea><button class="primary" type="submit">Add note</button></form>
               <p id="action-error" class="form-error" role="alert" hidden></p>
               <ol id="activity-list" class="activity-list"></ol>
@@ -40,7 +40,7 @@
           </div>
           <aside class="detail-aside">
             <article class="work-card action-card" id="payment-card">
-              <h2>Payment</h2><p class="card-help">Update payment at any stage. These details are not inserted in the report.</p>
+              <h2><span class="app-inline-icon" data-app-icon="payment" aria-hidden="true"></span>Payment</h2><p class="card-help">Update payment at any stage. These details are not inserted in the report.</p>
               <p id="payment-readonly-reason" class="readonly-notice" hidden></p>
               <form id="payment-form" class="stack-form">
                 <div class="field"><label for="estimated-fee">Estimated fee</label><input id="estimated-fee" inputmode="decimal" /></div>
@@ -54,7 +54,7 @@
               </form>
             </article>
             <article class="work-card action-card" id="final-report-card" hidden>
-              <h2>Final report</h2>
+              <h2><span class="app-inline-icon" data-app-icon="practice" aria-hidden="true"></span>Final report</h2>
               <p id="final-report-message" class="card-help"></p>
               <a id="download-final-docx" class="row-open retained-report-download" href="#" download title="Download retained report" aria-label="Download retained report"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></a>
               <small id="reopen-deadline" class="field-help"></small>
@@ -97,6 +97,8 @@
         </form>
       </section>
     </div>
+    <script src="/assets/js/components/report-calculator.js"></script>
+    <script src="/assets/js/core/numeric-entry.js"></script>
     <script src="/assets/js/core/business-api.js"></script>
     <script src="/assets/js/core/time.js"></script>
     <script src="/assets/js/core/app-shell.js"></script>

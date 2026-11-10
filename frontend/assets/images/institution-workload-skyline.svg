@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 88">
+  <defs>
+    <linearGradient id="ground" x2="0" y2="1">
+      <stop stop-color="#dfb498" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#cd9875" stop-opacity=".55"/>
+    </linearGradient>
+    <g id="tree">
+      <path fill="#c79777" d="M0 0c-5 0-8-4-7-8 1-3 4-5 6-5 2-6 11-4 12 1 5 1 7 6 4 9C12 0 6 1 0 0Z"/>
+      <path fill="none" stroke="#ab7657" stroke-linecap="round" d="M4 7V-5m0 6-4-4m4 3 4-4"/>
+    </g>
+  </defs>
+
+  <path fill="url(#ground)" d="M0 71c56-4 84-15 136-15 75 0 111 18 174 18 74 0 114-12 186-12 71 0 121 10 191 10 86 0 149-19 273-11v27H0Z"/>
+  <path fill="#cf9a77" opacity=".26" d="M0 80c77 2 143-10 213-10 57 0 111 10 170 10 64 0 111-9 177-9 57 0 115 8 175 8 75 0 156-5 225-7v16H0Z"/>
+
+  <g fill="#d4a281" fill-opacity=".58" stroke="#ba805d" stroke-opacity=".53" stroke-width="1" stroke-linejoin="round">
+    <path d="M53 80V65l17-10 17 10v15zM86 80V62l19-10 18 10v18zM142 80V69l16-8 17 8v11z"/>
+    <path fill="none" d="M58 69h5v5h-5zm14 0h6v5h-6zm19-3h6v6h-6zm16 0h6v6h-6zM99 80v-5h7v5m42-7h6v4h-6zm14 0h6v4h-6z"/>
+    <path d="M611 81V59l18-8 18 8v22zM649 81V44l25-13 25 13v37zM674 31v50M704 81V55l23-10 20 10v26z"/>
+    <path fill="none" d="M617 62h6v6h-6zm14 0h6v6h-6zm25-14 6-3v7l-6 3zm11-6 5-3v7l-5 3zm-11 18 6-3v7l-6 3zm11-6 5-3v7l-5 3zm11-15 6 3v7l-6-3zm11 6 5 3v7l-5-3zm-11 6 6 3v7l-6-3zm11 6 5 3v7l-5-3zM710 59h6v6h-6zm13 0h6v6h-6zm13 0h5v6h-5z"/>
+    <path d="M848 81V62l19-10 17 10v19zM887 81V68l15-8 14 8v13z"/>
+    <path fill="none" d="M855 65h5v6h-5zm15 0h5v6h-5zm23 7h6v5h-6zm11 0h5v5h-5z"/>
+  </g>
+
+  <g stroke="#b77b56" stroke-opacity=".67" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round">
+    <path fill="#d7a381" fill-opacity=".48" d="M752 78V48h36v30h-4V52h-28v26zM748 57h44v4h-44zM748 69h44v4h-44zM767 50h4v28h-4z"/>
+    <path fill="none" d="M798 80V20h5v60m-5-53 5 7-5 7 5 7-5 7 5 7-5 7 5 8m-30-57h80v4h-80zm3 0 24-13 47 13m-47-13v13m-24 4 6-4 6 4 6-4 6 4 6-4 6 4 6-4 6 4 6-4 6 4 6-4 6 4m-15 0v18m0 0 4 4h-8z"/>
+  </g>
+
+  <g opacity=".58">
+    <use href="#tree" x="23" y="75"/>
+    <use href="#tree" transform="translate(188 76) scale(.73)"/>
+    <use href="#tree" transform="translate(580 76) scale(.82)"/>
+    <use href="#tree" x="925" y="75"/>
+  </g>
+</svg>

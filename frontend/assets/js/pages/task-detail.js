@@ -328,6 +328,7 @@
   element("payment-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
+      if (!element("payment-form").reportValidity()) return;
       await TaskStore.updatePayment(taskId, {
         estimated: element("estimated-fee").value,
         agreed: element("agreed-fee").value,

@@ -186,7 +186,7 @@ const estimationController = fs.readFileSync(
 );
 assert.match(
   estimationController,
-  /function setWorkMode\(mode\)\s*\{[\s\S]*?state\.details\.workMode = mode;[\s\S]*?renderAll\([\s\S]*?persistDraftNow\(\);/,
+  /function setWorkMode\(mode(?:, [^\n]*)?\)\s*\{[\s\S]*?state\.details\.workMode = mode;[\s\S]*?renderAll\([\s\S]*?persistDraftNow\(\);/,
   "Selecting a preparation mode must persist the selection immediately",
 );
 assert.match(

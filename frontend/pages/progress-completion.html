@@ -41,11 +41,9 @@
               <div class="field"><label for="official-designation">Designation</label><input id="official-designation" /></div>
               <div class="field"><label class="required" for="report-place">Place</label><input id="report-place" required value="Adoni" /></div>
             </div>
-            <div class="row-actions" id="progress-preparation" hidden>
-              <button type="button" class="secondary" id="progress-preparation-switch">Upload retrospective report</button>
-              <span id="progress-preparation-label" aria-live="polite"></span>
-            </div>
           </section>
+
+          <section class="panel" data-section="preparation" id="progress-preparation"></section>
 
           <section class="panel" data-section="assessment">
             <section id="estimation-correction-review" class="notice" hidden><input id="estimation-revision-reviewed" type="checkbox"></section>
@@ -110,6 +108,8 @@
     <div class="processing" id="processing" hidden role="status" aria-live="polite"><div class="processing-card"><strong id="processing-title">Preparing report</strong><div class="loading-track"><div class="loading-bar"></div></div><span id="processing-stage">Please wait…</span></div></div>
     <div class="modal" id="preview-modal" hidden><div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="preview-title"><div class="modal-head"><div><h2 id="preview-title">Word print-layout preview</h2><p>The PDF is rendered from the same DOCX generator used for download.</p></div><button type="button" class="modal-close" id="close-preview" aria-label="Close preview">×</button></div><iframe id="preview-frame" title="Progress or completion report preview"></iframe></div></div>
 
+    <script src="/assets/js/components/report-calculator.js"></script>
+    <script src="/assets/js/core/numeric-entry.js"></script>
     <script src="/assets/js/core/business-api.js"></script>
     <script src="/assets/js/core/report-data.js"></script>
     <script src="/assets/js/core/time.js"></script>
@@ -122,7 +122,6 @@
     <script src="/assets/js/pages/retrospective-valuation.js"></script>
     <script src="/assets/js/pages/progress-completion.js"></script>
     <script src="/assets/js/components/task-context.js"></script>
-    <script src="/assets/js/components/report-calculator.js"></script>
     <script src="/assets/js/components/report-layout.js"></script>
   </body>
 </html>

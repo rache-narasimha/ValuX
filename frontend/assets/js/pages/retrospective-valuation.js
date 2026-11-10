@@ -1,4 +1,4 @@
-/** Shared preparation-method and offline-upload controls for standard valuation tasks. */
+/** Shared preparation-method and offline-upload controls for valuation and linked progress/completion tasks. */
 (function exposeRetrospectiveValuation(global) {
   "use strict";
 
@@ -21,17 +21,24 @@
     const panel = document.createElement("div");
     panel.className = "panel preparation-method-panel";
     panel.dataset.group = "preparation";
-    const reportLabel = taskFor(reportKey)?.reportGroup === "revaluation" ? "revaluation" : "valuation";
+    const progress = reportKey === "progress" || reportKey === "completion";
+    const reportLabel = progress ? reportKey : taskFor(reportKey)?.reportGroup === "revaluation" ? "revaluation" : "valuation";
+    const onlineHint = progress
+      ? "Review the work assessment, add site photographs, preview the report, then generate the DOCX."
+      : `Complete the ${reportLabel} form, add photographs and map, preview the report, then generate the DOCX.`;
+    const offlineHint = progress
+      ? "Review the work assessment, then attach an existing DOCX or PDF with a work note."
+      : "Download the clean template or use an existing completed report, then attach the finished DOCX or PDF with a work note.";
     panel.innerHTML = `<h2>Preparation Method</h2>
       <p class="section-intro">Choose how this ${reportLabel} report will be prepared. The remaining steps will adapt to this selection.</p>
       <div class="preparation-choice-grid" role="radiogroup" aria-label="Report preparation method">
         <label class="preparation-choice-card">
           <input type="radio" name="${MODE_NAME}" value="online" data-preparation-method ${selectedMode === "online" ? "checked" : ""}>
-          <span><strong>Fill online</strong><small>Complete the ${reportLabel} form, add photographs and map, preview the report, then generate the DOCX.</small></span>
+          <span><strong>Fill online</strong><small>${onlineHint}</small></span>
         </label>
         <label class="preparation-choice-card">
           <input type="radio" name="${MODE_NAME}" value="offline" data-preparation-method ${selectedMode === "offline" ? "checked" : ""}>
-          <span><strong>Complete offline and upload</strong><small>Download the clean template or use an existing completed report, then attach the finished DOCX or PDF with a work note.</small></span>
+          <span><strong>${progress ? "Upload retrospective report" : "Complete offline and upload"}</strong><small>${offlineHint}</small></span>
         </label>
       </div>
       <p class="preparation-selection-status" data-preparation-status aria-live="polite">${selectedMode ? "Preparation method selected." : "Select a preparation method to continue."}</p>`;

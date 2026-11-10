@@ -7,6 +7,13 @@ ABBREVIATIONS = {"cellar": "Cellar", "stilt": "Stilt", "ground": "GF", "first": 
 LEVELS = {key: index - 1 for index, key in enumerate(FLOORS)}
 
 
+def industrial_centre_line(state):
+    return (
+        state.get("propertyType") == "industrial"
+        and (state.get("details") or {}).get("measurementMethod") == "centre_line"
+    )
+
+
 def modern_identity(details):
     return details.get("identityVersion") == 2 or "workAddress" in details
 
@@ -47,6 +54,24 @@ def component_labels(state):
             source_id = f"measure-{component.get('id') or index + 1}" + (f"-{sheet.get('id') or sheet.get('key') or position + 1}" if sheet else "")
             records.append({"id": source_id, "label": label if modern else legacy, "legacyLabel": legacy, "component": component, "sheet": sheet, "first": position == 0})
     return records
+
+
+
+def typical_floor_names(sheet):
+    keys = (sheet or {}).get("typicalFloorKeys") or []
+    names = []
+    for key in keys:
+        upper = re.fullmatch(r"upper_(\d+)", key)
+        names.append(ABBREVIATIONS.get(key, f"{int(upper[1]) + 1}F" if upper else key))
+    return f"{', '.join(names[:-1])} & {names[-1]}" if len(names) > 1 else ""
+
+
+def abstract_description(state, component, sheet, label):
+    floors = typical_floor_names(sheet)
+    if not floors:
+        return f"Cost of construction of {label}"
+    prefix = f"{component_name(component)}: " if sum(bool(item.get("sheets")) for item in state["components"]) > 1 else ""
+    return f"Cost of construction for {prefix}{floors}"
 
 
 def work_text(details, description=None):

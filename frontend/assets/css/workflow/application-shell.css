@@ -1,21 +1,30 @@
 /* Peach & Cream application system */
 .workflow-page { background: radial-gradient(circle at 95% 4%, rgba(255, 224, 207, .42), transparent 28%), var(--canvas); }
 .shared-app-header {
+  --app-header-background: #eef3f6;
   height: 68px;
   min-height: 68px;
   padding: 0 20px;
   border-color: var(--line);
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  background: var(--app-header-background);
   box-shadow: 0 2px 16px rgba(102, 44, 24, .035);
   backdrop-filter: blur(12px);
 }
+html[data-theme="dark"] .shared-app-header { --app-header-background: #293741; }
 .shared-app-header .brand-mark { background: linear-gradient(145deg, #d96a3d, #ac3f23); box-shadow: 0 7px 16px rgba(177, 65, 34, .18); }
-.header-shortcuts { margin-left: auto; margin-right: 18px; }
-.header-shortcuts a { padding: 22px 16px 20px; border-bottom: 3px solid transparent; color: var(--ink); font-size: .84rem; font-weight: 800; text-decoration: none; }
+.header-shortcuts { display: flex; align-items: center; gap: 3px; margin-left: auto; margin-right: 12px; }
+.header-shortcuts a { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; padding: 20px 9px 18px; border-bottom: 3px solid transparent; color: var(--ink); font-size: .84rem; font-weight: 800; text-decoration: none; }
 .header-shortcuts a:hover, .header-shortcuts a.active { border-color: var(--peach); color: var(--peach-dark); }
 .header-shortcuts .header-primary-link { margin-block: 13px; padding: 9px 13px; border: 0; border-radius: 8px; background: linear-gradient(135deg, #dc6c3d, #b74927); color: #fff; box-shadow: 0 7px 15px rgba(178, 65, 33, .16); }
 .header-shortcuts .header-primary-link:hover { border: 0; color: #fff; background: linear-gradient(135deg, #cc5b30, #9f351c); }
-.shared-app-header .appearance-toggle { min-width: 80px; justify-content: center; border-color: var(--line); }
+.shared-app-header .appearance-toggle { display: grid; place-items: center; width: 38px; height: 38px; padding: 0; border-color: var(--line); }
+.shared-app-header .appearance-toggle svg, .app-inline-icon svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.shared-app-header .appearance-toggle svg { width: 23px; height: 23px; }
+.app-inline-icon { display: inline-grid; place-items: center; width: 1.14em; height: 1.14em; vertical-align: -.16em; margin-inline-end: .37em; }
+.app-inline-icon svg { width: 100%; height: 100%; }
+.header-shortcuts .app-inline-icon { width: 17px; height: 17px; margin-inline-end: 0; }
+.filter-bar .app-inline-icon, .task-period-filter .app-inline-icon, .institution-summary-cards .app-inline-icon,
+.section-heading h2 .app-inline-icon, .account-card h2 .app-inline-icon { color: var(--peach-dark); }
 .shared-app-header .role-switch { border-color: var(--line); background: var(--cream); }
 .shared-app-header .role-switch button.active { background: linear-gradient(135deg, #d76a3d, #ad4325); color: #fff; box-shadow: 0 4px 10px rgba(178, 68, 36, .2); }
 .shared-app-header .avatar { background: var(--peach-soft); color: var(--peach-dark); }
@@ -37,6 +46,12 @@
 html[data-theme="dark"] .app-sidebar { background: linear-gradient(180deg, #35231c, #241915); }
 .sidebar-brand-mobile { display: none; }
 .application-navigation { display: grid; gap: 5px; }
+.app-sidebar .report-tools { padding: 6px 0 0; margin-top: 8px; border-color: var(--line); }
+.app-sidebar .report-calculator-launch { min-height: 45px; gap: 8px; padding: 8px 10px; color: var(--ink); font: inherit; font-size: .82rem; font-weight: 720; }
+.app-sidebar .report-calculator-launch svg { width: 30px; height: 21px; }
+.app-sidebar .report-calculator-launch:hover { background: var(--peach-soft); color: var(--peach-dark); }
+.sidebar-collapsed .app-sidebar .report-calculator-launch { justify-content: center; padding-inline: 5px; }
+.sidebar-collapsed .app-sidebar .report-calculator-launch span { display: none; }
 .app-nav-link {
   position: relative;
   display: grid;
@@ -183,7 +198,8 @@ html[data-theme="dark"] .app-nav-link.active { background: #513025; color: #ffc4
 .row-action { color: #08728f; }
 
 .form-section-heading > span { background: var(--peach-soft); color: var(--peach-dark); }
-.practice-icon { background: linear-gradient(135deg, #dc6c3d, #b74927); }
+.practice-icon { background: linear-gradient(135deg, #dc6c3d, #b74927); color: #fff; }
+.practice-icon .app-inline-icon { width: 25px; height: 25px; margin: 0; }
 .settings-editor { top: 88px; }
 
 html[data-theme="dark"] .work-card,
@@ -209,10 +225,19 @@ html[data-theme="dark"] .action-strip-form { background: #33251f; border-color: 
   .institution-summary-layout { grid-template-columns: 1fr; }
 }
 
+@media (max-width: 1120px) {
+  .shared-app-header .top-actions { gap: 10px; }
+  .header-shortcuts { margin-right: 6px; }
+  .header-section-label, .header-shortcuts .header-dashboard-link { display: none; }
+  .header-shortcuts .header-section-link { display: grid; place-items: center; width: 34px; min-height: 38px; padding: 3px; }
+  .header-shortcuts .app-inline-icon { width: 20px; height: 20px; }
+}
+
 @media (max-width: 900px) {
   .shared-app-header { padding-inline: 12px; }
   .mobile-menu-button { display: block; }
-  .shared-app-header .brand > span:last-child, .header-shortcuts, .shared-app-header .user-chip > span:last-child, .prototype-label { display: none; }
+  .shared-app-header .brand > span:last-child, .header-shortcuts .header-context-link,
+  .shared-app-header .user-chip > span:last-child, .prototype-label { display: none; }
   .shared-app-header .top-actions { gap: 8px; }
   .app-shell, .sidebar-collapsed { grid-template-columns: 1fr; }
   .app-sidebar { position: fixed; z-index: 30; top: 0; left: 0; width: 250px; height: 100vh; transform: translateX(-105%); box-shadow: 12px 0 35px rgba(76, 31, 17, .18); transition: transform .2s ease; }
@@ -220,6 +245,8 @@ html[data-theme="dark"] .action-strip-form { background: #33251f; border-color: 
   .sidebar-brand-mobile { display: flex; align-items: center; gap: 10px; margin: 2px 4px 18px; }
   .sidebar-collapsed .app-nav-link { grid-template-columns: 30px minmax(0, 1fr) auto auto; justify-items: stretch; padding-inline: 10px; }
   .sidebar-collapsed .app-nav-label, .sidebar-collapsed .app-nav-count, .sidebar-collapsed .nav-chevron { display: initial; }
+  .sidebar-collapsed .app-sidebar .report-calculator-launch { justify-content: flex-start; padding-inline: 10px; }
+  .sidebar-collapsed .app-sidebar .report-calculator-launch span { display: inline; }
   .sidebar-collapse { display: none; }
   .dashboard, .page-frame { padding: 20px 16px 38px; }
   .metric-grid-five { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -230,6 +257,9 @@ html[data-theme="dark"] .action-strip-form { background: #33251f; border-color: 
 
 @media (max-width: 640px) {
   .shared-app-header .role-switch { display: none; }
+  .shared-app-header .user-chip { padding-left: 6px; }
+  .shared-app-header .top-actions { gap: 5px; }
+  .shared-app-header .brand { flex: 0 0 auto; }
   .dashboard-heading { align-items: flex-start; }
   .dashboard-heading-actions { width: 100%; }
   .dashboard-heading-actions .new-assignment { flex: 1; }
@@ -248,4 +278,12 @@ html[data-theme="dark"] .action-strip-form { background: #33251f; border-color: 
   .institution-summary-cards { grid-template-columns: 1fr 1fr; }
   .institution-directory-row { grid-template-columns: 42px minmax(0, 1fr) 14px; }
   .institution-directory-row > span:nth-of-type(n+3) { display: none; }
+}
+
+@media (max-width: 380px) {
+  .shared-app-header .top-actions { gap: 4px; }
+  .header-shortcuts { gap: 0; margin-right: 2px; }
+  .header-shortcuts .header-section-link { width: 32px; }
+  .shared-app-header #status { display: block; max-width: 58px; padding-inline: 5px; overflow: hidden; text-overflow: ellipsis; }
+  .shared-app-header #status.is-saving::before { display: inline-block; margin-inline-end: 4px; }
 }

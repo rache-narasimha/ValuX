@@ -13,18 +13,20 @@ import math
 import re
 from copy import copy
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP, localcontext
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Mapping, MutableMapping, Sequence
 
 from openpyxl import load_workbook
+from openpyxl.formula import Tokenizer
 from openpyxl.styles import Border, Font, PatternFill, Side
 from openpyxl.utils import range_boundaries
 from openpyxl.workbook.properties import CalcProperties
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.worksheet.views import Selection
 
-from .presentation import applicant_text, compact_abstract, component_labels, component_work, modern_identity, work_text
+from .presentation import abstract_description, applicant_text, compact_abstract, component_labels, component_work, industrial_centre_line, modern_identity, work_text
 
 
 RESOURCE_DIRECTORY = Path(__file__).resolve().parents[3] / "resources" / "estimation"
@@ -48,6 +50,12 @@ COMMON_EXTERNAL_WORKS = (
 INVALID_SHEET_CHARACTERS = re.compile(r"[\\/?*\[\]:]")
 NON_FILE_CHARACTERS = re.compile(r"[^a-z0-9_-]+", re.IGNORECASE)
 NON_ALPHANUMERIC = re.compile(r"[^a-z0-9]+")
+ROOM_SCHEDULE_ANCHORS = {
+    "ceiling-inside": ("ceiling", "three_factor_fgh"),
+    "plaster-gross": ("plaster", "three_factor_fgi"),
+    "plaster-space-6": ("plaster", "three_factor_fgi"),
+}
+DETAIL_CELL_REFERENCE = re.compile(r"(\$?[A-Z]+\$?)([1-9][0-9]*)")
 
 PALE_GREEN = "E2F0D9"
 PALE_BLUE = "DDEBF7"
@@ -86,6 +94,8 @@ class DetailSpec:
     work_description: str = ""
     first_sheet: bool = True
     floor_label: str = ""
+    abstract_label: str = ""
+    floor_multiplier: int = 1
 
 
 @dataclass
@@ -116,6 +126,15 @@ def _numeric(value: Any) -> float | int | None:
     if not math.isfinite(number):
         return None
     return int(number) if number.is_integer() else number
+
+
+def _displayed_price(quantity: float, rate: float) -> float:
+    with localcontext() as context:
+        context.prec = 640
+        cents = Decimal("0.01")
+        displayed_quantity = Decimal(str(quantity)).quantize(cents, rounding=ROUND_HALF_UP)
+        displayed_rate = Decimal(str(rate)).quantize(cents, rounding=ROUND_HALF_UP)
+        return float((displayed_quantity * displayed_rate).quantize(cents, rounding=ROUND_HALF_UP))
 
 
 def _normalised_text(value: Any) -> str:
@@ -159,6 +178,9 @@ def _template_key(state: Mapping[str, Any], component: Mapping[str, Any], sheet:
     level = float((sheet or {}).get("level") or 0)
     centre_line = (state.get("details") or {}).get("measurementMethod") == "centre_line"
     suffix = "_centre_line" if centre_line else ""
+    above_foundation = bool(sheet and sheet.get("layoutVersion") == 2 and any(
+        float(other.get("level") or 0) < level for other in component.get("sheets") or []
+    ))
 
     if kind == "storage_shed":
         return "storage_shed"
@@ -169,18 +191,24 @@ def _template_key(state: Mapping[str, Any], component: Mapping[str, Any], sheet:
     if kind == "shed_hall":
         return "commercial_shed_hall"
     if property_type == "industrial" and kind in {"rcc_building", "office_amenity", "utility_structure"}:
+        if above_foundation:
+            return "rcc_upper"
         if sheet_key == "cellar":
             return "industrial_cellar"
         if sheet_key == "stilt":
             return "industrial_stilt"
         return "rcc_upper" if level > 1 else "rcc_ground"
     if property_type == "commercial" and kind == "rcc_building":
+        if above_foundation:
+            return f"commercial_rcc_upper{suffix}"
         if sheet_key == "cellar":
             return f"commercial_rcc_cellar{suffix}"
         if sheet_key == "stilt":
             return f"commercial_rcc_stilt{suffix}"
         return f"commercial_rcc_upper{suffix}" if level > 1 else f"commercial_rcc_ground{suffix}"
     if kind == "residential_building":
+        if above_foundation:
+            return f"residential_upper{suffix}"
         if sheet_key == "cellar":
             return f"residential_cellar{suffix}"
         if sheet_key == "stilt":
@@ -201,7 +229,11 @@ def _detail_specs(state: Mapping[str, Any], manifest: Mapping[str, Any]) -> list
         component_name = record["label"]
         typical = sheet and len(sheet.get("typicalFloorKeys") or []) > 1
         name = _clean_sheet_name(component_name if modern_identity(state.get("details") or {}) else sheet.get("label") if typical else component_name, used_names)
-        specs.append(DetailSpec(name, component_name, key, form_data, component_work(component), record["first"], (sheet or {}).get("label", "")))
+        multiplier = len(sheet["typicalFloorKeys"]) if typical and sheet.get("typicalBasis") == "per-floor" else 1
+        specs.append(DetailSpec(
+            name, component_name, key, form_data, component_work(component), record["first"],
+            (sheet or {}).get("label", ""), abstract_description(state, component, sheet, component_name), multiplier,
+        ))
     if not specs:
         raise ValueError("Select at least one supported component before preparing a workbook.")
     return specs
@@ -258,6 +290,11 @@ def _copy_template_sheets(workbook, specs: Sequence[DetailSpec], manifest: Mappi
     return copies
 
 
+def _direct_quantity(inputs: Mapping[str, Any]) -> float | int | None:
+    direct = _numeric(inputs.get("directQuantity"))
+    return direct if direct is not None else _numeric(inputs.get("setupQuantity"))
+
+
 def _set_numeric_inputs(ws: Worksheet, row: int, values: Mapping[str, Any] | None) -> None:
     if not values:
         return
@@ -266,11 +303,14 @@ def _set_numeric_inputs(ws: Worksheet, row: int, values: Mapping[str, Any] | Non
         value = _numeric(values.get(field))
         if value is not None:
             ws[f"{column}{row}"] = value
+    quantity = _direct_quantity(values)
+    if quantity is not None:
+        ws.cell(row, 10).value = quantity
 
 
 def _copy_standard_inputs(
     ws: Worksheet, spec: DetailSpec, manifest: Mapping[str, Any], result: DetailResult
-) -> dict[tuple[int, str], int]:
+) -> tuple[dict[tuple[int, str], int], dict[int, int]]:
     rows = spec.form_data.get("rows") or {}
     schema_items = manifest["worksheets"][spec.template_key]["items"]
     last_data_row = result.total_row - 1
@@ -282,6 +322,7 @@ def _copy_standard_inputs(
 
     search_from = 17
     row_map: dict[tuple[int, str], int] = {}
+    item_starts: dict[int, int] = {}
     for item_index, item in enumerate(schema_items):
         start = None
         if item.get("sno") is not None:
@@ -297,6 +338,7 @@ def _copy_standard_inputs(
                     break
         if start is None:
             continue
+        item_starts[item_index] = start
         next_start = next((row for row, _ in starts if row > start), last_data_row + 1)
         cursor = start
         input_rows = [line for line in item.get("rows") or [] if line.get("calculation") != "heading"]
@@ -305,6 +347,12 @@ def _copy_standard_inputs(
             expected = _normalised_text(line.get("label"))
             for row in range(cursor, next_start):
                 candidate = _normalised_text(ws.cell(row, 2).value)
+                if line.get("id") == "waterproofing-roof":
+                    # The specification heading also contains “over roof slab”.
+                    if candidate == expected:
+                        target = row
+                        break
+                    continue
                 if candidate and (candidate in expected or expected in candidate):
                     target = row
                     break
@@ -318,7 +366,7 @@ def _copy_standard_inputs(
             _set_numeric_inputs(ws, target, rows.get(line.get("id")))
             cursor = target + 1
         search_from = start + 1
-    return row_map
+    return row_map, item_starts
 
 
 def _configured_line(line: Mapping[str, Any], inputs: Mapping[str, Any], storage: bool) -> dict[str, Any]:
@@ -348,8 +396,12 @@ def _custom_additions(spec: DetailSpec, manifest: Mapping[str, Any]) -> list[dic
         for custom in (form_data.get("customItems") or {}).get(item_key, []):
             custom_id = custom.get("id")
             lines = []
-            for line in item.get("rows") or []:
+            source_lines = item.get("rows") or []
+            single_measurement = sum(line.get("calculation") != "heading" for line in source_lines) == 1
+            for line in source_lines:
                 line = dict(line)
+                if line.get("label") == item.get("label") or (single_measurement and line.get("calculation") != "heading"):
+                    line["label"] = (custom.get("shortDescription") or "").strip() or "Custom item"
                 line["id"] = f"{custom_id}:{line.get('id')}"
                 line["values"] = (form_data.get("rows") or {}).get(line["id"], {})
                 lines.append(line)
@@ -357,15 +409,24 @@ def _custom_additions(spec: DetailSpec, manifest: Mapping[str, Any]) -> list[dic
                 "description": custom.get("detailedDescription") or custom.get("shortDescription") or f"Custom: {item.get('label')}",
                 "lines": lines,
             })
+        if (form_data.get("omittedItems") or {}).get(item_key):
+            continue
         for line in item.get("rows") or []:
-            for custom in (form_data.get("customRows") or {}).get(line.get("id"), []):
+            base_id = line.get("id")
+            user_rows = (form_data.get("customRows") or {}).get(base_id, [])
+            setup_rows = ((form_data.get("dimensionSetup") or {}).get("additions") or {}).get(base_id, [])
+            # Shared room measurements belong in the corresponding plastering item.
+            if base_id in ROOM_SCHEDULE_ANCHORS:
+                setup_rows = []
+            for custom in [*user_rows, *setup_rows]:
                 custom_line = dict(line)
                 custom_line.update({
                     "id": custom.get("id"),
                     "label": custom.get("label") or f"Custom: {line.get('label')}",
                     "values": (form_data.get("rows") or {}).get(custom.get("id"), {}),
                 })
-                additions.append({"description": f"Custom measurement under {item.get('label')}", "lines": [custom_line]})
+                source = "Measurement" if custom in setup_rows else "Custom measurement"
+                additions.append({"description": f"{source} under {item.get('label')}", "lines": [custom_line]})
                 additions[-1]["originItemIndex"] = index
                 additions[-1]["originLineId"] = line.get("id")
     return additions
@@ -376,7 +437,8 @@ def _prepared_calculation_items(spec: DetailSpec, manifest: Mapping[str, Any]) -
     prepared = []
     for index, base in enumerate(manifest["worksheets"][spec.template_key]["items"]):
         item_key = f"standard-{index}"
-        prepared.append({**base, "itemKey": item_key})
+        if not (data.get("omittedItems") or {}).get(item_key):
+            prepared.append({**base, "itemKey": item_key})
         for custom in (data.get("customItems") or {}).get(item_key, []):
             prepared.append({
                 **base,
@@ -397,15 +459,19 @@ def _calculation_rows(item: Mapping[str, Any], data: Mapping[str, Any]) -> list[
         base_id = scoped(base.get("id"))
         if data.get("storageWorksheet") and _storage_hidden(base):
             continue
-        effective = _configured_line(base, (data.get("rows") or {}).get(base_id, {}), bool(data.get("storageWorksheet")))
-        rows.append({
-            **effective,
-            "instanceId": base_id,
-            "baseId": base_id,
-            "sourceId": scoped(base.get("sourceId")) if base.get("sourceId") else None,
-            "itemKey": item.get("itemKey"),
-        })
-        for custom in (data.get("customRows") or {}).get(base_id, []):
+        inputs = (data.get("rows") or {}).get(base_id, {})
+        if not inputs.get("setupOmitted"):
+            effective = _configured_line(base, inputs, bool(data.get("storageWorksheet")))
+            rows.append({
+                **effective,
+                "instanceId": base_id,
+                "baseId": base_id,
+                "sourceId": scoped(base.get("sourceId")) if base.get("sourceId") else None,
+                "itemKey": item.get("itemKey"),
+            })
+        user_rows = (data.get("customRows") or {}).get(base_id, [])
+        setup_rows = ((data.get("dimensionSetup") or {}).get("additions") or {}).get(base_id, [])
+        for custom in [*user_rows, *setup_rows]:
             rows.append({
                 **base,
                 "id": custom.get("id"),
@@ -486,10 +552,17 @@ def _calculated_sheet_amount(spec: DetailSpec, manifest: Mapping[str, Any]) -> f
                 source_groups = row.get("includeSourceGroups") or [row.get("sourceGroup")]
                 sources = [value for group in source_groups for value in group_values(row, group)]
                 quantity = sum(sources) * float(row.get("percentage") or 0) if sources else None
+            direct_quantity = _direct_quantity(inputs)
+            if direct_quantity is not None and calculation not in {"heading", "lump_sum"}:
+                quantity = direct_quantity
             values[key]["quantity"] = quantity
-            if row.get("rate"):
-                rate = _numeric(inputs.get("rate"))
-                values[key]["amount"] = None if quantity is None or rate is None else float(quantity) * float(rate)
+
+    for row in rows:
+        if row.get("rate"):
+            rate = _numeric(direct(row).get("rate"))
+            value = values[str(row.get("instanceId"))]
+            quantity = value["quantity"]
+            value["amount"] = None if quantity is None or rate is None else _displayed_price(quantity, rate)
 
     total = 0.0
     for item, item_rows in prepared:
@@ -497,12 +570,14 @@ def _calculated_sheet_amount(spec: DetailSpec, manifest: Mapping[str, Any]) -> f
         override = _numeric((data.get("itemOverrides") or {}).get(item.get("itemKey")))
         total += float(override) if override is not None else calculated
     sheet_override = _numeric(data.get("sheetTotalOverride"))
-    return float(sheet_override) if sheet_override is not None else total
+    return float(sheet_override) if sheet_override is not None else total * spec.floor_multiplier
 
 
 def _effective_final_amount(spec: DetailSpec, manifest: Mapping[str, Any]) -> float | int:
     final_amount = _numeric(spec.form_data.get("finalAmount"))
-    return final_amount if final_amount is not None else _calculated_sheet_amount(spec, manifest)
+    if final_amount is not None and not spec.form_data.get("omittedItems"):
+        return final_amount
+    return _calculated_sheet_amount(spec, manifest)
 
 
 def _alignment_with(cell, **changes: Any):
@@ -696,6 +771,15 @@ def _apply_dimension_formulas(
                     label = ws.cell(target - 1, 2)
                     label.value = str(label.value).replace("gravel", "sand")
             inputs = rows.get(identifier, {})
+            if inputs.get("setupOmitted"):
+                for column in range(6, 13):
+                    ws.cell(target, column).value = None
+                if identifier != "plaster-gross":
+                    ws.row_dimensions[target].hidden = True
+                continue
+            if inputs.get("setupLabel"):
+                description.value = str(inputs["setupLabel"])
+                description.data_type = "s"
             factor = _numeric(inputs.get("factor"))
             configured = _configured_line(line, inputs, storage)
             if configured.get("percentage") != line.get("percentage"):
@@ -707,13 +791,24 @@ def _apply_dimension_formulas(
                 else:
                     description.value = f"Net with {(1 - percent) * 100:g}% deduction for openings"
             if line.get("calculation") in {"derived", "derived_expression"} and factor is not None:
-                description.value = f"{line['label']} @ {factor:g} {'kg/m²' if identifier == 'steel-roof-slab' else 'kg/m³'}"
+                slab_depth = _numeric(inputs.get("slabDepth"))
+                steel_rate = _numeric(inputs.get("steelRate"))
+                slab_steel = identifier == "steel-roof-slab"
+                if slab_steel and slab_depth is not None and steel_rate is not None and slab_depth * steel_rate == factor:
+                    description.value = f"{line['label']} @ {steel_rate:g} kg/m³, {slab_depth:g} m thick"
+                    multiplier = f"{slab_depth}*{steel_rate}"
+                else:
+                    description.value = f"{line['label']} @ {factor:g} {'kg/m²' if slab_steel else 'kg/m³'}"
+                    multiplier = str(factor)
                 source = by_id.get(line.get("sourceId"))
                 if source is not None and _numeric(inputs.get("quantity")) is None:
-                    ws.cell(target, 10).value = f'=IF(ISNUMBER(J{source}),J{source}*{factor},"")'
+                    ws.cell(target, 10).value = f'=IF(ISNUMBER(J{source}),J{source}*{multiplier},"")'
             if configured["calculation"] != line["calculation"] and configured["calculation"] == "manual_quantity_rate":
                 ws.cell(target, 11).value = _numeric(inputs.get("rate"))
                 ws.cell(target, 12).value = f'=IF(COUNT(J{target},K{target})<2,"",J{target}*K{target})'
+            direct = _direct_quantity(inputs)
+            if direct is not None and line.get("calculation") != "lump_sum":
+                ws.cell(target, 10).value = direct
 
 
 def _custom_quantity_formula(line: Mapping[str, Any], row: int, by_id: Mapping[str, int], by_group: Mapping[str, list[int]]) -> str | None:
@@ -755,10 +850,168 @@ def _formula_amount_rows(ws: Worksheet, before_row: int) -> list[int]:
     return rows
 
 
+def _use_displayed_prices(ws: Worksheet, result: DetailResult) -> None:
+    for row in _formula_amount_rows(ws, result.total_row):
+        cell = ws.cell(row, 12)
+        if cell.data_type != "f":
+            continue
+        # Keep template blank guards, using the Qty override for count-rate rows when present.
+        quantity, count, rate = f"J{row}", f"F{row}", f"K{row}"
+        formula = cell.value
+        if f"{count}*{rate}" in formula:
+            if _numeric(ws[quantity].value) is not None:
+                formula = formula.replace(f"ISNUMBER({count})", f"ISNUMBER({quantity})")
+                formula = formula.replace(f"{count}*{rate}", f"{quantity}*{rate}")
+            else:
+                quantity = count
+        cell.value = formula.replace(f"{quantity}*{rate}", f"ROUND(ROUND({quantity},2)*ROUND({rate},2),2)")
+
+
+def _remap_detail_formula(formula: str, row_map: Mapping[int, int]) -> str:
+    """Update local A1 references without touching quoted report text."""
+    tokens = Tokenizer(formula)
+    for token in tokens.items:
+        if token.subtype != "RANGE":
+            continue
+        refs = [DETAIL_CELL_REFERENCE.fullmatch(part) for part in token.value.split(":")]
+        if not all(refs) or len(refs) > 2:
+            continue
+        start, end = int(refs[0][2]), int(refs[-1][2])
+        retained = [row_map[row] for row in range(start, end + 1) if row in row_map]
+        if not retained:
+            # An empty cell keeps COUNT, SUM and ISNUMBER guards working when
+            # their source item is removed.
+            token.value = "$XFD$1"
+        elif len(refs) == 1:
+            token.value = f"{refs[0][1]}{retained[0]}"
+        else:
+            token.value = f"{refs[0][1]}{retained[0]}:{refs[1][1]}{retained[-1]}"
+    return tokens.render()
+
+
+def _insert_scheduled_rooms(
+    ws: Worksheet,
+    spec: DetailSpec,
+    result: DetailResult,
+    row_map: dict[tuple[int, str], int],
+    item_starts: dict[int, int],
+    anchor_id: str,
+) -> dict[tuple[int, str], list[int]]:
+    setup = spec.form_data.get("dimensionSetup") or {}
+    rooms = (setup.get("additions") or {}).get(anchor_id, [])
+    if not rooms:
+        return {}
+    anchor = next(((index, row) for (index, key), row in row_map.items() if key == anchor_id), None)
+    if anchor is None:
+        return {}
+    index, anchor_row = anchor
+    if (spec.form_data.get("omittedItems") or {}).get(f"standard-{index}"):
+        return {}
+    first = anchor_row + 1
+    amount = len(rooms)
+    positions = {row: row + amount if row >= first else row for row in range(1, ws.max_row + 1)}
+    for cells in ws.iter_rows():
+        for cell in cells:
+            if cell.data_type == "f":
+                cell.value = _remap_detail_formula(cell.value, positions)
+    _insert_rows_preserving_merges(ws, first, amount)
+    for key, row in row_map.items():
+        row_map[key] = positions[row]
+    for key, row in item_starts.items():
+        item_starts[key] = positions[row]
+    result.total_row = positions[result.total_row]
+    result.estimated_row = positions[result.estimated_row]
+    result.words_row = positions[result.words_row]
+    result.last_row = positions[result.last_row]
+
+    group, calculation = ROOM_SCHEDULE_ANCHORS[anchor_id]
+    inputs = spec.form_data.get("rows") or {}
+    for row, room in enumerate(rooms, first):
+        _style_table_row(ws, row, str(room["label"]))
+        ws.cell(row, 2).data_type = "s"
+        ws.cell(row, 10).value = _custom_quantity_formula({"calculation": calculation}, row, {}, {})
+        _set_numeric_inputs(ws, row, inputs.get(room["id"], {}))
+    return {(index, group): list(range(first, first + amount))}
+
+
+def _remove_standard_items(
+    ws: Worksheet,
+    spec: DetailSpec,
+    result: DetailResult,
+    item_starts: Mapping[int, int],
+    standard_end: int,
+) -> None:
+    omitted = spec.form_data.get("omittedItems") or {}
+    if not omitted:
+        return
+    # Include template-only numbered blocks in the boundary list so omitting
+    # the item above one never removes that separate block.
+    boundaries = sorted({*item_starts.values(), standard_end, *(
+        row for row in range(17, standard_end) if _numeric(ws.cell(row, 1).value) is not None
+    )})
+    ends = dict(zip(boundaries, boundaries[1:]))
+    blocks = sorted(
+        (start, ends[start]) for index, start in item_starts.items()
+        if omitted.get(f"standard-{index}")
+    )
+    if not blocks:
+        return
+    removed = {row for start, end in blocks for row in range(start, end)}
+    retained = [row for row in range(1, ws.max_row + 1) if row not in removed]
+    row_map = {old: new for new, old in enumerate(retained, 1)}
+    first_changed = blocks[0][0]
+
+    for row in ws.iter_rows():
+        for cell in row:
+            if cell.row in row_map and cell.data_type == "f":
+                cell.value = _remap_detail_formula(cell.value, row_map)
+
+    merges = [merge for merge in ws.merged_cells.ranges if merge.max_row >= first_changed]
+    for merge in merges:
+        ws.unmerge_cells(str(merge))
+    dimensions = {row: dimension for row, dimension in ws.row_dimensions.items() if row >= first_changed}
+    for row in dimensions:
+        del ws.row_dimensions[row]
+    for start, end in reversed(blocks):
+        ws.delete_rows(start, end - start)
+    for row, dimension in dimensions.items():
+        if row in row_map:
+            dimension.index = row_map[row]
+            ws.row_dimensions[row_map[row]] = dimension
+    for merge in merges:
+        surviving = [row_map[row] for row in range(merge.min_row, merge.max_row + 1) if row in row_map]
+        if surviving:
+            ws.merge_cells(start_row=surviving[0], end_row=surviving[-1],
+                           start_column=merge.min_col, end_column=merge.max_col)
+
+    serial = 0
+    for row in range(17, row_map[standard_end]):
+        cell = ws.cell(row, 1)
+        if _numeric(cell.value) is not None and not ws.row_dimensions[row].hidden:
+            serial += 1
+            cell.value = serial
+    result.total_row = row_map[result.total_row]
+    result.estimated_row = row_map[result.estimated_row]
+    result.words_row = row_map[result.words_row]
+    result.last_row = row_map[result.last_row]
+
+
+def _group_detail_amounts(ws: Worksheet, result: DetailResult, multiplier: int) -> None:
+    ws["L16"].value = f"Group amount (Rs.) × {multiplier}"
+    for row in _formula_amount_rows(ws, result.total_row):
+        cell = ws.cell(row, 12)
+        if cell.data_type == "f":
+            # A blank rate leaves the amount blank rather than producing a spreadsheet error.
+            formula = cell.value[1:]
+            cell.value = f'=IF(ISNUMBER({formula}),({formula})*{multiplier},"")'
+        elif _numeric(cell.value) is not None:
+            cell.value = f"={cell.value}*{multiplier}"
+
+
 def _repair_detail_totals(ws: Worksheet, result: DetailResult) -> None:
     amount_rows = _formula_amount_rows(ws, result.total_row)
     references = ",".join(f"L{row}" for row in amount_rows)
-    ws.cell(result.total_row, 12).value = f'=IF(COUNT({references})=0,"",SUM({references}))'
+    ws.cell(result.total_row, 12).value = f'=IF(COUNT({references})=0,"",SUM({references}))' if references else '=""'
     ws.cell(result.estimated_row, 12).value = f'=IF(COUNT(L{result.total_row})=0,"",L{result.total_row})'
     ws["L14"] = f'=IF(COUNT(L{result.estimated_row})=0,"",L{result.estimated_row})'
     ws.cell(result.words_row, 12).value = f'=IF(COUNT(L{result.estimated_row})=0,"",L{result.estimated_row})'
@@ -899,7 +1152,7 @@ def _build_separate_abstract(
     for index, spec in enumerate(specs, 1):
         result = results[spec.name]
         formula = f'=IF(COUNT(\'{spec.name.replace(chr(39), chr(39) * 2)}\'!{result.estimated_cell})=0,"",\'{spec.name.replace(chr(39), chr(39) * 2)}\'!{result.estimated_cell})'
-        _add_abstract_direct_row(ws, row, index, f"Cost of construction of {spec.component_name}", formula, bold=True)
+        _add_abstract_direct_row(ws, row, index, spec.abstract_label, formula, bold=True)
         if completed:
             final_amount = _effective_final_amount(spec, manifest)
             known_total += float(final_amount)
@@ -1072,7 +1325,7 @@ def _append_compact_abstract(
     for index, spec in enumerate(specs, 1):
         result = results[spec.name]
         formula = f'=IF(COUNT(\'{spec.name.replace(chr(39), chr(39) * 2)}\'!{result.estimated_cell})=0,"",\'{spec.name.replace(chr(39), chr(39) * 2)}\'!{result.estimated_cell})'
-        _add_abstract_direct_row(ws, row, index, f"Cost of construction of {spec.component_name}", formula)
+        _add_abstract_direct_row(ws, row, index, spec.abstract_label, formula)
         if completed:
             final_amount = _effective_final_amount(spec, manifest)
             known_total += float(final_amount)
@@ -1120,6 +1373,8 @@ def generate_estimation_workbook(
 
     if mode not in {"completed", "offline"}:
         raise ValueError("mode must be 'completed' or 'offline'")
+    if industrial_centre_line(state):
+        raise ValueError("Prepare the industrial Centre Line estimate offline and upload the completed report.")
     manifest = _load_manifest()
     specs = _detail_specs(state, manifest)
     separate_abstract = _uses_separate_abstract(state)
@@ -1132,20 +1387,35 @@ def generate_estimation_workbook(
         result = results[spec.name]
         if mode == "completed" or spec.template_key == "storage_shed":
             if mode == "completed":
-                if spec.form_data.get("dimensionsRequired") and not spec.form_data.get("dimensionSetup"):
+                if spec.form_data.get("dimensionsRequired") and not (spec.form_data.get("dimensionSetup") or spec.form_data.get("manualMeasurements")):
                     raise ValueError(f"Apply dimensions and defaults for {spec.component_name}.")
                 output_spec = spec
             else:
                 output_spec = DetailSpec(spec.name, spec.component_name, spec.template_key, {})
-            row_map = _copy_standard_inputs(ws, output_spec, manifest, result)
+            row_map, item_starts = _copy_standard_inputs(ws, output_spec, manifest, result)
+            custom_group_rows = {}
+            for anchor in ROOM_SCHEDULE_ANCHORS:
+                custom_group_rows.update(_insert_scheduled_rooms(ws, output_spec, result, row_map, item_starts, anchor))
+            standard_end = result.total_row
             additions = _custom_additions(spec, manifest) if mode == "completed" else []
-            custom_group_rows = _append_custom_additions(ws, result, additions)
+            for group, rows in _append_custom_additions(ws, result, additions).items():
+                custom_group_rows.setdefault(group, []).extend(rows)
             _repair_standard_aggregate_formulas(ws, output_spec, manifest, row_map, custom_group_rows)
             _apply_dimension_formulas(ws, output_spec, manifest, row_map)
+            if mode == "completed":
+                _use_displayed_prices(ws, result)
+                _remove_standard_items(ws, spec, result, item_starts, standard_end)
+            if mode == "completed" and spec.floor_multiplier > 1:
+                _group_detail_amounts(ws, result, spec.floor_multiplier)
         _repair_detail_totals(ws, result)
         explicit_final_amount = _numeric(spec.form_data.get("finalAmount")) if mode == "completed" else None
-        if explicit_final_amount is not None:
+        if mode == "completed" and spec.form_data.get("omittedItems"):
+            if spec.form_data.get("itemOverrides") or _numeric(spec.form_data.get("sheetTotalOverride")) is not None:
+                ws[result.estimated_cell] = _effective_final_amount(spec, manifest)
+        elif explicit_final_amount is not None and (spec.floor_multiplier == 1 or spec.form_data.get("itemOverrides") or _numeric(spec.form_data.get("sheetTotalOverride")) is not None):
             ws[result.estimated_cell] = explicit_final_amount
+        elif mode == "completed" and _numeric(spec.form_data.get("sheetTotalOverride")) is not None:
+            ws[result.estimated_cell] = _numeric(spec.form_data["sheetTotalOverride"])
         if mode == "completed":
             effective_final_amount = _effective_final_amount(spec, manifest)
             ws.cell(result.words_row, 1).value = f"(Rupees {_amount_in_words(effective_final_amount)} only)"
@@ -1168,6 +1438,10 @@ def generate_estimation_workbook(
     calculation.forceFullCalc = True
     calculation.calcMode = "auto"
     for worksheet in workbook.worksheets:
+        for row in worksheet.iter_rows(min_row=14, min_col=6, max_col=12):
+            for cell in row:
+                if cell.data_type == "f" or (cell.data_type == "n" and cell.value is not None):
+                    cell.number_format = "#,##0.00"
         _apply_a4_print_layout(worksheet)
     workbook.active = 0
 
