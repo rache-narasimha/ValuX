@@ -101,9 +101,20 @@ body:not(.workflow-page) .mobile-menu-button { display: none; }
 .finance-horizontal-chart .grouped-bars > i:first-child { border-radius: 999px 0 0 999px; }
 .finance-horizontal-chart .grouped-bars > i:last-child { border-radius: 0 999px 999px 0; }
 .finance-horizontal-chart .grouped-bars > i:only-child { border-radius: 999px; }
-.finance-horizontal-chart .grouped-bars .earned { background: var(--peach); }
-.finance-horizontal-chart .grouped-bars .received { background: var(--green); }
-.finance-horizontal-chart .grouped-bars .outstanding { background: var(--amber); }
+.finance-horizontal-chart .grouped-bars .earned { background-color: var(--peach); }
+.finance-horizontal-chart .grouped-bars .received { background-color: var(--green); }
+.finance-horizontal-chart .grouped-bars .outstanding { background-color: var(--amber); }
+.horizontal-track > i,
+.finance-horizontal-chart .grouped-bars > i,
+.institution-bars i::after,
+.institution-bar-row > i::after,
+.report-mix-chart i::after,
+.finance-mini-bars i::after,
+.workflow-distribution-chart i > b {
+  background-image: var(--chart-satin-horizontal);
+}
+.chart-track > i { background-image: var(--chart-satin-vertical); }
+
 .finance-column.selected .horizontal-track { outline-color: color-mix(in srgb, var(--peach) 42%, transparent); }
 
 .workflow-distribution-chart button { grid-template-columns: 110px minmax(120px, 1fr) 28px; }

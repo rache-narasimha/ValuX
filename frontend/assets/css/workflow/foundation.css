@@ -27,6 +27,8 @@
   --peach-soft: #fff0e7;
   --cream: #fffaf6;
   --shadow: 0 10px 30px rgba(104, 48, 28, .06);
+  --chart-satin-horizontal: linear-gradient(180deg, #ffffff32 0%, #ffffff12 22%, transparent 52%, #0000000b 100%);
+  --chart-satin-vertical: linear-gradient(90deg, #0000000b 0%, transparent 20%, #ffffff28 48%, #ffffff12 68%, #0000000b 100%);
 }
 
 html[data-theme="dark"] {

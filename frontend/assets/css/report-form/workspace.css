@@ -40,6 +40,32 @@ html[data-theme="dark"] body:not(.workflow-page) .panel,
 html[data-theme="dark"] body:not(.workflow-page) footer,
 html[data-theme="dark"] body:not(.workflow-page) .processing-card,
 html[data-theme="dark"] body:not(.workflow-page) .modal-card { background: #2a1d18; border-color: #604237; color: #f7ded0; }
+html[data-theme="dark"] body:not(.workflow-page) :is(.document-card, .floor-card, .workflow-card, .preparation-choice-card) {
+  background: var(--cream, #241915);
+  border-color: var(--line, #604237);
+  color: var(--ink, #f7ded0);
+}
+html[data-theme="dark"] body:not(.workflow-page) .preparation-choice-card:has(input:checked) {
+  border-color: var(--peach, #f18a5c);
+}
+html[data-theme="dark"] body:not(.workflow-page) .subgroup { border-color: var(--line, #604237); }
+html[data-theme="dark"] body:not(.workflow-page) :is(.subgroup h3, .workflow-card h3, .preparation-choice-card strong) {
+  color: var(--peach-dark, #ffad87);
+}
+html[data-theme="dark"] body:not(.workflow-page) :is(.workflow-card p, .preparation-choice-card small, .preparation-selection-status) {
+  color: var(--muted, #c7aaa0);
+}
+html[data-theme="dark"] body:not(.workflow-page) :is(button.secondary, .button-link.secondary, .add-document) {
+  background: var(--peach-soft, #4a2d24);
+  color: var(--ink, #f7ded0);
+}
+html[data-theme="dark"] body:not(.workflow-page) .remove-document {
+  background: var(--red-soft, #4b2722);
+  color: var(--red, #ef8a7e);
+}
+html[data-theme="dark"] body:not(.workflow-page) :is(.practice-banner, .report-task-context, .report-task-notes) {
+  border-color: var(--line, #604237) !important;
+}
 html[data-theme="dark"] body:not(.workflow-page) .workspace { background: #1c1411; }
 html[data-theme="dark"] body:not(.workflow-page) input,
 html[data-theme="dark"] body:not(.workflow-page) select,
@@ -121,6 +147,17 @@ body.report-nav-collapsed main > aside .example-controls { display: none; }
   gap: 12px;
   margin-bottom: 16px;
 }
+
+.site-match-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.site-match-control input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: #b94a28; }
+.site-match-message { margin: -6px 0 12px; }
 
 .subgroup-heading h3 { margin: 0; }
 .subgroup-heading .hint { margin: 6px 0 0; }

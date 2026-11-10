@@ -170,6 +170,12 @@ try:
     valuation_form["uploadType"] = "retrospective"
     current_draft = reports.get_draft(unknown["id"], father)
     reports.save_draft(unknown["id"], {"reportKey":"valuation-general","revision":current_draft["revision"],"payload":valuation_form}, father)
+    fails(lambda:workflow.complete(unknown["id"],{"version":version(unknown)},father),"stale_report")
+    reports.register_artifact(
+        unknown["id"], father, content=b"%PDF-1.4 fresh", filename="fresh-valuation.pdf",
+        artifact_type="valuation_pdf", source="uploaded",
+        payload={"retrospective": True, "preparationSource": "retrospective"}, work_note="Reviewed the replacement report.",
+    )
     original = workflow.complete(unknown["id"], {"version":version(unknown)}, father)
     revaluation = workflow.create_task({**task_payload("revaluation", f"File-only revaluation {suffix}"),
                                         "linkedValuationId":original["id"]}, father)

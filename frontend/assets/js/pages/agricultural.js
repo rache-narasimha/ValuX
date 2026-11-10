@@ -340,9 +340,8 @@ async function setPreparationMethod(method) {
   if (state.preparationMethod === method) return true;
   const previous = state.preparationMethod;
   const task = currentTask();
+  if (!RetrospectiveValuation.confirmPreparationChange("preparation method", previous, method, task)) return false;
   if (previous && task?.reportGeneratedAt) {
-    const accepted = window.confirm("Change the preparation method? The retained report attachment will be removed. Your entered form details will be kept.");
-    if (!accepted) return false;
     try {
       await BusinessApi.delete(`/api/tasks/${encodeURIComponent(task.id)}/artifacts/latest`);
       await TaskStore.refresh(task.id);
@@ -361,7 +360,7 @@ async function setPreparationMethod(method) {
 function confirmReportInvalidation() {
   const task = currentTask();
   if (!task?.reportGeneratedAt || task.reportFresh === false || state.generatedChangeAcknowledged) return true;
-  const accepted = window.confirm("Changing report details will make the retained report outdated. Continue and regenerate the report before completing this task?");
+  const accepted = RetrospectiveValuation.confirmReportEdit(state.preparationMethod);
   if (accepted) state.generatedChangeAcknowledged = true;
   return accepted;
 }
@@ -548,7 +547,7 @@ function wireInputs() {
     });
 }
 
-window.addEventListener("sln:valuation-upload-type-changed", () => { markDirty(); saveDraft(); });
+
 
 // Page assembly and report-generation event wiring.
 async function init() {
@@ -584,7 +583,7 @@ async function init() {
     if (section.id === "preparation") {
       panel = window.RetrospectiveValuation.preparationPanel("valuation-agricultural", state.preparationMethod, setPreparationMethod);
     } else if (section.id === "offline") {
-      panel = window.RetrospectiveValuation.offlinePanel("valuation-agricultural", draft?.uploadType);
+      panel = window.RetrospectiveValuation.offlinePanel("valuation-agricultural", draft?.uploadType, { uploadTypeChanged: async () => { await persistDraftNow(); markDirty(); } });
     } else {
       panel = document.createElement("div");
       panel.className = "panel";
@@ -672,9 +671,11 @@ byId("preview-report").onclick = async () => {
     "Creating agricultural report preview",
     "Preparing photographs and generating the PDF preview…",
   );
+  const cancel = ReportProcessing.cancellation(byId("processing"));
   try {
     await persistDraftNow();
     const response = await fetch("/api/agricultural/preview", {
+      signal: cancel.signal,
       method: "POST",
       headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(ReportData.requestPayload(reportPayload())),
@@ -683,6 +684,7 @@ byId("preview-report").onclick = async () => {
       if (!result.ok) throw new Error(data.error || "Preview failed");
       return data;
     });
+    if (cancel.signal.aborted) return;
     byId("preview-frame").src = response.preview;
     byId("preview-modal").hidden = false;
     state.previewId = response.preview_id;
@@ -690,9 +692,12 @@ byId("preview-report").onclick = async () => {
     ReportData.setPreview({ id: response.preview_id, url: response.preview });
     status.textContent = "Preview ready";
   } catch (error) {
+    if (cancel.signal.aborted) { status.textContent = "Preview cancelled"; return; }
     status.textContent = "Preview failed";
     alert(reportErrorMessage(error, "The preview could not be created. Check your connection and try again."));
   } finally {
+    if (cancel.signal.aborted) status.textContent = "Preview cancelled";
+    cancel.dispose();
     setProcessing(false);
   }
 };

@@ -235,10 +235,10 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   segment boundaries. Institution section headings and report-type rows use
   decorative SVG icons; report labels use a compact shared column so the bars
   use the remaining width. Existing chart drill-downs remain unchanged.
-  Institution Workload shows
-  assignment counts with existing task-list links. Its NBFC column includes
-  Total Institutions, derived from the configured institutions listed in the
-  chart; these institution counts do not change with period/report filters.
+  Institution Workload shows assignment counts with existing task-list links.
+  Its NBFC column includes the compact Workload by Institution Type doughnut,
+  based on filtered Bank and NBFC assignment counts and percentages. An empty
+  selection shows an empty ring and No assignments.
 - Income & Payments is consolidated into the lower summary, with no duplicate
   institution payment bars, analysis toggle or payment-view control. It defaults
   to all institutions within the shared period; its institution selector narrows
@@ -247,10 +247,11 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   118px diameter and shares the satin finish of the two analysis doughnuts.
 - The dashboard places institution analysis beside assignment status, and
   payment summary beside report types on roomy desktop screens. The right
-  panel stacks a compact Assignment Status chart above Workload by Institution
-  Type (CEO-only). The latter uses Bank/NBFC assignment counts and percentages
-  from the same filtered workload data, not configured-institution counts.
-  With no matching assignments it displays an empty ring and No assignments.
+  panel stacks a compact Assignment Status doughnut above the CEO-only Report
+  Preparation vertical chart. The bars are labelled Online Preparation,
+  Offline Template and Retrospective Submission. They follow the same period
+  and report filters, and Progress and Completion use their linked estimate’s
+  method, as in the task-list filter. Unrecorded methods are counted separately.
   Panels stack before their content becomes cramped, with content-led chart
   heights and consistent heading/section spacing. Task-status colours match their
   distribution legend. Cancelled work appears in that distribution when present
@@ -259,6 +260,14 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Workload totals link to the existing task-summary page for Banks, NBFCs or
   both together, preserving the selected report group and assigned-date
   period. Aggregate summaries, task tables and exports use the same filters.
+- Assignment Status and Institution Type doughnut slices and Report Preparation
+  bars open the matching task filters with the dashboard’s period and report
+  group. Institution Type uses the active institution directory. Legend links
+  and existing workload and report-type drill-downs remain available.
+- CEO payment amounts and collection slices carry the institution, period and
+  report group into the task list. Payment received combines Partially Received
+  and Received. Outstanding combines Partially Received and Pending. These
+  links exclude Cancelled tasks and institutions outside the active directory.
 - Institution drill-down retains report-type and task filters and includes a
   route back to the all-institutions view.
 - Father/CEO financial views show earned, received, and outstanding totals for
@@ -387,6 +396,10 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - DOCX is the completion-qualifying artifact for ordinary valuation work. A
   generated PDF is an optional direct-download copy and does not independently
   qualify the task for completion or closure.
+- General valuation Site & Land offers separate matching controls for Boundaries
+  and Dimensions. Users can edit either column while its matching control is on.
+  Existing conflicting pairs must be resolved before linking. Unlinking keeps the
+  copied values, and saved drafts retain the matching controls.
 - For an eligible standard general or agricultural valuation, both the CEO and
   the assigned employee choose a preparation method immediately after Report
   Setup: Fill online, or Complete offline and upload. Online preparation exposes
@@ -436,8 +449,8 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   including the total area of all floors represented on a typical sheet. Report
   Setup and both Abstract layouts have no Overall Plinth Area field or aggregate
   area wording. Legacy overall-area values are ignored in newly generated output;
-  individual areas populate worksheet headings. They affect measurements only
-  when explicitly used as the basis for the sand filling area.
+  individual areas accept text and populate worksheet headings. They do not
+  drive measurements.
 - Every task-linked report form starts with its work-note composer collapsed.
   Add note/Hide note toggles it; Save note submits it. A required completion note
   reveals/focuses the composer, preserving all existing note and offline-note rules.
@@ -475,7 +488,9 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   measurement defaults. Applying them updates the linked quantities and preserves
   rates, independent measurements, lump sums and custom entries. Older worksheets
   can use this step explicitly or continue with their saved manual measurements.
-  Inputs share a baseline within each row when their labels wrap.
+  Inputs share a baseline within each row when their labels wrap. The selected
+  worksheet shows a live review of derived counts, lengths, widths and depths,
+  with the sources of inherited values and overrides, before applying.
   The lowest RCC floor's outside dimensions are entered manually. On an upper
   worksheet, each outside dimension can default to the edge-to-edge roof slab
   dimension of the physical floor immediately below in the same building.
@@ -522,9 +537,8 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   or restored per worksheet. Removal excludes its rows and amount from the
   completed workbook and renumbers subsequent standard items. RCC sand filling
   defaults to roof slab length × width with the existing filling depth.
-  Users can override the plan dimensions or enter a measured area or an
-  editable percentage of the worksheet’s plinth area. A measured area takes
-  precedence over the percentage and plan dimensions.
+  Users adjust filling measurements or quantity on the worksheet itself.
+  Previously applied dimensions remain in saved worksheets until reapplied.
 - A new Typical Floors group uses per-floor dimensions, rates and lump sums.
   Each line amount multiplies by the number of floors once, and the Abstract
   names every grouped floor and includes the group total once. The lowest
@@ -540,8 +554,9 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   roofing measurements. Shed brickwork uses gross quantity and wall plaster retains
   its editable opening deduction. Workbook quantities use the same applied measurements
   and factors as the online form.
-- Standard general/agricultural valuation and estimation offline uploads ask for
-  Filled template or Retrospective report. Filled template requires only a prior
+- Standard valuation, revaluation, estimation, Progress and Completion offline
+  uploads use the Estimation form's attachment-first layout and ask for Filled
+  template or Retrospective report. Filled template requires only a prior
   template download recorded against the task, valid across reloads, devices and
   handovers; configuration, template version and uploaded contents are not matched.
   Retrospective uploads require no template download. CEO and assigned employees
@@ -559,7 +574,7 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   Changed report inputs invalidate the preview and retained report; workflow-only
   changes do not. Switching preparation methods retains entered data but requires
   a newly generated or attached report.
-- Estimation gives action-specific confirmation for every actual preparation or
+- Standard report forms give action-specific confirmation for every actual preparation or
   previously selected upload-type change, including repeated switches. First
   selection without a retained report needs no warning. Cancellation restores
   the previous selection and section. Existing configuration/measurements remain;
@@ -568,8 +583,10 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Estimation extraction, preview, template preparation, generation, submission and
   retained-file removal display one processing indicator with meaningful stage
   text and no fabricated percentages. Conflicting actions are blocked until it
-  finishes, controls recover after failure, and superseded extraction results
-  cannot overwrite a newer selection. The report-output card uses a contained
+  finishes and controls recover after failure. Users can cancel extraction and
+  retain the file for manual entry, or cancel waiting for a preview in any online
+  report form. Superseded results cannot overwrite a newer approved preview.
+  Submission and removal can commit server-side once sent. The report-output card uses a contained
   filename, compact download icon and distinct ready/outdated states; report
   readiness does not mark the task Completed.
 - Preparation Method is recorded explicitly as Online, Filled template or
@@ -622,17 +639,20 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   and Branch Sanction page. Reports for other institutions omit those items.
 - Progress and Completion default to Fill online for a linked finalized estimate
   with retained component costs. The CEO and assigned employee can choose
-  Fill online or Upload retrospective report in Preparation Method, directly
-  after Report Setup. The retrospective route keeps the assessment and replaces
+  Fill online or Complete offline and upload in Preparation Method, directly
+  after Report Setup. Offline preparation keeps the assessment and replaces
   the online generation steps with a DOCX or PDF upload and one work note.
+  The task-specific DOCX template includes the linked project and component costs
+  with assessment fields ready to fill.
   Mark the task Completed separately. The same
   linked-estimate and assessment rules apply. A changed assessment or revised
   linked estimation requires review and a fresh attachment. The task records its
   own preparation method while the CEO filter still uses the linked estimate's.
 - Online Progress/Completion retain their existing site-photograph and document
   rules, including at least one authenticated site photograph and a generated
-  DOCX. Retrospective upload qualifies with the retained DOCX or PDF and requires
-  no separate photo upload, preview or template download.
+  DOCX. Offline upload qualifies with the retained DOCX or PDF and requires
+  no separate photo upload or preview. Only Filled template requires a prior
+  template download.
 - Revaluation is a separate assignment linked to an original Completed or Closed
   General or Agricultural Valuation. It pins the original retained report version
   and starts with an editable copy of its saved fields, excluding photos and maps.

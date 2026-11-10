@@ -7,7 +7,7 @@
 
   const geometryFields = new Set([
     "long", "short", "longCount", "shortCount", "columns", "measuredPerimeter",
-    "fillArea", "fillAreaPercent", "fillLength", "fillWidth", "slabLength", "slabWidth",
+    "slabLength", "slabWidth",
     "ceilingLength", "ceilingWidth", "coatLength", "coatWidth", "plasterRun", "floorLength", "floorWidth",
   ]);
 
@@ -53,16 +53,11 @@
     group("Excavation, foundation and filling", ids.has("excavation-total") ? [
       ["excWidth", "Wall excavation width (m)", 0.90], ["excDepth", "Wall excavation depth (m)", shed ? 2.10 : 1.15],
       ...dims("pit", "Column pit", [1.20, 1.20, shed ? 2.10 : 2.12]),
-      ["pccDepth", centre ? "Wall PCC thickness (m)" : "PCC thickness (m)", shed ? 0.30 : 0.15],
-      ...(centre ? [["pitPccDepth", "Column-pit PCC thickness (m)", 0.30]] : []),
-      ...(!shed ? [
-        ["fillArea", "Measured filling area override (m²)", ""],
-        ["fillAreaPercent", "Filling area as % of plinth area", "", "percent"],
-      ] : []),
+      ["pccDepth", "Wall PCC thickness (m)", shed ? 0.30 : 0.15],
+      ["pitPccDepth", "Column-pit PCC thickness override (m)", centre ? 0.30 : ""],
       ["foundationWidth", "Foundation masonry width (m)", 0.60], ["foundationDepth", "Foundation masonry depth (m)", shed ? 1.80 : 1],
       ["basementWidth", "Basement masonry width (m)", 0.45], ["basementDepth", "Basement masonry height (m)", shed ? 0.91 : 1],
-      ["fillLength", "Filling length override (m)", ""], ["fillWidth", "Filling width override (m)", ""],
-      ["fillDepth", shed ? "Filling depth (m)" : "Filling depth override (m)", shed ? 0.76 : ""],
+      ...(shed ? [["fillDepth", "Filling depth (m)", 0.76]] : []),
       ...(shed && !storage ? [["fillOffset", "Gravel filling plan adjustment (m)", 0.76]] : []),
     ] : []);
     group("RCC concrete and reinforcement", [
@@ -119,7 +114,7 @@
     return { ids, groups, shed, storage, centre, layers };
   }
 
-  function derive(definition, values, additions = {}) {
+  function derive(definition, values, additions = {}, reviewSources = {}) {
     const { ids, shed, storage, centre } = definition;
     const v = {};
     for (const { fields } of definition.groups) for (const { id, label, value, kind } of fields) {
@@ -144,10 +139,11 @@
     const perimeter = measuredPerimeter ?? 2 * (lc + sc);
     const rows = {};
     function set(id, fields) { if (ids.has(id)) rows[id] = fields; }
-    function measure(id, no, length, breadth, depth) {
+    function measure(id, no, length, breadth, depth, source) {
       if (!ids.has(id)) return;
       if ([length, breadth, depth].some((value) => value != null && value < 0)) throw new Error("The selected dimensions produce a negative measurement. Check the wall runs and widths.");
       set(id, { no, length, breadth, depth });
+      if (source) reviewSources[id] = source;
     }
     const foundationRun = perimeter - (v.excWidth - v.foundationWidth);
     const basementRun = foundationRun - (v.foundationWidth - v.basementWidth);
@@ -173,38 +169,50 @@
     }
 
     function runs(id, width, depth, allRound, longCount = v.longCount, shortCount = v.shortCount) {
+      const inheritedWidth = {
+        pcc: "Width from wall excavation",
+        "concrete-plinth": v.plinthWidth == null ? "Width from basement masonry" : "Manual width override",
+        "concrete-roof": v.roofBeamWidth == null ? "Width from lintel" : "Manual width override",
+        brick: v.brickWidth == null ? "Width from wall thickness" : "Manual width override",
+      }[id];
+      const source = (basis) => [basis, inheritedWidth].filter(Boolean).join(" · ");
       if (storage) {
-        measure(`${id}-long`, longCount ?? 1, allRound, width, depth);
+        measure(`${id}-long`, longCount ?? 1, allRound, width, depth, source("Storage Shed run"));
         measure(`${id}-short`, 0, 0, 0, 0);
       } else if (centre) {
         if (!ids.has(`${id}-centre-1`)) return;
-        measure(`${id}-centre-1`, 1, v[`perimeter-${id}`] ?? perimeter, width, depth);
+        measure(`${id}-centre-1`, 1, v[`perimeter-${id}`] ?? perimeter, width, depth,
+          source(v[`perimeter-${id}`] != null || measuredPerimeter != null ? "Manual perimeter override" : "Exterior centre-line perimeter"));
         for (const run of wallSchedules) {
           if (!run.lengths.has(id)) continue;
           const length = run.lengths.get(id);
+          const rowId = ids.has(`${id}-centre-${run.slot + 1}`) && run.slot <= 6
+            ? `${id}-centre-${run.slot + 1}` : `setup-${id}-centre-2-${run.slot}`;
+          reviewSources[rowId] = source(run.overrides?.[id] != null && run.overrides[id] !== "" ? "Manual wall-run override" : "Wall Runs schedule");
           scheduledRow(`${id}-centre-${run.slot + 1}`, run.slot, `${id}-centre-2`, run.label,
             { no: run.count, length, breadth: width, depth });
         }
       } else {
-        measure(`${id}-long`, longCount, lc + width, width, depth);
-        measure(`${id}-short`, shortCount, sc - width, width, depth);
+        measure(`${id}-long`, longCount, lc + width, width, depth, source("Long centre line + stage width"));
+        measure(`${id}-short`, shortCount, sc - width, width, depth, source("Short centre line − stage width"));
       }
     }
     if (ids.has("excavation-total")) {
       runs("excavation", v.excWidth, v.excDepth, perimeter);
       runs("pcc", v.excWidth, v.pccDepth, perimeter);
       measure(centre ? "excavation-centre-8" : "excavation-columns", columns, v.pitLength, v.pitWidth, v.pitDepth);
-      measure(centre ? "pcc-centre-8" : "pcc-columns", columns, v.pitLength, v.pitWidth, centre ? v.pitPccDepth : v.pccDepth);
+      measure(centre ? "pcc-centre-8" : "pcc-columns", columns, v.pitLength, v.pitWidth, v.pitPccDepth ?? v.pccDepth,
+        v.pitPccDepth == null ? "Pit dimensions · Thickness from wall PCC" : "Pit dimensions · Column-pit PCC thickness");
       runs("masonry-foundation", v.foundationWidth, v.foundationDepth, foundationRun);
       runs("masonry-basement", v.basementWidth, v.basementDepth, basementRun);
       const fillLength = storage ? lc : shed ? long + v.excWidth - v.fillOffset : slabLength;
       const fillWidth = storage ? sc : shed ? short - v.excWidth + v.fillOffset : slabWidth;
       const fillDepth = v.fillDepth ?? v.basementDepth;
-      const fillArea = !shed ? fillingArea(v.fillArea, v.fillAreaPercent, values.plinthArea) : null;
-      if (fillArea != null) set("filling-basement", { no: null, length: null, breadth: null, depth: fillDepth, setupQuantity: fillArea * fillDepth });
-      else measure("filling-basement", 1, v.fillLength ?? fillLength, v.fillWidth ?? fillWidth, fillDepth);
+      measure("filling-basement", 1, fillLength, fillWidth, fillDepth,
+        shed ? "Shed filling dimensions" : "Shared roof slab · Depth from basement masonry");
     }
-    measure("concrete-footings", columns, v.footingLength ?? v.pitLength, v.footingWidth ?? v.pitWidth, v.footingDepth);
+    measure("concrete-footings", columns, v.footingLength ?? v.pitLength, v.footingWidth ?? v.pitWidth, v.footingDepth,
+      v.footingLength == null && v.footingWidth == null ? "Length and width from column pit" : "Footing dimensions with manual override");
     measure("concrete-pedestals", columns, v.pedestalLength, v.pedestalWidth, v.pedestalDepth);
     runs("concrete-plinth", plinthWidth, v.plinthDepth, basementRun + plinthWidth - v.basementWidth);
     measure("concrete-columns", columns, v.columnLength, v.columnWidth, v.columnDepth);
@@ -213,7 +221,8 @@
     runs("concrete-roof", roofBeamWidth, v.roofBeamDepth, lintelRun,
       shed ? v.roofLongCount : v.longCount, shed ? v.roofShortCount : v.shortCount);
 
-    measure("concrete-roof-slab", 1, slabLength, slabWidth);
+    measure("concrete-roof-slab", 1, slabLength, slabWidth,
+      v.slabLength == null || v.slabWidth == null ? "Shared slab · Blank axes use outside dimensions" : "Shared roof slab dimensions");
     for (const { fields } of definition.groups) for (const { id } of fields) {
       if (id === "steel-roof-slab") {
         set(id, { factor: v[id] * v.slabDepth, steelRate: v[id], slabDepth: v.slabDepth });
@@ -235,11 +244,13 @@
       set("ceiling-inside", { setupOmitted: true });
       for (const room of rooms) if (room.ceiling) addRoom("ceiling-inside", room, room.ceiling);
     } else {
-      measure("ceiling-inside", 1, v.ceilingLength ?? slabLength, v.ceilingWidth ?? slabWidth);
+      measure("ceiling-inside", 1, v.ceilingLength ?? slabLength, v.ceilingWidth ?? slabWidth, undefined,
+        v.ceilingLength != null || v.ceilingWidth != null ? "Shared slab with manual override" : "Shared roof slab dimensions");
     }
     set("ceiling-beams", { factor: v.ceilingAllowance / 100 });
     set("ceiling-net", { factor: 1 - v.ceilingDeduction / 100 });
-    measure("waterproofing-roof", 1, v.coatLength ?? slabLength, v.coatWidth ?? slabWidth);
+    measure("waterproofing-roof", 1, v.coatLength ?? slabLength, v.coatWidth ?? slabWidth, undefined,
+        v.coatLength != null || v.coatWidth != null ? "Shared slab with manual override" : "Shared roof slab dimensions");
 
     const plasterRooms = rooms.filter((room) => room.plaster);
     if (centre) {
@@ -258,7 +269,8 @@
       measure("plaster-gross", v.plasterFaces, v.plasterRun ?? (storage ? brickRun : shed ? wallRun / 2 : wallRun), null, v.plasterHeight ?? v.brickHeight);
     }
     set("plaster-net", { factor: 1 - v.plasterDeduction / 100 });
-    measure("flooring", 1, v.floorLength ?? (shed ? long - 2 * wall : slabLength), v.floorWidth ?? (shed ? short - 2 * wall : slabWidth), v.floorDepth);
+    measure("flooring", 1, v.floorLength ?? (shed ? long - 2 * wall : slabLength), v.floorWidth ?? (shed ? short - 2 * wall : slabWidth), v.floorDepth,
+      v.floorLength != null || v.floorWidth != null ? "Flooring with manual override" : shed ? "Inside building footprint" : "Shared roof slab dimensions");
 
     if (shed) {
       function truss(id, count, span, weight) {
@@ -280,14 +292,6 @@
       if (v.machineArea != null) set("heavy-foundation", { quantity: v.machineArea });
     }
     return rows;
-  }
-
-  function fillingArea(measuredArea, percent, plinthArea) {
-    if (measuredArea != null) return measuredArea;
-    if (percent == null) return null;
-    const area = optionalNumber(plinthArea, "the plinth area");
-    if (!(area > 0) && percent > 0) throw new Error("Enter the plinth area (sft.) to use a filling area percentage.");
-    return (area ?? 0) * 0.09290304 * percent / 100;
   }
 
   function optionalNumber(value, label, { count = false } = {}) {

@@ -11,6 +11,7 @@ const state = {
   map: null,
   floorCount: 1,
   documentCount: 1,
+  matchedSiteFields: {},
   previewReady: false,
   previewId: null,
   preparationMethod: "",
@@ -244,7 +245,7 @@ function addDocumentSection(panel) {
     }),
   );
 }
-function addSubgroup(panel, label, fields) {
+function addSubgroup(panel, label, fields, group) {
   if (!fields.length) return;
   const block = document.createElement("section");
   block.className = "subgroup";
@@ -272,7 +273,70 @@ function addSubgroup(panel, label, fields) {
     markDirty();
     saveDraft();
   });
+  if (group === "boundaries" || group === "dimensions") {
+    block.dataset.siteMatchGroup = group;
+  }
   panel.append(block);
+}
+function addSiteMatchControl(block, saved) {
+  if (ReportData.readOnly) return;
+  const group = block.dataset.siteMatchGroup;
+  const fieldType = group === "boundaries" ? "boundary" : "dimension";
+  const pairs = ["north", "south", "east", "west"].map((direction) =>
+    ["deed", "actual"].map((side) => block.querySelector(`[name="property.${fieldType}.${direction}.${side}"]`)),
+  );
+  if (pairs.some((pair) => pair.some((input) => !input))) return;
+
+  const label = document.createElement("label");
+  label.className = "site-match-control";
+  label.innerHTML = '<input type="checkbox" data-site-match> Deed and actual match';
+  const toggle = label.querySelector("input");
+  const message = document.createElement("p");
+  message.className = "hint site-match-message";
+  message.setAttribute("role", "status");
+  block.querySelector(".subgroup-heading").append(label);
+  block.querySelector(".grid").before(message);
+
+  function updateMessage(text) {
+    message.textContent = text;
+    message.hidden = !text;
+  }
+
+  toggle.checked = saved === true && pairs.every(([deed, actual]) => deed.value === actual.value);
+  if (toggle.checked) state.matchedSiteFields[group] = true;
+  updateMessage(toggle.checked ? "Edit either column to update both." : "");
+
+  toggle.addEventListener("change", () => {
+    if (!toggle.checked) {
+      delete state.matchedSiteFields[group];
+      updateMessage("");
+      saveDraft();
+      return;
+    }
+    if (pairs.some(([deed, actual]) => deed.value.trim() && actual.value.trim() && deed.value !== actual.value)) {
+      toggle.checked = false;
+      updateMessage("Some deed and actual values differ. Make those pairs match before linking the columns.");
+      return;
+    }
+    const needsCopy = pairs.some(([deed, actual]) => deed.value !== actual.value);
+    if (needsCopy && !confirmReportInvalidation()) {
+      toggle.checked = false;
+      return;
+    }
+    for (const [deed, actual] of pairs) {
+      const value = deed.value.trim() ? deed.value : actual.value;
+      deed.value = actual.value = value;
+    }
+    state.matchedSiteFields[group] = true;
+    updateMessage("Edit either column to update both.");
+    if (needsCopy) markDirty();
+    saveDraft();
+  });
+
+  for (const [deed, actual] of pairs) {
+    deed.addEventListener("input", () => { if (toggle.checked) actual.value = deed.value; });
+    actual.addEventListener("input", () => { if (toggle.checked) deed.value = actual.value; });
+  }
 }
 function addLandCalculator(panel) {
   const block = document.createElement("section");
@@ -491,9 +555,8 @@ async function setPreparationMethod(method) {
   if (state.preparationMethod === method) return true;
   const previous = state.preparationMethod;
   const task = currentTask();
+  if (!RetrospectiveValuation.confirmPreparationChange("preparation method", previous, method, task)) return false;
   if (previous && task?.reportGeneratedAt) {
-    const accepted = window.confirm("Change the preparation method? The retained report attachment will be removed. Your entered form details will be kept.");
-    if (!accepted) return false;
     try {
       await BusinessApi.delete(`/api/tasks/${encodeURIComponent(task.id)}/artifacts/latest`);
       await TaskStore.refresh(task.id);
@@ -512,7 +575,7 @@ async function setPreparationMethod(method) {
 function confirmReportInvalidation() {
   const task = currentTask();
   if (!task?.reportGeneratedAt || task.reportFresh === false || state.generatedChangeAcknowledged) return true;
-  const accepted = window.confirm("Changing report details will make the retained report outdated. Continue and regenerate the report before completing this task?");
+  const accepted = RetrospectiveValuation.confirmReportEdit(state.preparationMethod);
   if (accepted) state.generatedChangeAcknowledged = true;
   return accepted;
 }
@@ -630,6 +693,7 @@ async function persistDraftNow() {
     uploadType: byId("valuation-upload-type")?.value || "",
     floorCount: state.floorCount,
     documentCount: state.documentCount,
+    matchedSiteFields: state.matchedSiteFields,
     photos: state.photos,
     map: state.map,
   }, String(state.schema.version || "3"));
@@ -695,7 +759,7 @@ function wireInputs() {
       "#valuation-form input,#valuation-form select,#valuation-form textarea",
     )
     .forEach((i) => {
-      if (i.type === "file" || i.dataset.preparationMethod || i.dataset.wired) return;
+      if (i.type === "file" || i.dataset.preparationMethod || i.hasAttribute("data-site-match") || i.dataset.wired) return;
       i.dataset.wired = "1";
       i.addEventListener("focus", () => {
         i.dataset.previousValue = i.value;
@@ -733,7 +797,7 @@ function wireInputs() {
     });
 }
 
-window.addEventListener("sln:valuation-upload-type-changed", () => { markDirty(); saveDraft(); });
+
 
 // Page assembly and report-generation event wiring.
 async function init() {
@@ -766,7 +830,7 @@ async function init() {
     if (section.id === "preparation") {
       panel = window.RetrospectiveValuation.preparationPanel("valuation-general", state.preparationMethod, setPreparationMethod);
     } else if (section.id === "offline") {
-      panel = window.RetrospectiveValuation.offlinePanel("valuation-general", draft?.uploadType);
+      panel = window.RetrospectiveValuation.offlinePanel("valuation-general", draft?.uploadType, { uploadTypeChanged: async () => { await persistDraftNow(); markDirty(); } });
     } else {
       panel = document.createElement("div");
       panel.className = "panel";
@@ -798,7 +862,7 @@ async function init() {
             !excluded.has(f.id) &&
             !f.id.startsWith("building.floors."),
         );
-        addSubgroup(panel, g === "valuation" ? "Value Conclusions" : (labels[g] || title(g)), fields);
+        addSubgroup(panel, g === "valuation" ? "Value Conclusions" : (labels[g] || title(g)), fields, g);
         if (g === "land") addLandCalculator(panel);
         if (g === "floors") addFloorSection(panel);
       });
@@ -857,6 +921,9 @@ async function init() {
     if (draft?.values && Object.values(draft.values).some((value) => String(value ?? "").trim()))
       byId("status").textContent = "Draft restored";
   } else applyInstitutionOptions();
+  document.querySelectorAll("[data-site-match-group]").forEach((block) => {
+    addSiteMatchControl(block, draft?.matchedSiteFields?.[block.dataset.siteMatchGroup]);
+  });
   calculations.restore(initialValues);
   wireInputs();
   installExampleAssistance(byId("valuation-form"), "general");
@@ -887,9 +954,11 @@ byId("preview-report").onclick = async () => {
     "Creating report preview",
     "Generating the exact Word file, then rendering that file as a PDF preview…",
   );
+  const cancel = ReportProcessing.cancellation(byId("processing"));
   try {
     await persistDraftNow();
     const response = await fetch("/api/preview", {
+      signal: cancel.signal,
       method: "POST",
       headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(ReportData.requestPayload(reportPayload())),
@@ -898,6 +967,7 @@ byId("preview-report").onclick = async () => {
       if (!r.ok) throw new Error(data.error || "Preview failed");
       return data;
     });
+    if (cancel.signal.aborted) return;
     byId("preview-frame").src = response.preview;
     byId("preview-modal").hidden = false;
     state.previewId = response.preview_id;
@@ -905,9 +975,12 @@ byId("preview-report").onclick = async () => {
     ReportData.setPreview({ id: response.preview_id, url: response.preview });
     status.textContent = "Preview ready";
   } catch (error) {
+    if (cancel.signal.aborted) { status.textContent = "Preview cancelled"; return; }
     status.textContent = "Preview failed";
     alert(reportErrorMessage(error, "The preview could not be created. Check your connection and try again."));
   } finally {
+    if (cancel.signal.aborted) status.textContent = "Preview cancelled";
+    cancel.dispose();
     setProcessing(false);
   }
 };

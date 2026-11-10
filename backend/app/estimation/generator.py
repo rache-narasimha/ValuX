@@ -1095,17 +1095,12 @@ def _report_text(state: Mapping[str, Any]) -> tuple[str, str, str, str]:
     return f"Name of the Work : {work_text(details)}", f"Name of the Applicant : {applicant_text(details)}", details.get("place") or "[Enter place]", details.get("estimateDate") or "[Enter date]"
 
 
-def _plinth_area(value):
-    if value is None or str(value).strip() == "":
-        return None
+def _plinth_area_text(value):
+    text = "" if value is None else str(value).strip()
+    if not text:
+        return "[Enter area] sft."
     number = _numeric(value)
-    if number is None or number < 0:
-        raise ValueError("Plinth Area must be a valid non-negative area in sft.")
-    return float(number)
-
-
-def _area_text(value):
-    return f"{value:,.2f}" if value is not None else "[Enter area]"
+    return f"{number:,.2f} sft." if number is not None else text
 
 
 def _apply_detail_report_text(ws: Worksheet, state: Mapping[str, Any], result: DetailResult, spec: DetailSpec) -> None:
@@ -1113,7 +1108,7 @@ def _apply_detail_report_text(ws: Worksheet, state: Mapping[str, Any], result: D
     ws["A8"] = f"Name of the Work : {work_text(state.get('details') or {}, spec.work_description)}" if modern_identity(state.get("details") or {}) else work
     ws["A11"] = applicant
     if modern_identity(state.get("details") or {}) or "plinthArea" in spec.form_data:
-        ws["A14"] = f"Plinth Area : {_area_text(_plinth_area(spec.form_data.get('plinthArea')))} sft."
+        ws["A14"] = f"Plinth Area : {_plinth_area_text(spec.form_data.get('plinthArea'))}"
     # Detail footers are replaced by one signature block on the Abstract.
     _clear_rows_and_merges(ws, result.words_row + 1)
     result.last_row = result.words_row

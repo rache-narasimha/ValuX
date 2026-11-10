@@ -28,6 +28,21 @@ from .ooxml import (
     unwrap_content_controls,
 )
 
+def keep_table_opening_together(document):
+    """Keep each report table's opening row and its first detail row together."""
+    for table in document.tables:
+        if len(table.rows) < 2:
+            continue
+        for index, row in enumerate(table.rows[:2]):
+            properties = row._tr.get_or_add_trPr()
+            if properties.find(qn("cantSplit")) is None:
+                etree.SubElement(properties, qn("cantSplit"))
+            if index == 0:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        paragraph.paragraph_format.keep_with_next = True
+
+
 def normalize_agricultural_typography(docx_path):
     document = Document(docx_path)
 
@@ -78,6 +93,7 @@ def normalize_agricultural_typography(docx_path):
             if row_properties.find(qn("cantSplit")) is None:
                 etree.SubElement(row_properties, qn("cantSplit"))
 
+    keep_table_opening_together(document)
     align_signature_fields(document)
     document.save(docx_path)
 
@@ -303,4 +319,7 @@ def _generate_general_docx(values, output_path, photos=None, map_image=None, *, 
                         set_construction_heading(paragraph, values.get("property.status") == "proposed")
                 data = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone="yes")
             zout.writestr(item, data)
+    document = Document(output_path)
+    keep_table_opening_together(document)
+    document.save(output_path)
     insert_uploaded_media(output_path, photos or [], map_image, valuation_map=True)

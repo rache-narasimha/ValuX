@@ -378,3 +378,11 @@ html[data-theme="dark"] .file-input { display: none; }
   margin-block: .45rem;
 }
 .schedule-check input { width: auto; }
+
+
+#dimension-review { margin-top: 0.75rem; }
+.dimension-review-table { min-width: 42rem; }
+.dimension-review-table td:nth-child(n+2):nth-child(-n+5) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

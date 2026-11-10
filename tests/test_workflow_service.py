@@ -195,6 +195,52 @@ try:
         employee,
     )
     assert valuation["payment"]["status"] == "Received"
+    partial = service.update_payment(
+        similar_valuation["id"],
+        {"version": similar_valuation["version"], "estimated": 5000, "agreed": 4000, "received": 2000},
+        father,
+    )
+    cancelled_payment = service.create_task(payload("valuation-general", f"Payment cancellation {suffix}"), father)
+    cancelled_payment = service.update_payment(
+        cancelled_payment["id"], {"version": cancelled_payment["version"], "estimated": 5000, "received": 2000}, father,
+    )
+    service.cancel(cancelled_payment["id"], {"version": cancelled_payment["version"], "reason": "Created by Mistake"}, father)
+    inactive_code = f"T{suffix.upper()}"
+    database.execute(
+        "INSERT INTO app.institutions (id, code, name, institution_type, color, active) VALUES (%s, %s, %s, 'Bank', '#087EA4', TRUE)",
+        (uuid.uuid4(), inactive_code, f"Inactive payment test {suffix}"),
+    )
+    inactive_payment = service.create_task(
+        {**payload("valuation-general", f"Inactive institution {suffix}"), "institutionCode": inactive_code}, father,
+    )
+    service.update_payment(
+        inactive_payment["id"], {"version": inactive_payment["version"], "estimated": 5000, "received": 2000}, father,
+    )
+    database.execute("UPDATE app.institutions SET active = FALSE WHERE code = %s", (inactive_code,))
+    pending = service.create_task(payload("valuation-general", f"Pending collection {suffix}"), father)
+    service.update_payment(
+        pending["id"], {"version": pending["version"], "estimated": 5000, "received": 0}, father,
+    )
+    overdue = service.create_task(payload("valuation-general", f"Overdue collection {suffix}"), father)
+    overdue = service.update_payment(
+        overdue["id"],
+        {"version": overdue["version"], "estimated": 5000, "received": 2000,
+         "dueDate": (today - timedelta(days=1)).isoformat()},
+        father,
+    )
+    assert overdue["payment"]["status"] == "Overdue"
+    for payment_filter, expected in [
+        ("Partially Received,Received", {valuation["id"], partial["id"]}),
+        ("Partially Received,Pending", {partial["id"], pending["id"]}),
+    ]:
+        options = {
+            "search": suffix, "group": "valuation", "period": "daily",
+            "periodReference": today.isoformat(), "payment": payment_filter,
+        }
+        results = service.list_tasks(options, father)
+        assert {item["id"] for item in results["items"]} == expected
+        assert results["total"] == len(expected)
+        expect_error(lambda: service.list_tasks(options, employee), "forbidden")
     valuation = service.close(valuation["id"], {"version": valuation["version"], "note": "Settled."}, employee)
     assert valuation["status"] == "Closed"
     def age_closed(days):
@@ -318,13 +364,25 @@ try:
     )
     report_service.save_draft(
         completion["id"], {"reportKey": "completion", "schemaVersion": "1", "revision": changed_completion_draft["revision"],
-                           "payload": {**changed_completion_state, "preparationMethod": "offline"}}, father,
+                           "payload": {**changed_completion_state, "preparationMethod": "offline", "uploadType": "template"}}, father,
     )
-    completion = report_service.register_artifact(
-        completion["id"], father, content=b"%PDF-1.4 retrospective completion", filename="completion.pdf",
-        artifact_type="completion_pdf", source="uploaded", payload={"retrospective": True}, work_note="Verified offline completion.",
-    )["task"]
-    assert completion["retrospectiveReady"]
+    def attach_filled_completion():
+        return report_service.register_artifact(
+            completion["id"], father, content=b"%PDF-1.4 filled completion", filename="completion.pdf",
+            artifact_type="completion_pdf", source="uploaded",
+            payload={"retrospective": True, "preparationSource": "template"}, work_note="Verified filled completion template.",
+        )["task"]
+
+    try:
+        attach_filled_completion()
+    except report_service.ReportDataError as error:
+        assert error.code == "template_download_required"
+    else:
+        raise AssertionError("Filled template uploads must require a prior template download.")
+    service.record_template_download(completion["id"], father, linked_report_inputs=changed_completion_state)
+    completion = attach_filled_completion()
+    assert completion["retrospectiveReady"] and completion["ownPreparationSource"] == "template"
+    assert completion["preparationSource"] == "online"
     completion = service.complete(completion["id"], {"version": completion["version"]}, father)
     stored_keys = [row["storage_key"] for row in database.execute("SELECT storage_key FROM app.stored_files WHERE created_by_user_id = %s", (father_id,)).fetchall()]
     assert database.execute("SELECT COUNT(*) AS count FROM app.report_draft_files WHERE task_id = %s", (uuid.UUID(completion["internalId"]),)).fetchone()["count"] == 0

@@ -117,6 +117,18 @@ def main():
     assert "Cost of balance work" not in completion_text
     assert completion.summary["reportType"] == "completion"
 
+    from backend.app.progress.generator import generate_progress_template
+
+    for report_type, example in (("progress", payload()), ("completion", completion_payload)):
+        template = Document(BytesIO(generate_progress_template(example, report_type)))
+        text = combined_text(template)
+        assert "Sample Borrower" in text and "GF & FF" in text
+        assert "88,53,000" in text and "60%" not in text and "100%" not in text
+        assert "Record whether work follows the sanctioned plan" in text
+        assert ("BRANCH SANCTION" in text) == (report_type == "progress")
+        assert not template.inline_shapes
+        assert template.tables[2].rows[0].cells[0].paragraphs[0].paragraph_format.keep_with_next
+
     missing_photos = copy.deepcopy(completion_payload)
     missing_photos["photos"] = []
     try:

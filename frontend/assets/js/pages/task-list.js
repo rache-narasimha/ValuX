@@ -20,6 +20,7 @@
   let periodReference = ValuxTime.todayDate();
   let directoryMode = false;
   let summaryMode = false;
+  let activeInstitutionScope = false;
   let analyticsLoadPromise = null;
   let renderSequence = 0;
   const GROUP_LABELS = {
@@ -52,6 +53,14 @@
       institutions.forEach((institution) => group.append(new Option(`${institution.code} — ${institution.name}`, institution.code)));
       fields.institution.append(group);
     });
+    if (WorkflowAccess.currentRole() === "father") {
+      const collection = document.createElement("optgroup");
+      collection.label = "Payment collection";
+      for (const pair of Object.values(TaskStore.PAYMENT_STATUS_PAIRS)) {
+        collection.append(new Option(pair.split(",").join(" + "), pair));
+      }
+      fields.payment.append(collection);
+    }
     const initial = new URLSearchParams(window.location.search);
     directoryMode = initial.get("view") === "institutions";
     summaryMode = initial.get("view") === "summary";
@@ -59,11 +68,13 @@
     fields.group.value = initial.get("group") || "all";
     fields.preparationSource.value = WorkflowAccess.currentRole() === "father" ? initial.get("preparationSource") || "" : "";
     fields.institution.value = initial.get("institution") || "";
+    activeInstitutionScope = Boolean(selectedInstitutionType() && initial.get("institutionScope") === "active");
     fields.period.value = initial.get("period") || "";
     fields.status.value = initial.get("status") || "";
     fields.assignee.value = initial.get("assignee") || "";
     fields.holdReason.value = initial.get("holdReason") || "";
     fields.payment.value = initial.get("payment") || "";
+    if (fields.payment.selectedIndex < 0) fields.payment.value = "";
     fields.search.value = initial.get("search") || "";
   }
 
@@ -133,7 +144,7 @@
   function queryOptions(limit = visible) {
     return Object.fromEntries([
       ["preparationSource", WorkflowAccess.currentRole() === "father" ? fields.preparationSource.value : ""], ["group", fields.group.value], ["institution", selectedInstitutionType() ? "" : fields.institution.value],
-      ["institutionType", selectedInstitutionType()],
+      ["institutionType", selectedInstitutionType()], ["institutionScope", activeInstitutionScope ? "active" : ""],
       ["period", fields.period.value], ["status", fields.status.value],
       ["assignee", fields.assignee.value], ["holdReason", fields.holdReason.value],
       ["payment", fields.payment.value], ["search", fields.search.value], ["limit", limit],
@@ -150,7 +161,8 @@
     if (fields.assignee.value) parts.push(`Assigned to: ${fields.assignee.value}`);
     if (fields.holdReason.value) parts.push(`On hold: ${fields.holdReason.value}`);
     if (fields.preparationSource.value) parts.push(`Preparation: ${fields.preparationSource.selectedOptions[0].textContent}`);
-    if (fields.payment.value) parts.push(`Payment: ${fields.payment.value}`);
+    if (fields.payment.value) parts.push(`Payment: ${fields.payment.selectedOptions[0].textContent}`);
+    if (activeInstitutionScope) parts.push("Active institutions only");
     if (fields.search.value.trim()) parts.push(`Search: ${fields.search.value.trim()}`);
     return parts.length ? parts.join(" · ") : "All assignments visible to the signed-in user";
   }
@@ -235,6 +247,7 @@
   }
 
   function summaryLabel() {
+    if (activeInstitutionScope) return selectedInstitutionType() === "Bank" ? "Active banks" : "Active NBFCs";
     return { Bank: "All banks", NBFC: "All NBFCs" }[selectedInstitutionType()] || "All banks and NBFCs";
   }
 
@@ -316,6 +329,7 @@
     if (directoryMode && !selectedInstitution()) params.set("view", "institutions");
     else if (summaryMode || selectedInstitutionType()) params.set("view", "summary");
     if (fields.group.value !== "all") params.set("group", fields.group.value);
+    if (activeInstitutionScope) params.set("institutionScope", "active");
     if (fields.period.value) params.set("periodReference", isoDate(periodReference));
     ["institution", "period", "status", "assignee", "holdReason", "payment", "preparationSource"].forEach((key) => {
       if (fields[key].value) params.set(key, fields[key].value);
@@ -430,7 +444,10 @@
   renderPeriodFilter();
   Object.entries(fields).forEach(([key, field]) => {
     if (key !== "period") field.addEventListener(key === "search" ? "input" : "change", () => {
-      if (key === "institution") summaryMode = true;
+      if (key === "institution") {
+        summaryMode = true;
+        activeInstitutionScope = false;
+      }
       reset();
     });
   });

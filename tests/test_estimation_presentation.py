@@ -56,10 +56,11 @@ three['components'][0]['sheets'][0]['typicalFloorKeys']=['ground','third'];asser
 assert not compact_abstract(multi)
 override=copy.deepcopy(state);override['details']['plinthArea']=1500
 w=load_workbook(BytesIO(generate_estimation_workbook(override).content));assert not any('Overall Plinth Area' in value for sheet in w for value in strings(sheet));assert '755.52' in w['Ground Floor']['A14'].value;w.close()
-invalid=copy.deepcopy(state);invalid['components'][0]['sheets'][0]['formData']['plinthArea']=-1
-try:generate_estimation_workbook(invalid)
-except ValueError:pass
-else:raise AssertionError('Negative plinth area accepted')
+text_area = copy.deepcopy(state)
+text_area['components'][0]['sheets'][0]['formData']['plinthArea'] = '755.52 sft. (GF only)'
+w = load_workbook(BytesIO(generate_estimation_workbook(text_area).content))
+assert w['Ground Floor']['A14'].value == 'Plinth Area : 755.52 sft. (GF only)'
+w.close()
 for source in (state, multi):
     for mode in ('completed', 'offline'):
         w=load_workbook(BytesIO(generate_estimation_workbook(source, mode=mode).content))

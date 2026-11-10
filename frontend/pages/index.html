@@ -78,9 +78,13 @@
               <p class="analysis-subtitle" id="status-period-label"></p>
               <div id="assignment-status-chart" class="distribution-content"></div>
             </section>
-            <section class="dashboard-distribution-section institution-type-section" id="institution-type-section" aria-labelledby="institution-type-heading" hidden>
-              <div class="analysis-heading"><h3 id="institution-type-heading"><svg class="dashboard-chart-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 8 9-5 9 5-9 5zM3 12l9 5 9-5M3 16l9 5 9-5"/></svg>Workload by Institution Type</h3></div>
-              <div id="institution-workload-chart" class="distribution-content"></div>
+            <section class="dashboard-distribution-section report-preparation-section" id="report-preparation-section" aria-labelledby="report-preparation-heading" hidden>
+              <div class="analysis-heading"><h3 id="report-preparation-heading"><svg class="dashboard-chart-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M6 17v-4m6 4V8m6 9V4"/></svg>Report Preparation</h3></div>
+              <ul id="report-preparation-chart" class="report-preparation-chart" aria-label="Assignment counts by preparation method"></ul>
+              <div class="preparation-chart-notes">
+                <p class="analysis-subtitle">Progress and Completion use the linked estimate’s preparation method.</p>
+                <p class="analysis-subtitle" id="report-preparation-unrecorded" hidden></p>
+              </div>
             </section>
           </article>
           <article class="work-card finance-overview" id="dashboard-finance" hidden>
@@ -88,8 +92,8 @@
             <div class="finance-summary-content">
               <div class="finance-strip" aria-label="Selected institution payment summary">
                 <article><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v12c0 4 16 4 16 0V5M4 11c0 4 16 4 16 0"/></svg></span><span>Income earned</span><strong id="income-earned">₹0</strong><small>Agreed / estimated fee</small></article>
-                <article><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v13m-5-5 5 5 5-5M4 17v4h16v-4"/></svg></span><span>Payment received</span><strong id="income-received">₹0</strong><small>Recorded receipts</small></article>
-                <article><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/></svg></span><span>Outstanding</span><strong id="income-outstanding">₹0</strong><small>Pending collection</small></article>
+                <article><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v13m-5-5 5 5 5-5M4 17v4h16v-4"/></svg></span><span>Payment received</span><strong><a id="income-received" class="finance-amount-link">₹0</a></strong><small>Recorded receipts</small></article>
+                <article><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/></svg></span><span>Outstanding</span><strong><a id="income-outstanding" class="finance-amount-link">₹0</a></strong><small>Pending collection</small></article>
               </div>
               <div id="payment-collection-chart" class="collection-chart"></div>
             </div>

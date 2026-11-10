@@ -21,6 +21,7 @@ from ..auth.service import AuthError
 from ..estimation import extract_estimation_summary, generate_estimation_workbook
 from ..exports import generate_table_export
 from ..progress import generate_progress_report
+from ..progress.generator import generate_progress_template
 from ..reports import routes as report_routes
 from ..reports import service as report_service
 from ..valuation.config import AGRICULTURAL_TEMPLATE, ASSETS_DIR, OUTPUT_DIR, PAGES_DIR, SOFFICE, TEMPLATE
@@ -284,7 +285,7 @@ class Handler(BaseHTTPRequestHandler):
         if request_path in {"/api/estimation/workbook", "/api/estimation/preview"}:
             self.handle_estimation_generation(request_path)
             return
-        if request_path in {"/api/progress/generate", "/api/progress/preview"}:
+        if request_path in {"/api/progress/generate", "/api/progress/preview", "/api/progress/template"}:
             self.handle_progress_generation(request_path)
             return
         if request_path == "/api/exports/workbook":
@@ -322,6 +323,7 @@ class Handler(BaseHTTPRequestHandler):
             if preview_id and not re.fullmatch(r"\d+", preview_id):
                 raise ValueError("Invalid preview identifier")
             generation_id = str(time.time_ns())
+            preview_input = report_service.preview_input_fingerprint(task_code, session) if task_code and is_preview else None
             base_name = f"{prefix}-preview-{preview_id}" if is_preview else f"{prefix}-report-{generation_id}"
             docx_name = f"{base_name}.docx"
             docx_path = OUTPUT_DIR / docx_name
@@ -351,7 +353,7 @@ class Handler(BaseHTTPRequestHandler):
                     artifact = report_service.register_artifact(
                         task_code, session, content=pdf_path.read_bytes(), filename=pdf_name if is_preview else report_service.valuation_download_filename(task_code, session, ".pdf"),
                         artifact_type="preview_pdf", source="generated", payload=payload, current=False,
-                        preview_token=preview_id if is_preview else "",
+                        preview_token=preview_id if is_preview else "", preview_input=preview_input,
                     )
                 if is_preview:
                     self.send_json({"ok": True, "preview": artifact["download"] if artifact else f"/previews/{pdf_name}?v={time.time_ns()}", "preview_id": preview_id})
@@ -407,8 +409,9 @@ class Handler(BaseHTTPRequestHandler):
             OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
             is_preview = request_path.endswith("/preview")
             mode = "offline" if payload.get("mode") == "offline" else "completed"
-            generated = generate_estimation_workbook(state, mode=mode)
             generation_id = str(time.time_ns())
+            preview_input = report_service.preview_input_fingerprint(task_code, session) if task_code and is_preview else None
+            generated = generate_estimation_workbook(state, mode=mode)
             if is_preview:
                 xlsx_path = OUTPUT_DIR / f"estimation-preview-{generation_id}.xlsx"
                 pdf_path = xlsx_path.with_suffix(".pdf")
@@ -430,7 +433,7 @@ class Handler(BaseHTTPRequestHandler):
                     artifact = report_service.register_artifact(
                         task_code, session, content=pdf_path.read_bytes(), filename=pdf_path.name,
                         artifact_type="preview_pdf", source="generated", payload=state, current=False,
-                        preview_token=generation_id,
+                        preview_token=generation_id, preview_input=preview_input,
                     )
                 self.send_json({"ok": True, "preview": artifact["download"] if artifact else f"/previews/{pdf_path.name}?v={generation_id}", "preview_id": generation_id})
                 return
@@ -664,7 +667,7 @@ class Handler(BaseHTTPRequestHandler):
                 filename=file_name,
                 artifact_type=f"{group}_{suffix[1:]}",
                 source="uploaded",
-                payload={"retrospective": True, "mode": "offline", "preparationSource": "retrospective" if progress else self.headers.get("X-Upload-Type") or "retrospective"},
+                payload={"retrospective": True, "mode": "offline", "preparationSource": self.headers.get("X-Upload-Type") or "retrospective"},
                 work_note=note,
             )
             self.send_json({
@@ -719,6 +722,22 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(payload, dict):
                 raise ValueError("The progress/completion report data is missing.")
             task_code = task_code_from(self, payload)
+            if request_path.endswith("/template"):
+                auth_routes.verify_csrf(self)
+                report_type = payload.get("requestedReportType")
+                if not task_code or report_type not in {"progress", "completion"}:
+                    raise ValueError("Open an active Progress or Completion task to download its template.")
+                task = report_service.require_report_key(task_code, session, report_type)
+                payload["institution"] = {
+                    "code": task["institution_code_snapshot"],
+                    "name": task["institution_name_snapshot"],
+                    "branch": task["branch"],
+                }
+                content = generate_progress_template(payload, report_type)
+                workflow_service.record_template_download(task_code, session, linked_report_inputs=payload)
+                filename = f"{report_type.title()}_Offline_Template.docx"
+                self.send_file(Path(filename), data=content, headers=[("Content-Disposition", f'attachment; filename="{filename}"')])
+                return
             if task_code:
                 auth_routes.verify_csrf(self)
                 payload = report_service.hydrate_media(task_code, payload, session)
@@ -726,6 +745,7 @@ class Handler(BaseHTTPRequestHandler):
             is_preview = request_path.endswith("/preview")
             generation_id = str(time.time_ns())
             preview_id = generation_id if is_preview else str(payload.get("preview_id") or "")
+            preview_input = report_service.preview_input_fingerprint(task_code, session) if task_code and is_preview else None
             if preview_id and not re.fullmatch(r"\d+", preview_id):
                 raise ValueError("Invalid preview identifier")
             if task_code and not is_preview:
@@ -749,7 +769,7 @@ class Handler(BaseHTTPRequestHandler):
                     artifact = report_service.register_artifact(
                         task_code, session, content=pdf_path.read_bytes(), filename=pdf_path.name,
                         artifact_type="preview_pdf", source="generated", payload=payload, current=False,
-                        preview_token=preview_id,
+                        preview_token=preview_id, preview_input=preview_input,
                     )
                 self.send_json({"ok": True, "preview": artifact["download"] if artifact else f"/previews/{pdf_path.name}?v={generation_id}", "preview_id": preview_id, "reportType": generated.report_type})
                 return
@@ -769,7 +789,7 @@ class Handler(BaseHTTPRequestHandler):
                 "registered": bool(artifact),
                 "task": artifact.get("task") if artifact else None,
             })
-        except (AuthError, report_service.ReportDataError) as exc:
+        except (AuthError, report_service.ReportDataError, workflow_service.WorkflowError) as exc:
             self.send_json({"ok": False, "error": str(exc), "code": exc.code}, exc.status)
         except (ValueError, json.JSONDecodeError) as exc:
             self.send_json({"ok": False, "error": str(exc)}, 400)

@@ -3,6 +3,10 @@
   "use strict";
 
   const STATUSES = ["Unassigned", "In Progress", "On Hold", "Completed", "Closed", "Cancelled"];
+  const PAYMENT_STATUS_PAIRS = {
+    received: "Partially Received,Received",
+    pending: "Partially Received,Pending",
+  };
   const HOLD_REASONS = ["Awaiting Documents", "Scheduled Site Visit", "Awaiting Review", "Returned for Correction", "Custom"];
   const CANCELLATION_REASONS = ["Created by Mistake", "Wrong Details", "Custom"];
   const EMPLOYEES = window.__VALUX_BUSINESS_CONTEXT__?.employees || [];
@@ -241,16 +245,24 @@
     const search = String(options.search || "").trim().toLowerCase();
     const offset = Math.max(0, Number(options.offset) || 0);
     const limit = Math.max(1, Number(options.limit) || 20);
+    const collectionPair = Object.values(PAYMENT_STATUS_PAIRS).includes(options.payment);
+    const paymentStatuses = collectionPair ? options.payment.split(",") : [options.payment];
+    if (collectionPair && window.WorkflowAccess?.currentRole() !== "father") return { total: 0, items: [], hasMore: false };
+    const activeTypes = options.institutionScope === "active" || collectionPair
+      ? new Map(window.InstitutionStore.active().map(({ code, type }) => [code, type]))
+      : null;
     let tasks = all().filter((task) => {
       if (window.WorkflowAccess && !WorkflowAccess.visible(task)) return false;
       if (options.group && options.group !== "all" && task.reportGroup !== options.group) return false;
       if (options.status && task.status !== options.status) return false;
       if (options.assignee && task.assignee !== options.assignee) return false;
       if (options.holdReason && task.holdReason !== options.holdReason) return false;
-      if (options.payment && task.payment.status !== options.payment) return false;
+      if (collectionPair && (task.status === "Cancelled" || !activeTypes.has(task.institutionCode))) return false;
+      if (options.payment && !paymentStatuses.includes(task.payment.status)) return false;
       if (options.institution && task.institutionCode !== options.institution) return false;
       if (options.preparationSource && (task.preparationSource || "unknown") !== options.preparationSource) return false;
-      if (options.institutionType && task.institutionType !== options.institutionType) return false;
+      const institutionType = options.institutionScope === "active" ? activeTypes.get(task.institutionCode) : task.institutionType;
+      if (options.institutionType && institutionType !== options.institutionType) return false;
       if (options.period && !matchesPeriod(task, options.period, "assignedDate", options.periodReference)) return false;
       if (search) {
         const haystack = [task.id, task.customerName, task.reportName, task.assignee, task.institutionName, task.institutionCode, task.branch, task.propertyBrief, task.status, task.holdReason, task.payment.status].join(" ").toLowerCase();
@@ -297,7 +309,7 @@
   if (window.__VALUX_BUSINESS_CONTEXT__?.linkedTask) cacheRemote(window.__VALUX_BUSINESS_CONTEXT__.linkedTask, null, true);
 
   window.TaskStore = {
-    STATUSES, HOLD_REASONS, CANCELLATION_REASONS, EMPLOYEES, REPORTS,
+    STATUSES, PAYMENT_STATUS_PAIRS, HOLD_REASONS, CANCELLATION_REASONS, EMPLOYEES, REPORTS,
     create, get, query, summary, addNote, assign, putOnHold, resume,
     markReportGenerated, complete, updatePayment, close, reopen, cancel, removeInstitutionArtifact,
     matchesPeriod, periodBounds, dueDateRange, billingBasis, paymentSummary, all,

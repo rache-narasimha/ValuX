@@ -849,7 +849,6 @@
       values.roomCeiling ??= values.ceilingBasis !== "slab";
       values.rooms ??= EstimationDimensions.starterRooms.map((label, index) => ({ slot: index + 1, label }));
     }
-    values.plinthArea ??= data.plinthArea ?? "";
     return values;
   }
 
@@ -948,7 +947,7 @@
       const displayed = Object.hasOwn(inherited, id) ? inherited[id] : stored;
       const fallback = below && outsideAxes.includes(id) ? ` data-slab-default="${escapeHtml(below[id] ?? "")}"${values.slabLinked?.[id] ? " data-slab-linked" : ""}` : "";
       return `<div class="field"><label for="dimension-${id}">${escapeHtml(label)}${kind?.startsWith("required") ? ' <span aria-hidden="true">*</span>' : ""}</label><input id="dimension-${id}" data-dimension-field="${id}" type="number" min="0" ${kind === "percent" ? 'max="100"' : ""} step="${kind?.endsWith("count") ? "1" : "any"}" value="${escapeHtml(id === "slabDepth" ? displayed : decimalInput(displayed))}" data-precise-value="${escapeHtml(stored)}"${fallback}${kind?.startsWith("required") ? ' aria-required="true"' : ""}></div>`;
-    }).join("")}${fields.some(({ id }) => id === "fillAreaPercent") ? `<div class="field"><label for="dimension-plinth-area">Plinth Area (sft.)</label><input id="dimension-plinth-area" type="number" min="0" step="any" data-dimension-field="plinthArea" value="${escapeHtml(decimalInput(values.plinthArea))}" data-precise-value="${escapeHtml(values.plinthArea)}"></div>` : ""}</div>${fields.some(({ id }) => id === "fillAreaPercent") ? '<p class="hint">Sand filling defaults to the roof slab area. A measured area takes precedence over a percentage of the plinth area or separate filling dimensions.</p>' : ""}</details>`).join("");
+    }).join("")}</div></details>`).join("");
     const slabNote = below && !ReportData.readOnly
       ? `<p class="hint">Outside dimensions default to the ${escapeHtml(below.label)} roof slab. Edit either dimension to override it, or clear it to use the slab again. Apply the lower floor’s slab dimensions first if they are missing.</p>`
       : "";
@@ -957,8 +956,6 @@
         <p class="hint">Enter each group of matching crosswalls. Length is per run at the first applicable layer. Enable adjustments only where the same junction applies.</p>
         ${values.wallRuns.map((run) => wallRunFields(run, profile.layers)).join("")}
         <button type="button" class="secondary" data-action="add-dimension-row" data-schedule="wallRuns">Add wall run</button>
-        <button type="button" class="secondary" data-action="review-wall-runs">Review layer lengths</button>
-        <div class="worksheet-table-wrap" id="dimension-run-review"></div>
       </details>`;
     const rooms = !profile.centre || !profile.ids.has("ceiling-inside") ? "" : `
       <details class="dimension-group" data-schedule-group="rooms"><summary>Rooms &amp; Finishes</summary>
@@ -971,7 +968,9 @@
       ? '<p class="hint">Roof slab length and width are shared by flooring, waterproofing, slab-based ceiling plastering and, where applicable, sand filling. Leave either dimension blank to use its outside building dimension. Set individual overrides only when those measurements differ.</p>'
       : "";
     const note = profile.centre ? "Outside dimensions and wall thickness calculate the centre-line perimeter. Use Exterior perimeter overrides by layer for exceptions." : profile.storage ? "The perimeter supplies the foundation runs. The brickwork and lintel defaults exclude one long side. Enter an override if the measured runs differ." : "";
-    return `<div class="panel" data-key="dimensions"><h2>Dimensions &amp; Defaults</h2><p class="hint">Review the dimensions for each worksheet. Applying them fills the linked rows and preserves direct quantities and rates.</p><div class="field dimension-worksheet"><label for="dimension-worksheet">Worksheet</label><select id="dimension-worksheet">${options}</select></div>${note ? `<p class="hint">${escapeHtml(note)}</p>` : ""}${slabNote}${sharedSlab}${groups}${wallRuns}${rooms}${dimensionCopyControls(entry)}<p class="dimension-error" role="alert" hidden></p><button type="button" class="primary" data-action="apply-dimensions">Apply dimensions and continue</button> <button type="button" class="secondary" data-action="manual-measurements">Enter measurements manually</button></div>`;
+    return `<div class="panel" data-key="dimensions"><h2>Dimensions &amp; Defaults</h2><p class="hint">Review the dimensions for each worksheet. Applying them fills the linked rows and preserves direct quantities and rates.</p><div class="field dimension-worksheet"><label for="dimension-worksheet">Worksheet</label><select id="dimension-worksheet">${options}</select></div>${note ? `<p class="hint">${escapeHtml(note)}</p>` : ""}${slabNote}${sharedSlab}${groups}${wallRuns}${rooms}${dimensionCopyControls(entry)}
+      <details class="dimension-group" open><summary>Review worksheet dimensions</summary>
+      <div class="worksheet-table-wrap" id="dimension-review"></div></details><p class="dimension-error" role="alert" hidden></p><button type="button" class="primary" data-action="apply-dimensions">Apply dimensions and continue</button> <button type="button" class="secondary" data-action="manual-measurements">Enter measurements manually</button></div>`;
   }
 
   function dimensionError(message) {
@@ -1034,13 +1033,22 @@
     document.querySelector(`[data-schedule-group="${group}"]`).open = true;
   }
 
-  function makeDimensionUpdate(entry, values) {
+  function makeDimensionUpdate(entry, values, reviewSources) {
     const additions = {};
     const inherited = slabDimensions(entry, values);
-    const data = measurementData(entry.component, entry.sheet);
-    const { plinthArea = data.plinthArea, ...setupValues } = values;
-    const rows = EstimationDimensions.derive(dimensionProfile(entry), { ...setupValues, ...inherited, plinthArea }, additions);
-    return { values: setupValues, rows, additions, plinthArea, ...(Object.keys(inherited).length ? { slabDimensions: inherited } : {}) };
+    const profile = dimensionProfile(entry);
+    const setupValues = { ...values };
+    for (const field of ["plinthArea", "fillArea", "fillAreaPercent", "fillLength", "fillWidth"]) delete setupValues[field];
+    if (!profile.shed) delete setupValues.fillDepth;
+    const rows = EstimationDimensions.derive(profile, { ...setupValues, ...inherited }, additions, reviewSources);
+    return { values: setupValues, rows, additions, ...(Object.keys(inherited).length ? { slabDimensions: inherited } : {}) };
+  }
+
+  function manualFillingDimension(data, id, field) {
+    if (id !== "filling-basement" || !["no", "length", "breadth", "depth"].includes(field)) return null;
+    const previous = data.dimensionSetup?.rows?.[id];
+    const current = numberOrBlank(data.rows[id]?.[field]);
+    return previous && current != null && current !== numberOrBlank(previous[field]) ? current : null;
   }
 
   function applyDimensionUpdate(entry, update, inheritedRefresh = false) {
@@ -1057,13 +1065,12 @@
       if (fields.setupOmitted) data.rows[id].setupOmitted = true;
       else delete data.rows[id].setupOmitted;
       for (const [field, value] of Object.entries(fields)) {
+        if (manualFillingDimension(data, id, field) != null) continue;
         if (inheritedRefresh && previous && data.rows[id][field] !== previous[field]) continue;
         if (!previous || previous[field] !== value) data.rows[id][field] = value;
       }
     }
-    const { plinthArea, ...setup } = update;
-    if (plinthArea !== undefined) data.plinthArea = plinthArea;
-    data.dimensionSetup = setup;
+    data.dimensionSetup = update;
     if (inheritedRefresh) return;
     delete data.dimensionInputs;
     delete data.manualMeasurements;
@@ -1080,6 +1087,11 @@
       let update;
       try {
         update = makeDimensionUpdate(entry, setup.values);
+        if (["fillArea", "fillAreaPercent", "fillLength", "fillWidth", "fillDepth"].some((key) =>
+          setup.values[key] != null && setup.values[key] !== "" && (key !== "fillDepth" || !dimensionProfile(entry).shed))) {
+          if (setup.rows["filling-basement"]) update.rows["filling-basement"] = setup.rows["filling-basement"];
+          update.values = setup.values;
+        }
       } catch (_error) {
         // Retain the previous measurements and require this worksheet to be reviewed.
         continue;
@@ -1176,22 +1188,49 @@
     scheduleSave();
   }
 
-  function reviewWallRuns() {
+  function reviewWorksheetDimensions() {
+    const target = $("dimension-review");
+    if (!target) return;
     const entry = selectedDimensionEntry();
-    if (!entry) return;
+    const data = measurementData(entry.component, entry.sheet);
     const profile = dimensionProfile(entry);
+    const values = readDimensionValues(entry, profile);
+    const sources = {};
     try {
-      const { rows, additions } = makeDimensionUpdate(entry, readDimensionValues(entry, profile));
-      const lines = profile.layers.map(([id, label]) => {
-        const values = Object.entries(rows).filter(([key]) => key.startsWith(`${id}-centre-`) && Number(key.split("-").at(-1)) <= 7);
-        const extra = additions[`${id}-centre-2`] || [];
-        const measurements = [...values.map(([key, row]) => [row.setupLabel || (key.endsWith("-1") ? "Exterior" : key), row]),
-          ...extra.map(({ id, label }) => [label, rows[id]])];
-        return `<tr><th>${escapeHtml(label)}</th><td>${measurements.map(([name, row]) => `${escapeHtml(name)}: ${row.no} × ${formatNumber(row.length)} m`).join(" · ")}</td></tr>`;
+      const arithmeticError = NumericEntry.error(target.closest("[data-key='dimensions']"));
+      if (arithmeticError) throw new Error(arithmeticError);
+      const savedSetup = data.dimensionSetup;
+      if (ReportData.readOnly && !savedSetup) {
+        target.innerHTML = '<p class="hint">See the worksheet for the retained measurements.</p>';
+        return;
+      }
+      const derived = ReportData.readOnly ? savedSetup : makeDimensionUpdate(entry, values, sources);
+      const { rows, additions = {} } = derived;
+      const columns = ["no", "length", "breadth", "depth"];
+      const items = ESTIMATION_WORKSHEETS[measurementTemplateKey(entry.component, entry.sheet)].items();
+      const body = items.flatMap((item, index) => {
+        if (data.omittedItems?.[`standard-${index}`]) return [];
+        return item.rows.flatMap((row) => [row, ...(additions[row.id] || [])]).flatMap((row) => {
+          const applied = rows[row.id];
+          if (!applied || applied.setupOmitted || (!columns.some((column) => applied[column] != null) && applied.slabDepth == null)) return [];
+          const presentation = EstimationDimensions.rowChanges(row, applied, profile.storage);
+          if (presentation.hidden) return [];
+          const label = presentation.label || row.label;
+          const description = label === item.label ? label : `${item.label} · ${label}`;
+          const manual = columns.map((column) => manualFillingDimension(data, row.id, column));
+          const source = manual.some((value) => value != null) ? "Includes worksheet overrides"
+            : ReportData.readOnly ? "Retained setup"
+            : applied.slabDepth != null ? "Slab thickness for the steel calculation"
+            : sources[row.id] || (applied.setupLabel || row.id.startsWith("setup-") ? "Worksheet schedule" : "Dimensions & Defaults");
+          return [`<tr><th scope="row">${escapeHtml(description)}</th>${columns.map((column, index) => {
+            const value = manual[index] ?? applied[column];
+            return `<td>${column === "depth" && applied.slabDepth != null ? applied.slabDepth : value == null ? "—" : decimalInput(value)}</td>`;
+          }).join("")}<td>${escapeHtml(source)}</td></tr>`];
+        });
       });
-      $("dimension-run-review").innerHTML = `<table class="worksheet-table"><tbody>${lines.join("")}</tbody></table>`;
+      target.innerHTML = `<table class="worksheet-table dimension-review-table"><thead><tr><th>Item</th><th>Count</th><th>Length (m)</th><th>Width (m)</th><th>Depth / Height (m)</th><th>Source</th></tr></thead><tbody>${body.join("")}</tbody></table>`;
     } catch (error) {
-      dimensionError(error.message);
+      target.innerHTML = `<p class="hint">${escapeHtml(error.message)} The review will appear when the worksheet dimensions are ready.</p>`;
     }
   }
 
@@ -1212,7 +1251,7 @@
     const data = measurementData(entry.component, entry.sheet);
     const multiplier = typicalMultiplier(entry.sheet);
     const totals = sheetCalculations(schema, data, multiplier);
-    return `<div class="panel" data-key="${entry.key}"><h2>${escapeHtml(entry.label)}</h2><p class="hint">Qty calculates from the dimensions. Edit Qty to enter or adjust it directly, or clear it to restore the calculation. For grouped measurements within an item, use its total quantity row to price the entire item.${multiplier > 1 ? ` Enter quantities, rates and lump sums for one floor. Line amounts shown include all ${multiplier} floors.` : ""}</p><div class="worksheet-summary"><button type="button" class="text-button" data-action="edit-dimensions" data-section-key="${escapeHtml(entry.key)}">Edit dimensions &amp; defaults</button><span>Approved template: <strong>${escapeHtml(schema.label)}</strong></span>${editableFinalAmount(totals.overrideAmount, totals.calculatedAmount, `data-sheet-final-input="1" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, `data-action="reset-sheet-total" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, "Final sheet total", `data-sheet-calculated data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`)}</div><div class="field worksheet-plinth-area"><label for="plinth-${entry.key}">Plinth Area (sft.)</label><input id="plinth-${entry.key}" type="number" min="0" step="any" value="${escapeHtml(data.plinthArea ?? "")}" data-plinth-area data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"><small class="hint">Enter the area for all floors represented on this sheet. It is optional unless used as the basis for sand filling.</small></div>${omittedItemsControl(schema, data, entry.component.id, entry.sheet?.id || "component")}<div class="worksheet-item-list">${totals.calculations.map(({ item, calculation }) => {
+    return `<div class="panel" data-key="${entry.key}"><h2>${escapeHtml(entry.label)}</h2><p class="hint">Qty calculates from the dimensions. Edit Qty to enter or adjust it directly, or clear it to restore the calculation. For grouped measurements within an item, use its total quantity row to price the entire item.${multiplier > 1 ? ` Enter quantities, rates and lump sums for one floor. Line amounts shown include all ${multiplier} floors.` : ""}</p><div class="worksheet-summary"><button type="button" class="text-button" data-action="edit-dimensions" data-section-key="${escapeHtml(entry.key)}">Edit dimensions &amp; defaults</button><span>Approved template: <strong>${escapeHtml(schema.label)}</strong></span>${editableFinalAmount(totals.overrideAmount, totals.calculatedAmount, `data-sheet-final-input="1" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, `data-action="reset-sheet-total" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, "Final sheet total", `data-sheet-calculated data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`)}</div><div class="field worksheet-plinth-area"><label for="plinth-${entry.key}">Plinth Area (sft.)</label><input id="plinth-${entry.key}" type="text" value="${escapeHtml(data.plinthArea ?? "")}" data-plinth-area data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"><small class="hint">Enter the area for all floors represented on this sheet. Optional. Text or notes may be included.</small></div>${omittedItemsControl(schema, data, entry.component.id, entry.sheet?.id || "component")}<div class="worksheet-item-list">${totals.calculations.map(({ item, calculation }) => {
       const serial = item.displaySno == null ? "" : `${item.displaySno}. `;
       const label = item.isCustomItem ? `<span data-custom-item-display>${escapeHtml(item.label)}</span>` : escapeHtml(item.label);
       const actions = item.isCustomItem
@@ -1354,6 +1393,7 @@
     state.current = nextIndex < 0 ? 0 : nextIndex;
     wireEvents();
     offlineEntry.wire();
+    reviewWorksheetDimensions();
     document.body.dataset.valuationPreparation = state.details.workMode || "";
     window.dispatchEvent(new CustomEvent("sln:valuation-preparation-changed"));
     showSection(state.current, { skipAbstractRefresh: options.skipAbstractRefresh });
@@ -1602,18 +1642,24 @@
     }
     $("status").textContent = "Rendering workbook preview…";
     try {
-      await EstimationProcessing.run("Preparing workbook preview", "Saving report details and rendering the workbook…", async () => {
+      await EstimationProcessing.run("Preparing workbook preview", "Saving report details and rendering the workbook…", async (_stage, signal) => {
         await persistDraftNow();
-        const response = await fetch("/api/estimation/preview", { method: "POST", headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(ReportData.requestPayload({ state: workbookState(previewMode), mode: previewMode })) });
+        const response = await fetch("/api/estimation/preview", { method: "POST", signal, headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(ReportData.requestPayload({ state: workbookState(previewMode), mode: previewMode })) });
         const preview = await response.json();
+        signal.throwIfAborted();
         if (!response.ok) throw new Error(preview.error || "Workbook preview failed.");
         $("workbook-preview").innerHTML = `<iframe class="workbook-preview-frame" src="${escapeHtml(preview.preview)}" title="Rendered estimation workbook preview"></iframe>`;
         ReportData.setPreview({ id: preview.preview_id, url: preview.preview });
         $("status").textContent = "Workbook preview ready";
         updateOutputControls();
         if ($("generate-from-review")) $("generate-from-review").disabled = false;
-      });
+      }, "Cancel preview");
     } catch (error) {
+      if (error.name === "AbortError") {
+        $("workbook-preview").innerHTML = '<p class="hint">Preview cancelled.</p>';
+        $("status").textContent = "Preview cancelled";
+        return;
+      }
       $("workbook-preview").innerHTML = `<div class="notice"><strong>Workbook preview could not be rendered.</strong><br>${escapeHtml(workbookErrorMessage(error))}</div>`;
       $("status").textContent = "Workbook preview failed";
     }
@@ -1959,6 +2005,7 @@
         input.toggleAttribute("data-slab-linked", values.slabLinked[field]);
       }
       dimensionEdits.set(dimensionSelection, values);
+      reviewWorksheetDimensions();
     }));
     document.querySelectorAll("[data-dimension-schedule] input").forEach((input) => {
       input.addEventListener("input", () => {
@@ -1966,6 +2013,7 @@
         const values = dimensionEdits.get(dimensionSelection) || {};
         Object.assign(values, readSchedule());
         dimensionEdits.set(dimensionSelection, values);
+        reviewWorksheetDimensions();
       });
     });
     document.querySelectorAll("input[data-precise-value]").forEach((input) => {
@@ -1992,27 +2040,12 @@
     document.querySelectorAll('[name="work-mode"]').forEach((input) => input.addEventListener("change", () => setWorkMode(input.value)));
     $("property-subtype")?.addEventListener("change", (event) => { state.subtype = event.target.value; renderAll({ sectionKey: "configuration" }); scheduleSave(); });
     document.querySelectorAll("[data-detail]").forEach((input) => input.addEventListener("input", () => { state.details[input.dataset.detail] = input.value; if (input.type === "date") dateError(input); scheduleSave(); }));
-    document.querySelectorAll("[data-plinth-area]").forEach((input) => {
+    document.querySelectorAll("[data-plinth-area]").forEach((input) => input.addEventListener("input", () => {
       const found = locateMeasurement(input.dataset.component, input.dataset.sheet);
-      const values = found?.data.dimensionSetup?.values;
-      const linked = numberOrBlank(values?.fillAreaPercent) > 0 && numberOrBlank(values?.fillArea) == null;
-      input.addEventListener(linked ? "change" : "input", () => {
-        if (!found) return;
-        if (linked) {
-          const entry = dimensionEntries().find((candidate) => candidate.component === found.component && candidate.sheet === found.sheet);
-          try {
-            applyDimensionUpdate(entry, makeDimensionUpdate(entry, { ...values, plinthArea: input.value }), true);
-          } catch (error) {
-            input.value = found.data.plinthArea ?? "";
-            window.alert(error.message);
-            return;
-          }
-          refreshMeasurementCalculations(found.component, found.sheet);
-          measurementLayoutDirty = true;
-        } else found.data.plinthArea = input.value;
-        scheduleSave();
-      });
-    });
+      if (!found) return;
+      found.data.plinthArea = input.value;
+      scheduleSave();
+    }));
     document.querySelectorAll("[data-measurement-input]").forEach((input) => {
       input.addEventListener("input", () => updateMeasurementInput(input));
       input.addEventListener("blur", () => {
@@ -2053,7 +2086,6 @@
       if (action === "remove-abstract-custom") removeAbstractCustom(button.dataset.abstractCustomType, button.dataset.abstractCustomId);
       if (action === "apply-dimensions") applyDimensions();
       if (action === "add-dimension-row" || action === "remove-dimension-row") editDimensionSchedule(button, action === "add-dimension-row");
-      if (action === "review-wall-runs") reviewWallRuns();
       if (action === "copy-dimensions") copyDimensions();
       if (action === "manual-measurements") {
         const entry = dimensionEntries().find((item) => item.key === dimensionSelection);

@@ -64,6 +64,19 @@
     }));
   }
 
+  function preparationMix(tasks) {
+    const counts = new Map();
+    for (const { preparationSource } of tasks) {
+      counts.set(preparationSource, (counts.get(preparationSource) || 0) + 1);
+    }
+    const methods = [
+      { key: "online", label: "Online Preparation", color: "#287fa1" },
+      { key: "template", label: "Offline Template", color: "#9a6eb1" },
+      { key: "retrospective", label: "Retrospective Submission", color: "#c48852" },
+    ].map((method) => ({ ...method, count: counts.get(method.key) || 0 }));
+    return { methods, unrecorded: tasks.length - methods.reduce((sum, method) => sum + method.count, 0) };
+  }
+
   function periodLabel(period, reference = ValuxTime.todayDate()) {
     if (!period) return "All time";
     const format = (date, options) => new Intl.DateTimeFormat("en-IN", { ...options, timeZone: "UTC" }).format(date);
@@ -84,6 +97,7 @@
     finance,
     reportMix,
     workflowMix,
+    preparationMix,
     periodLabel,
   };
 })();

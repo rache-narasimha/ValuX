@@ -17,6 +17,17 @@
     return ["father", "employee"].includes(global.__VALUX_AUTH_CONTEXT__?.user?.role);
   }
 
+  function confirmPreparationChange(kind, previous, next, task) {
+    if (!previous && !task?.reportGeneratedAt) return true;
+    const labels = { online: "Fill online", offline: "Complete offline and upload", template: "Filled template", retrospective: "Retrospective report" };
+    return global.confirm(`Change ${kind} to ${labels[next] || "no upload type"}? Your entered details will be kept. Any existing report or preview will no longer qualify. Generate or submit a fresh report before completing the task, even if you switch back.`);
+  }
+
+  function confirmReportEdit(mode) {
+    const instruction = mode === "offline" ? "submit a fresh completed report" : "preview and generate a fresh report";
+    return global.confirm(`Changing report details will make the retained report outdated. Continue and ${instruction} before completing this task?`);
+  }
+
   function preparationPanel(reportKey, selectedMode, onSelect) {
     const panel = document.createElement("div");
     panel.className = "panel preparation-method-panel";
@@ -27,7 +38,7 @@
       ? "Review the work assessment, add site photographs, preview the report, then generate the DOCX."
       : `Complete the ${reportLabel} form, add photographs and map, preview the report, then generate the DOCX.`;
     const offlineHint = progress
-      ? "Review the work assessment, then attach an existing DOCX or PDF with a work note."
+      ? "Review the work assessment, then attach a filled template or an existing completed report with a work note."
       : "Download the clean template or use an existing completed report, then attach the finished DOCX or PDF with a work note.";
     panel.innerHTML = `<h2>Preparation Method</h2>
       <p class="section-intro">Choose how this ${reportLabel} report will be prepared. The remaining steps will adapt to this selection.</p>
@@ -38,7 +49,7 @@
         </label>
         <label class="preparation-choice-card">
           <input type="radio" name="${MODE_NAME}" value="offline" data-preparation-method ${selectedMode === "offline" ? "checked" : ""}>
-          <span><strong>${progress ? "Upload retrospective report" : "Complete offline and upload"}</strong><small>${offlineHint}</small></span>
+          <span><strong>Complete offline and upload</strong><small>${offlineHint}</small></span>
         </label>
       </div>
       <p class="preparation-selection-status" data-preparation-status aria-live="polite">${selectedMode ? "Preparation method selected." : "Select a preparation method to continue."}</p>`;
@@ -60,32 +71,33 @@
     return panel;
   }
 
-  function offlinePanel(reportKey, savedUploadType = "", prepareUpload = null) {
+  function offlinePanel(reportKey, savedUploadType, { prepareUpload, downloadTemplate, uploadTypeChanged } = {}) {
     const progress = reportKey === "progress" || reportKey === "completion";
     const taskCode = global.ReportData?.taskCode;
     const task = taskFor(reportKey);
     if (!task) return null;
 
-    const templateUrl = reportKey === "valuation-agricultural"
-      ? "/templates/agricultural-master.docx"
-      : "/templates/general-master.docx";
+    const templateUrl = reportKey === "valuation-agricultural" ? "/templates/agricultural-master.docx" : "/templates/general-master.docx";
     const panel = document.createElement("div");
     panel.className = "panel offline-report-panel";
     panel.dataset.group = "offline";
     panel.innerHTML = `<h2>Complete &amp; Upload Report</h2>
-      <p class="section-intro">Complete the downloaded template—or use an existing completed report—and attach the final DOCX or PDF. The task remains In Progress until the attachment is uploaded and the task is explicitly completed.</p>
-      <section class="subgroup offline-template-step">
-        <div class="subgroup-heading"><div><h3>1. Prepare the report</h3><p class="hint">Use the clean template when starting a new offline report. An existing completed report can be uploaded directly.</p></div><a class="button-link secondary" href="${templateUrl}?task=${encodeURIComponent(taskCode)}" data-template-download>Download clean DOCX template</a></div>
+      <section class="subgroup">
+        <div class="subgroup-heading"><h3 id="offline-upload-type-label">Upload Type</h3>
+          <button type="button" class="secondary" data-template-download>Download DOCX template</button>
+        </div>
+        <div class="field"><select id="valuation-upload-type" aria-labelledby="offline-upload-type-label"><option value="">Select upload type</option><option value="template">Filled template</option><option value="retrospective">Retrospective report</option></select></div>
+        <p class="hint">Filled template requires a template download for this task. Existing retrospective reports can be attached directly.</p>
       </section>
       <section class="subgroup offline-upload-step">
-        <h3>2. Attach the completed report</h3><div class="field"><label for="valuation-upload-type">Upload Type</label><select id="valuation-upload-type"><option value="">Select upload type</option><option value="template">Filled template</option><option value="retrospective">Retrospective report</option></select></div>
+        <h3 data-offline-entry-heading>Attach completed report</h3>
         <div class="grid" data-offline-entry>
           <div class="field"><label for="offline-valuation-file">Completed report (DOCX or PDF)</label><input id="offline-valuation-file" type="file" accept=".docx,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf"></div>
           <div class="field full"><label class="required" for="offline-valuation-note">Upload work note</label><textarea id="offline-valuation-note" placeholder="Explain the completed report and the work performed"></textarea></div>
         </div>
         <div class="offline-artifact" data-offline-artifact hidden><span aria-hidden="true">✓</span><div class="offline-artifact-details"><strong data-offline-filename></strong><small>Completed report submitted</small></div><div class="offline-artifact-actions"><a class="button-link secondary offline-artifact-download" data-offline-download title="Download submitted report" aria-label="Download submitted report"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></a><button type="button" class="secondary offline-artifact-download" data-offline-remove title="Remove submitted report" aria-label="Remove submitted report"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6m4-6v6"/></svg></button></div></div>
-        <div class="offline-upload-actions"><button type="button" class="primary" data-offline-upload>Submit</button><span data-offline-status role="status" aria-live="polite"></span></div>
-      </section>`;
+      </section>
+        <div class="offline-upload-actions"><button type="button" class="primary" data-offline-upload>Submit</button><span data-offline-status role="status" aria-live="polite"></span></div>`;
 
     const file = panel.querySelector("#offline-valuation-file");
     const note = panel.querySelector("#offline-valuation-note");
@@ -97,36 +109,71 @@
     const attachment = panel.querySelector("[data-offline-artifact]");
 
     const uploadType = panel.querySelector("#valuation-upload-type");
-    if (progress) {
-      panel.querySelector(".section-intro").textContent = "Review the work assessment, then attach the completed DOCX or PDF with a work note.";
-      panel.querySelector(".offline-template-step").hidden = true;
-      uploadType.closest(".field").hidden = true;
-      panel.querySelector(".offline-upload-step h3").textContent = "Attach the retrospective report";
-    }
-    uploadType.value = progress ? "retrospective" : savedUploadType || (["template", "retrospective"].includes(task.preparationSource) ? task.preparationSource : "");
-    uploadType.addEventListener("change", () => global.dispatchEvent(new CustomEvent("sln:valuation-upload-type-changed")));
-    panel.querySelector("[data-template-download]").addEventListener("click", async (event) => {
-      event.preventDefault();
+    const ownSource = (current) => progress ? current?.ownPreparationSource : current?.preparationSource;
+    const taskSource = ownSource(task);
+    uploadType.value = savedUploadType ?? (["template", "retrospective"].includes(taskSource) ? taskSource : "");
+    let previousUploadType = uploadType.value;
+    uploadType.addEventListener("change", async () => {
+      const next = uploadType.value;
+      if (!confirmPreparationChange("upload type", previousUploadType, next, global.TaskStore.get(taskCode))) {
+        uploadType.value = previousUploadType;
+        return;
+      }
+      uploadType.disabled = upload.disabled = true;
       try {
-        const response = await fetch(event.currentTarget.href);
-        if (!response.ok) throw new Error("The template could not be downloaded.");
-        const url = URL.createObjectURL(await response.blob());
-        const link = document.createElement("a"); link.href = url; link.download = `${reportKey === "valuation-general" ? "General" : "Agricultural"}_${task.reportGroup === "revaluation" ? "Revaluation" : "Valuation"}_Offline_Template.docx`;
-        link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+        await uploadTypeChanged?.(next);
+        previousUploadType = next;
+        // Changing the selection immediately makes the prior attachment
+        // ineligible, even while the updated task record is being fetched.
+        render(null);
         await global.TaskStore.refresh(taskCode);
-      } catch (error) { status.textContent = error.message; }
+      } catch (error) {
+        uploadType.value = previousUploadType;
+        status.textContent = error.message;
+      } finally {
+        uploadType.disabled = upload.disabled = false;
+      }
+    });
+    const templateButton = panel.querySelector("[data-template-download]");
+    templateButton.addEventListener("click", async () => {
+      templateButton.disabled = true;
+      status.textContent = "Preparing DOCX template…";
+      try {
+        const response = downloadTemplate ? await downloadTemplate()
+          : await fetch(`${templateUrl}?task=${encodeURIComponent(taskCode)}`);
+        if (!response.ok) {
+          const failure = await response.json().catch(() => ({}));
+          throw new Error(failure.error || "The template could not be downloaded.");
+        }
+        const url = URL.createObjectURL(await response.blob());
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = progress
+          ? `${reportKey === "progress" ? "Progress" : "Completion"}_Offline_Template.docx`
+          : `${reportKey === "valuation-general" ? "General" : "Agricultural"}_${task.reportGroup === "revaluation" ? "Revaluation" : "Valuation"}_Offline_Template.docx`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        await global.TaskStore.refresh(taskCode);
+        status.textContent = "Template downloaded.";
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        templateButton.disabled = false;
+      }
     });
 
     function render(current = global.TaskStore.get(taskCode)) {
       const artifact = global.ReportData.readOnly
         ? current?.status === "Closed" ? global.TaskStore.finalArtifact(current) : global.TaskStore.latestArtifact(current)
-        : current?.retrospectiveReady && current.reportFresh !== false ? global.TaskStore.latestArtifact(current) : null;
+        : current?.retrospectiveReady && current.reportFresh !== false && ownSource(current) === uploadType.value ? global.TaskStore.latestArtifact(current) : null;
       const ready = Boolean(artifact?.url);
       entry.hidden = ready;
+      panel.querySelector("[data-offline-entry-heading]").hidden = ready;
+      templateButton.hidden = global.ReportData.readOnly;
       attachment.hidden = !ready;
       upload.textContent = ready ? "Mark Completed" : "Submit";
-      panel.querySelector("[data-offline-filename]").textContent = artifact?.filename || "Completed valuation report";
-      panel.querySelector("[data-offline-filename]").title = artifact?.filename || "Completed valuation report";
+      panel.querySelector("[data-offline-filename]").textContent = artifact?.filename || "Completed report";
+      panel.querySelector("[data-offline-filename]").title = artifact?.filename || "Completed report";
       remove.hidden = !ready || global.ReportData.readOnly;
       upload.hidden = Boolean(global.ReportData.readOnly);
       download.hidden = !artifact?.url;
@@ -142,7 +189,7 @@
 
     upload.addEventListener("click", async () => {
       const current = global.TaskStore.get(taskCode);
-      if (current?.retrospectiveReady && current.reportFresh !== false && global.TaskStore.latestArtifact(current)?.url) {
+      if (current?.retrospectiveReady && current.reportFresh !== false && ownSource(current) === uploadType.value && global.TaskStore.latestArtifact(current)?.url) {
         global.dispatchEvent(new CustomEvent("sln:complete-offline-valuation"));
         return;
       }
@@ -159,7 +206,7 @@
         note.focus();
         return;
       }
-      upload.disabled = true;
+      upload.disabled = uploadType.disabled = templateButton.disabled = true;
       status.textContent = "Attaching report…";
       try {
         if (prepareUpload && !(await prepareUpload())) {
@@ -196,7 +243,7 @@
       } catch (error) {
         status.textContent = error.message || "The completed report could not be attached.";
       } finally {
-        upload.disabled = false;
+        upload.disabled = uploadType.disabled = templateButton.disabled = false;
       }
     });
     global.addEventListener("sln:tasks-changed", () => render());
@@ -243,5 +290,5 @@
     host.append(notice);
   }
 
-  global.RetrospectiveValuation = { supportsChoice, preparationPanel, offlinePanel, revaluationLabel, displayRevaluationSource };
+  global.RetrospectiveValuation = { supportsChoice, preparationPanel, offlinePanel, confirmPreparationChange, confirmReportEdit, revaluationLabel, displayRevaluationSource };
 })(window);

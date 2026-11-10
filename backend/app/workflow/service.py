@@ -506,12 +506,14 @@ def set_preparation_source(database, task, actor, source):
     return True
 
 
-def record_template_download(task_code, session):
+def record_template_download(task_code, session, *, linked_report_inputs=None):
     actor = _actor(session)
     with connection() as database:
         task = _task_row(database, task_code, lock=True)
         if not _can_change(actor, task) or task["status"] not in {"In Progress", "On Hold"}:
             raise WorkflowError("The template can be downloaded only for an editable active task.", 403, "forbidden")
+        if linked_report_inputs is not None:
+            require_estimation_ready(database, task, linked_report_inputs, verify_components=True)
         _update_task(database, task["id"], "template_downloaded_at = NOW()", ())
         _activity(database, task["id"], actor, "note", "Report template downloaded.", {"templateDownloaded": True})
 
@@ -682,7 +684,16 @@ def list_tasks(options: dict[str, Any], session: dict[str, Any] | None = None) -
         conditions.append("t.assigned_date >= %s AND t.assigned_date < %s")
         params.extend((start, end))
     payment_filter = _text(options.get("payment"))
-    if payment_filter:
+    if payment_filter in {"Partially Received,Received", "Partially Received,Pending"}:
+        if not session or session.get("role") != "father":
+            raise WorkflowError("Only the CEO can filter by payment collection.", 403, "forbidden")
+        conditions.extend((
+            "t.status <> 'Cancelled'",
+            "EXISTS (SELECT 1 FROM app.institutions i WHERE i.active AND i.code = t.institution_code_snapshot)",
+            f"({payment_case}) = ANY(%s)",
+        ))
+        params.append(payment_filter.split(","))
+    elif payment_filter:
         conditions.append(f"({payment_case}) = %s")
         params.append(payment_filter)
     where = f" WHERE {' AND '.join(conditions)}" if conditions else ""

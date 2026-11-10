@@ -273,7 +273,7 @@ def _project_table(document, data):
         _cell_text(row.cells[1], value, size=9)
 
 
-def _works_table(document, data):
+def _works_table(document, data, *, template=False):
     heading = _add_paragraph(document, "7. Details of works completed/investment made:", size=10, before=8, after=5, keep=True)
     heading.paragraph_format.keep_with_next = True
     table = document.add_table(rows=1, cols=6)
@@ -294,53 +294,64 @@ def _works_table(document, data):
     _set_repeat_header(table.rows[0])
     for component in data["components"]:
         row = table.add_row()
+        _cant_split(row)
         values = [
             "", "",
             component["label"],
             _currency(component["estimatedCost"]),
-            f"{component['completionPercent']:g}%",
-            _currency(component["completedCost"]),
+            "" if template else f"{component['completionPercent']:g}%",
+            "" if template else _currency(component["completedCost"]),
         ]
         for column, (cell, value) in enumerate(zip(row.cells, values)):
             _set_width(cell, widths[column])
             _cell_text(cell, value, size=9, align=WD_ALIGN_PARAGRAPH.LEFT if column == 2 else WD_ALIGN_PARAGRAPH.RIGHT if column in {3, 5} else WD_ALIGN_PARAGRAPH.CENTER)
+    for cell in table.rows[0].cells:
+        for paragraph in cell.paragraphs:
+            paragraph.paragraph_format.keep_with_next = True
     total = table.add_row()
+    _cant_split(total)
     _cell_text(total.cells[2], "Total", bold=True, size=9)
     _cell_text(total.cells[3], _currency(sum(item["estimatedCost"] for item in data["components"])), bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
     _cell_text(total.cells[4], "Total (Rs)", bold=True, size=9, align=WD_ALIGN_PARAGRAPH.CENTER)
-    _cell_text(total.cells[5], _currency(data["worksTotal"]), bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
+    _cell_text(total.cells[5], _currency(data["worksTotal"], blank=template), bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
     final_row = len(table.rows) - 1
     _cell_text(table.cell(1, 0).merge(table.cell(final_row, 0)), "1.", size=9, align=WD_ALIGN_PARAGRAPH.CENTER)
     description = str(data["linked"].get("workDescription") or "").strip()
     _cell_text(table.cell(1, 1).merge(table.cell(final_row, 1)), description, size=9)
     materials = table.add_row()
+    _cant_split(materials)
     materials.cells[0].merge(materials.cells[4])
     _cell_text(materials.cells[0], "Add: Cost of materials at site (Rs.)", bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
-    _cell_text(materials.cells[5], _currency(data["materialsAtSite"]), bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
+    _cell_text(materials.cells[5], _currency(data["materialsAtSite"], blank=template), bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
     words = table.add_row()
+    _cant_split(words)
     words.cells[0].merge(words.cells[4])
-    _cell_text(words.cells[0], f"(Rupees {amount_in_words(data['totalValue'])} only)", bold=True, size=9, align=WD_ALIGN_PARAGRAPH.CENTER)
-    _cell_text(words.cells[5], _currency(data["totalValue"]), bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
+    _cell_text(words.cells[0], "(Rupees ____________________ only)" if template else f"(Rupees {amount_in_words(data['totalValue'])} only)", bold=True, size=9, align=WD_ALIGN_PARAGRAPH.CENTER)
+    _cell_text(words.cells[5], _currency(data["totalValue"], blank=template), bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
 
 
-def _certificate(document, data):
-    _add_paragraph(document, "8. Certificate by the Valuer:", size=10, before=7, after=3)
+def _certificate(document, data, *, template=False):
+    heading = _add_paragraph(document, "8. Certificate by the Valuer:", size=10, before=7, after=3, keep=True)
+    heading.paragraph_format.keep_with_next = True
     details = data["details"]
-    if data["noDeviation"] == "yes":
+    if template:
+        plan_text = "[Record whether work follows the sanctioned plan and describe any deviations.]"
+    elif data["noDeviation"] == "yes":
         plan_text = "I hereby certify that the construction is being carried out as per the sanctioned plan without any deviation."
     else:
         plan_text = f"Deviation from the sanctioned plan was observed: {str(details.get('deviationRemarks') or '').strip()}"
     paragraph = _add_paragraph(document, align=WD_ALIGN_PARAGRAPH.JUSTIFY, size=9, after=2)
     paragraph.style = document.styles["List Bullet"]
+    paragraph.paragraph_format.keep_together = True
     paragraph.add_run(plan_text + " The value of works put up till date is ").font.name = "Arial"
-    amount_run = paragraph.add_run(_currency(data["totalValue"]))
+    amount_run = paragraph.add_run("____________" if template else _currency(data["totalValue"]))
     amount_run.bold = True
     amount_run.underline = True
     amount_run.font.name = "Arial"
     amount_run.font.size = Pt(9)
-    paragraph.add_run(f" (Rupees {amount_in_words(data['totalValue'])} only).").font.name = "Arial"
+    paragraph.add_run(" (Rupees ____________________ only)." if template else f" (Rupees {amount_in_words(data['totalValue'])} only).").font.name = "Arial"
     photo_text = "Photos taken at the site showing the progress, duly authenticated, are enclosed." if data["photos"] else "No authenticated site photographs were provided with this report."
-    photo = _add_paragraph(document, photo_text, size=9, after=2)
+    photo = _add_paragraph(document, "[Record site photographs enclosed, if applicable.]" if template else photo_text, size=9, after=2)
     photo.style = document.styles["List Bullet"]
     table = document.add_table(rows=1, cols=2)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -358,7 +369,7 @@ def _certificate(document, data):
         borders.append(node)
 
 
-def _bank_page(document, data):
+def _bank_page(document, data, *, template=False):
     document.add_page_break()
     _add_paragraph(document, "BRANCH SANCTION", align=WD_ALIGN_PARAGRAPH.CENTER, size=11, bold=True, after=6)
     bank = data["bank"]
@@ -397,7 +408,7 @@ def _bank_page(document, data):
     total_row = table.rows[-1]
     total_row.cells[0].merge(total_row.cells[4])
     _cell_text(total_row.cells[0], "Total", bold=True, size=8.5, align=WD_ALIGN_PARAGRAPH.RIGHT)
-    _cell_text(total_row.cells[5], _currency(released_total), bold=True, size=8.5, align=WD_ALIGN_PARAGRAPH.CENTER)
+    _cell_text(total_row.cells[5], _currency(None if template else released_total, blank=template), bold=True, size=8.5, align=WD_ALIGN_PARAGRAPH.CENTER)
 
     _add_paragraph(document, "Assessment of loan/instalment amount to be released:", size=10, before=9, after=3)
     margin_percent = _number(bank.get("marginPercent"), "Margin percentage", allow_blank=True)
@@ -409,7 +420,7 @@ def _bank_page(document, data):
         ("b.", "Cost incurred so far as per valuer's report overleaf", data["totalValue"]),
         ("c.", f"Margin to be maintained on the cost incurred/invested as per sanction terms ({margin_percent:g}% )" if margin_percent is not None else "Margin to be maintained on the cost incurred/invested as per sanction terms (____%)", margin),
         ("d.", "Total loan amount eligible for release (b-c)", eligible),
-        ("e.", "Loan amount already released (as in the above table)", released_total),
+        ("e.", "Loan amount already released (as in the above table)", None if template else released_total),
         ("f.", "Loan instalment/amount eligible for release now (d-e)", instalment),
     ]
     assessment_table = document.add_table(rows=len(assessment), cols=3)
@@ -448,7 +459,7 @@ def _bank_page(document, data):
         borders.append(node)
 
 
-def _document(data):
+def _document(data, *, template=False):
     document = Document()
     section = document.sections[0]
     section.page_width = Mm(210)
@@ -479,10 +490,10 @@ def _document(data):
         node.set(qn("w:val"), "nil")
         borders.append(node)
     _project_table(document, data)
-    _works_table(document, data)
-    _certificate(document, data)
+    _works_table(document, data, template=template)
+    _certificate(document, data, template=template)
     if is_karnataka:
-        _bank_page(document, data)
+        _bank_page(document, data, template=template)
     photo = document.add_paragraph()
     photo.paragraph_format.page_break_before = True
     photo.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -491,6 +502,25 @@ def _document(data):
     run.font.name = "Arial"
     run.font.size = Pt(11)
     return document
+
+
+def generate_progress_template(payload: Mapping[str, Any], report_type: str) -> bytes:
+    """Build a fillable report with known project data and blank assessment results."""
+    components = [{
+        "label": str(component.get("label") or ""),
+        "estimatedCost": _number(component.get("estimatedCost"), "Estimated cost"),
+    } for component in payload.get("components") or []]
+    if not components:
+        raise ValueError("The linked estimation report has no component estimates.")
+    data = {
+        "institution": payload["institution"], "linked": payload.get("linkedEstimation") or {},
+        "details": {}, "bank": {}, "components": components, "reportType": report_type,
+        "reportDate": "", "visitDate": "", "worksTotal": None, "materialsAtSite": None,
+        "totalValue": None, "photos": [],
+    }
+    stream = BytesIO()
+    _document(data, template=True).save(stream)
+    return stream.getvalue()
 
 
 def generate_progress_report(payload: Mapping[str, Any], output_path: str | Path | None = None) -> GeneratedProgressReport:

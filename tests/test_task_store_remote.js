@@ -84,6 +84,24 @@ const store = context.window.TaskStore;
   assert.equal(reopened.latestDocx, null);
   assert.equal(reopened.reportGeneratedAt, null);
 
+  context.WorkflowAccess = context.window.WorkflowAccess = { currentRole: () => "father", visible: () => true };
+  context.window.InstitutionStore = { active: () => [{ code: "CANARA", type: "NBFC" }] };
+  serverTask.payment = { estimated: 1000, agreed: 800, received: 400 };
+  await store.refresh(baseTask.id);
+  assert.equal(store.query({ payment: store.PAYMENT_STATUS_PAIRS.received, institution: "CANARA" }).total, 1);
+  assert.equal(store.query({ payment: store.PAYMENT_STATUS_PAIRS.pending, institution: "CANARA" }).total, 1);
+  assert.equal(store.query({ institutionType: "NBFC", institutionScope: "active" }).total, 1);
+  assert.equal(store.query({ institutionType: "Bank", institutionScope: "active" }).total, 0);
+  serverTask.payment.dueDate = "2000-01-01";
+  await store.refresh(baseTask.id);
+  assert.equal(store.query({ payment: store.PAYMENT_STATUS_PAIRS.received }).total, 0);
+  assert.equal(store.query({ payment: store.PAYMENT_STATUS_PAIRS.pending }).total, 0);
+  serverTask.payment.dueDate = null;
+  serverTask.status = "Cancelled";
+  await store.refresh(baseTask.id);
+  assert.equal(store.query({ payment: store.PAYMENT_STATUS_PAIRS.received }).total, 0);
+  assert.equal(store.query({ payment: store.PAYMENT_STATUS_PAIRS.pending }).total, 0);
+
   assert.ok(requests.some((request) => request.path === "/api/tasks"));
   assert.ok(requests.some((request) => request.path === `/api/tasks/${baseTask.id}`));
   assert.ok(requests.every((request) => request.method !== "POST" || Number.isInteger(request.body?.version)));

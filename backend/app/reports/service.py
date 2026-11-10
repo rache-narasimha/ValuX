@@ -315,6 +315,20 @@ def get_draft(task_code: str, session: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def preview_input_fingerprint(task_code: str, session: dict[str, Any]) -> str:
+    """Capture the draft identity before the potentially slow preview render."""
+    with connection() as database:
+        task = _task(database, task_code)
+        _require_editable(_actor(session), task)
+        row = database.execute(
+            "SELECT input_fingerprint FROM app.report_drafts WHERE task_id = %s",
+            (task["id"],),
+        ).fetchone()
+    if not row or not row["input_fingerprint"]:
+        raise ReportDataError("Save the current draft before previewing the report.", 409, "draft_required")
+    return row["input_fingerprint"]
+
+
 def require_current_preview(task_code: str, session: dict[str, Any], preview_token: str) -> None:
     """Require a preview that still belongs to the task's current saved inputs."""
     actor = _actor(session)
@@ -406,17 +420,32 @@ def save_draft(task_code: str, values: dict[str, Any], session: dict[str, Any]) 
                     details["preparationRevision"] = preparation_revision
                 if "details" in normalized:
                     normalized["details"] = details
-            if report_key in {"progress", "completion"}:
+            if report_key in {"valuation-general", "valuation-agricultural", "progress", "completion"}:
                 previous = (current or {}).get("payload") or {}
-                mode = mode or "online"
-                if mode not in {"online", "offline"}:
-                    raise ReportDataError("Select a valid preparation method.")
-                revision = int(previous.get("preparationRevision") or 0)
-                if mode != (previous.get("preparationMethod") or "online"):
-                    revision += 1
-                normalized["preparationMethod"] = mode
-                normalized["preparationRevision"] = revision
-                upload_type = "retrospective"
+                linked_report = report_key in {"progress", "completion"}
+                if linked_report:
+                    mode = mode or "online"
+                    if mode not in {"online", "offline"}:
+                        raise ReportDataError("Select a valid preparation method.")
+                    normalized["preparationMethod"] = mode
+                if linked_report and mode == "offline" and "uploadType" not in normalized:
+                    upload_type = previous.get("uploadType") or "retrospective"
+                if upload_type and upload_type not in {"template", "retrospective"}:
+                    raise ReportDataError("Select a valid upload type.")
+                if mode in {"online", "offline"}:
+                    previous_mode = previous.get("preparationMethod") or ("online" if linked_report else "")
+                    method_switched = mode != previous_mode and bool(previous_mode or task.get("report_generated_at"))
+                    # Legacy linked offline drafts have no explicit type.
+                    previous_type = previous.get("uploadType") or (
+                        "retrospective" if linked_report and previous_mode == "offline" else ""
+                    )
+                    next_type = upload_type or ""
+                    upload_switched = (mode == previous_mode == "offline" and next_type != previous_type
+                                       and bool(previous_type or task.get("report_generated_at")))
+                    revision = int(previous.get("preparationRevision") or 0) + int(method_switched or upload_switched)
+                    normalized.pop("preparationRevision", None)
+                    if revision or linked_report:
+                        normalized["preparationRevision"] = revision
             selected_source = "online" if mode == "online" else upload_type if mode == "offline" else None
             preparation_changed = workflow_service.set_preparation_source(database, task, actor, selected_source)
             input_fingerprint = report_input_fingerprint(
@@ -641,6 +670,8 @@ def report_input_fingerprint(
             "bank": _compact_payload(source.get("bank") if isinstance(source.get("bank"), dict) else {}),
             "photos": _compact_payload(source.get("photos") if isinstance(source.get("photos"), list) else []),
         }
+        if source.get("preparationMethod") == "offline" and source.get("uploadType") == "template":
+            report_input["uploadType"] = "template"
         if source.get("preparationMethod") == "offline" or source.get("preparationRevision"):
             report_input["preparationMethod"] = source.get("preparationMethod")
             report_input["preparationRevision"] = source.get("preparationRevision") or 0
@@ -655,6 +686,8 @@ def report_input_fingerprint(
         # upload type. Keep online/legacy fingerprints unchanged.
         if source.get("preparationMethod") == "offline" and _text(source.get("uploadType")):
             report_input["uploadType"] = _text(source["uploadType"])
+        if source.get("preparationRevision"):
+            report_input["preparationRevision"] = source["preparationRevision"]
     encoded = json.dumps(report_input, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
@@ -778,6 +811,7 @@ def register_artifact(
     template_version: str = "1",
     current: bool = True,
     preview_token: str = "",
+    preview_input: str | None = None,
     work_note: str = "",
 ) -> dict[str, Any]:
     actor = _actor(session)
@@ -813,11 +847,18 @@ def register_artifact(
             draft_meta = None
             if task["report_key"] in {"valuation-general", "valuation-agricultural", "estimation", "progress", "completion"}:
                 draft_meta = database.execute(
-                    "SELECT schema_version, payload FROM app.report_drafts WHERE task_id = %s",
+                    "SELECT schema_version, payload, input_fingerprint, preview_token FROM app.report_drafts WHERE task_id = %s",
                     (task["id"],),
                 ).fetchone()
                 if draft_meta:
                     schema_version = draft_meta["schema_version"]
+            if preview_input is not None:
+                previous_preview = str((draft_meta or {}).get("preview_token") or "")
+                if (
+                    not draft_meta or draft_meta.get("input_fingerprint") != preview_input
+                    or (previous_preview.isdecimal() and preview_token.isdecimal() and int(previous_preview) > int(preview_token))
+                ):
+                    raise ReportDataError("The preview was superseded. Open the latest preview.", 409, "preview_superseded")
             if task["report_key"] == "estimation" and industrial_centre_line((draft_meta or {}).get("payload") or {}):
                 if source == "generated":
                     raise ReportDataError("Prepare the industrial Centre Line estimate offline and upload the completed report.")
@@ -835,8 +876,10 @@ def register_artifact(
                 if not linked or draft.get("linkedEstimationId") != linked["task_code"]:
                     raise ReportDataError("Reload the report to use its linked estimation.")
                 if draft.get("preparationMethod") != "offline":
-                    raise ReportDataError("Select Upload retrospective report before attaching the file.")
-                payload = {**draft, "retrospective": True, "preparationSource": "retrospective", "photos": []}
+                    raise ReportDataError("Select Complete offline and upload before attaching the file.")
+                if selected_source != (draft.get("uploadType") or "retrospective"):
+                    raise ReportDataError("Save the selected upload type before attaching the file.")
+                payload = {**draft, "retrospective": True, "preparationSource": selected_source, "photos": []}
                 try:
                     summary = retrospective_summary(payload, task["report_group"], linked["task_code"])
                 except ValueError as error:
@@ -855,6 +898,8 @@ def register_artifact(
             fingerprint_payload = draft_meta["payload"] if draft_meta and (
                 task["report_key"] in {"estimation", "progress", "completion"} or retrospective
             ) else payload
+            if draft_meta and (draft_revision := draft_meta["payload"].get("preparationRevision")):
+                fingerprint_payload = {**(fingerprint_payload or {}), "preparationRevision": draft_revision}
             input_fingerprint = report_input_fingerprint(fingerprint_payload, task["report_key"], schema_version, template_version)
             revision_id = None
             revision_payload = None

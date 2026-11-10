@@ -9,7 +9,7 @@
   const draftScope = practice ? "practice" : `task-${taskId || "standalone"}`;
   const DRAFT_KEY = `sln.progress-completion.form.draft.v1-${draftScope}`;
   const TODAY = localToday();
-  const sectionLabels = { setup: "Report Setup", preparation: "Preparation Method", assessment: "Work Assessment", bank: "Bank Sanction", photos: "Photos & Generate", offline: "Upload retrospective report" };
+  const sectionLabels = { setup: "Report Setup", preparation: "Preparation Method", assessment: "Work Assessment", bank: "Bank Sanction", photos: "Photos & Generate", offline: "Complete & Upload Report" };
   const state = { linkedEstimationId: task?.linkedEstimationId || "", current: 0, preparationMethod: "online", details: {}, components: [], bank: { releases: [] }, photos: [] };
   let saveTimer = null;
   let previousReports = [];
@@ -264,6 +264,7 @@
     return clone({
       linkedEstimationId: state.linkedEstimationId,
       preparationMethod: state.preparationMethod,
+      uploadType: state.uploadType || "",
       details: state.details,
       components: state.components,
       bank: state.bank,
@@ -274,7 +275,7 @@
   function confirmReportInvalidation() {
     const current = currentTask();
     if (!current?.reportGeneratedAt || current.reportFresh === false || generatedChangeAcknowledged) return true;
-    const accepted = window.confirm("Changing report details will make the retained report outdated. Continue and regenerate the report before completing this task?");
+    const accepted = RetrospectiveValuation.confirmReportEdit(state.preparationMethod);
     if (accepted) generatedChangeAcknowledged = true;
     return accepted;
   }
@@ -378,6 +379,7 @@
   }
 
   async function requestReport(mode) {
+    if (!element("processing").hidden) return;
     const issues = validate();
     element("validation-message").hidden = !issues.length;
     element("validation-message").innerHTML = issues.length ? `<strong>Complete these items first</strong><ul>${issues.map((issue) => `<li>${escape(issue)}</li>`).join("")}</ul>` : "";
@@ -389,11 +391,13 @@
     element("processing").hidden = false;
     element("processing-title").textContent = mode === "preview" ? "Rendering report preview" : "Generating Word report";
     element("processing-stage").textContent = "Building the certificate, calculations and photo pages…";
+    const cancel = mode === "preview" ? ReportProcessing.cancellation(element("processing")) : null;
     try {
       await persistDraftNow();
-      const response = await fetch(`/api/progress/${mode}`, { method: "POST", headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(ReportData.requestPayload(payload())) });
+      const response = await fetch(`/api/progress/${mode}`, { method: "POST", signal: cancel?.signal, headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(ReportData.requestPayload(payload())) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "The report could not be generated.");
+      if (cancel?.signal.aborted) return;
       if (mode === "preview") {
         element("preview-frame").src = result.preview;
         element("preview-modal").hidden = false;
@@ -413,9 +417,14 @@
         element("status").textContent = "DOCX generated";
       }
     } catch (error) {
+      if (cancel?.signal.aborted) return;
       window.alert(reportErrorMessage(error, "The report could not be generated. Check your connection and try again."));
       element("status").textContent = "Report generation failed";
-    } finally { element("processing").hidden = true; }
+    } finally {
+      if (cancel?.signal.aborted) element("status").textContent = "Preview cancelled";
+      cancel?.dispose();
+      element("processing").hidden = true;
+    }
   }
 
   function fileToData(file) {
@@ -478,7 +487,7 @@
     if (!canChoosePreparation()) return false;
     const previous = state.preparationMethod;
     if (method === previous) return true;
-    if (currentTask()?.reportGeneratedAt && !window.confirm("Changing preparation method makes the retained report outdated. Continue?")) return false;
+    if (!RetrospectiveValuation.confirmPreparationChange("preparation method", previous, method, currentTask())) return false;
     const controls = element("progress-preparation").querySelectorAll("[data-preparation-method]");
     controls.forEach((control) => { control.disabled = true; });
     state.preparationMethod = method;
@@ -506,6 +515,9 @@
       element("preview-report").disabled = true;
     }
     await restoreDraft();
+    if (state.preparationMethod === "offline" && !Object.hasOwn(state, "uploadType")) {
+      state.uploadType = task?.ownPreparationSource === "template" ? "template" : "retrospective";
+    }
     if (canChoosePreparation()) {
       const panel = RetrospectiveValuation.preparationPanel(task.reportKey, state.preparationMethod, setPreparationMethod);
       panel.id = "progress-preparation";
@@ -513,7 +525,28 @@
       element("progress-preparation").replaceWith(panel);
     }
     if (task && ["progress", "completion"].includes(task.reportGroup)) {
-      const panel = RetrospectiveValuation.offlinePanel(task.reportKey, "retrospective", prepareRetrospectiveUpload);
+      const panel = RetrospectiveValuation.offlinePanel(task.reportKey, state.uploadType, {
+        prepareUpload: prepareRetrospectiveUpload,
+        downloadTemplate: async () => {
+          const { photos, ...templateData } = payload();
+          return fetch("/api/progress/template", {
+            method: "POST",
+            headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify(ReportData.requestPayload(templateData)),
+          });
+        },
+        uploadTypeChanged: async (type) => {
+          const previous = state.uploadType;
+          state.uploadType = type;
+          try {
+            await persistDraftNow();
+          } catch (error) {
+            state.uploadType = previous;
+            throw error;
+          }
+          markDirty();
+        },
+      });
       if (panel) {
         panel.classList.remove("panel");
         element("progress-offline").append(panel);
