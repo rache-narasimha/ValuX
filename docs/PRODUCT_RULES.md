@@ -197,8 +197,10 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - “Payments” opens Completed reports requiring payment tracking.
 - “Reports” opens Closed reports.
 - Recent Activity can be filtered by state. The signed-in header uses compact
-  Payments and Activity shortcuts to the dashboard sections, with SVG icons
-  and accessible names at narrow widths. Assignments remain in sidebar navigation.
+  Payments and Activity shortcuts, with SVG icons and accessible names at narrow
+  widths. Payments opens Income & Payments for the CEO and Completed reports
+  payment tracking for employees. Activity opens Recent Activity. Assignments
+  remain in sidebar navigation.
 - Completed and Closed task rows with a retained report expose a direct
   download icon without requiring the task to be opened. The task detail view
   also exposes the retained report download. Completed uses the latest valid
@@ -242,7 +244,8 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Income & Payments is consolidated into the lower summary, with no duplicate
   institution payment bars, analysis toggle or payment-view control. It defaults
   to all institutions within the shared period; its institution selector narrows
-  the three amounts and collection doughnut, and All institutions resets it.
+  the three amounts and collection doughnut to All Banks, All NBFCs or an
+  individual institution. All institutions resets it.
   Financial views remain CEO-only. The collection doughnut uses its compact
   118px diameter and shares the satin finish of the two analysis doughnuts.
 - The dashboard places institution analysis beside assignment status, and
@@ -268,6 +271,11 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   report group into the task list. Payment received combines Partially Received
   and Received. Outstanding combines Partially Received and Pending. These
   links exclude Cancelled tasks and institutions outside the active directory.
+  Collection slices also open a payment summary with the selected amount first,
+  all three payment amounts, and separate assignment counts by payment status.
+  The summary covers the full institution, period and report selection. The
+  bars apply their payment filters to the table and export. Total Earned
+  shows assignments with an agreed or estimated fee recorded.
 - Institution drill-down retains report-type and task filters and includes a
   route back to the all-institutions view.
 - Father/CEO financial views show earned, received, and outstanding totals for
@@ -280,6 +288,10 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   institution export.
 
 ## 7. Report-form boundary
+
+- Sequential keyboard navigation skips locked fields and values the form can
+  identify as supplied by the app. Editable prefilled fields remain clickable.
+  Manual entries and overrides stay in the normal Tab sequence.
 
 - Report-generation forms contain only the valuation/report fields approved
   for the generated document. Workflow fields, assignee data, application
@@ -720,6 +732,8 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   Notifications show task/customer, event, actor and tenant-local time, with
   links to assignment details, individual read controls and Mark all as read.
   Read state is durable per user; lists are bounded and load more on request.
+  Closing an open panel marks the notifications it showed as read, including
+  additional pages loaded during that opening.
 - Only new events create notifications, in the same transaction as task history.
   Active recipients exclude the actor: assignment/transfer to the new assignee;
   On Hold transitions to CEOs; payment changes, Completed and Closed to CEOs

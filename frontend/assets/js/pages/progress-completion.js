@@ -15,6 +15,7 @@
   let previousReports = [];
   let previewId = null;
   let generatedChangeAcknowledged = false;
+  const reportDefaults = new Set();
 
   const element = (id) => document.getElementById(id);
   const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -85,7 +86,9 @@
     const priorByLabel = new Map((previous?.components || []).map((component) => [component.label, component]));
     const currentByLabel = new Map((preserveValues ? state.components : []).map((component) => [component.label, component]));
     state.components = (summary.components || []).map((baseline, index) => {
-      const existing = currentByLabel.get(baseline.label) || priorByLabel.get(baseline.label) || {};
+      const current = currentByLabel.get(baseline.label);
+      const previous = priorByLabel.get(baseline.label);
+      const existing = current || previous || {};
       return {
         id: baseline.id || `component-${index + 1}`,
         label: baseline.label,
@@ -93,11 +96,14 @@
         completionPercent: existing.completionPercent ?? "",
         completedCost: existing.completedCost ?? "",
         manualCompleted: Boolean(existing.manualCompleted),
+        percentFromPreviousReport: current ? Boolean(current.percentFromPreviousReport) : Boolean(previous),
       };
     });
-    if (!state.details.reportDate) state.details.reportDate = TODAY;
-    if (!state.details.visitDate) state.details.visitDate = TODAY;
-    if (!state.details.place) state.details.place = "Adoni";
+    for (const [key, value] of Object.entries({ reportDate: TODAY, visitDate: TODAY, place: "Adoni" })) {
+      if (state.details[key]) continue;
+      state.details[key] = value;
+      reportDefaults.add(key);
+    }
     render();
     scheduleSave();
   }
@@ -137,8 +143,12 @@
     element("component-rows").innerHTML = state.components.length ? state.components.map((component, index) => {
       const current = calculation(component);
       const completedValue = component.manualCompleted ? component.completedCost : current.calculated;
-      return `<tr><td>${index + 1}</td><td>${escape(component.label)}</td><td>${escape(current.estimated.toFixed(2))}</td><td><input type="number" min="0" max="100" step="any" value="${escape(component.completionPercent)}" data-progress-percent="${index}" aria-label="Completion percentage for ${escape(component.label)}"></td><td><input type="number" min="0" max="${escape(current.estimated)}" step="any" value="${escape(completedValue)}" data-progress-completed="${index}" aria-label="Completed cost for ${escape(component.label)}"></td><td>${escape(current.balance.toFixed(2))}</td><td><button type="button" class="reset-calculation" data-reset-completed="${index}" ${component.manualCompleted ? "" : "hidden"}>Use calculated</button></td></tr>`;
+      return `<tr><td>${index + 1}</td><td>${escape(component.label)}</td><td>${escape(current.estimated.toFixed(2))}</td><td><input type="number" min="0" max="100" step="any" value="${escape(component.completionPercent)}" data-progress-percent="${index}"${component.percentFromPreviousReport && component.completionPercent !== "" ? " data-tab-autofilled" : ""} aria-label="Completion percentage for ${escape(component.label)}"></td><td><input type="number" min="0" max="${escape(current.estimated)}" step="any" value="${escape(completedValue)}" data-progress-completed="${index}"${component.manualCompleted ? "" : " data-tab-autofilled"} aria-label="Completed cost for ${escape(component.label)}"></td><td data-progress-balance>${escape(current.balance.toFixed(2))}</td><td><button type="button" class="reset-calculation" data-reset-completed="${index}" ${component.manualCompleted ? "" : "hidden"}>Use calculated</button></td></tr>`;
     }).join("") : '<tr><td colspan="7">No linked estimation components are available.</td></tr>';
+    renderComponentTotals();
+  }
+
+  function renderComponentTotals() {
     const currentTotals = totals();
     element("estimated-total").textContent = currency(currentTotals.estimated);
     element("completed-total").textContent = currency(currentTotals.completed);
@@ -203,7 +213,11 @@
       "loan-account": [state.bank, "accountNumber"], "limit-sanctioned": [state.bank, "limitSanctioned"], "balance-as-on": [state.bank, "balanceAsOn"],
       "balance-outstanding": [state.bank, "balanceOutstanding"], "margin-percent": [state.bank, "marginPercent"], "bank-page-date": [state.bank, "date"],
     };
-    Object.entries(mapping).forEach(([id, [owner, key]]) => { element(id).value = owner[key] ?? ""; });
+    Object.entries(mapping).forEach(([id, [owner, key]]) => {
+      const field = element(id);
+      field.value = owner[key] ?? "";
+      if (owner === state.details) FormTabOrder.mark(field, reportDefaults.has(key));
+    });
     document.querySelectorAll('input[name="no-deviation"]').forEach((input) => { input.checked = input.value === state.details.noDeviation; });
     element("deviation-wrap").hidden = state.details.noDeviation !== "no";
   }
@@ -269,6 +283,7 @@
       components: state.components,
       bank: state.bank,
       photos: state.photos,
+      autofilledReportFields: [...reportDefaults],
     });
   }
 
@@ -325,6 +340,7 @@
       if (!saved || typeof saved !== "object") return;
       if (!practice && saved.linkedEstimationId !== task?.linkedEstimationId) return;
       Object.assign(state, saved);
+      (saved.autofilledReportFields || []).forEach((key) => reportDefaults.add(key));
       state.details = saved.details || {};
       state.bank = { releases: [], ...(saved.bank || {}) };
       state.photos = Array.isArray(saved.photos) ? saved.photos : [];
@@ -452,6 +468,7 @@
     Object.entries(bindings).forEach(([id, [owner, key]]) => element(id).addEventListener("input", (event) => {
       if (!confirmReportInvalidation()) { event.target.value = owner[key] ?? ""; return; }
       owner[key] = event.target.value;
+      if (owner === state.details) reportDefaults.delete(key);
       if (["materials-at-site", "margin-percent"].includes(id)) { renderComponents(); renderBankCalculations(); }
       reportInputChanged();
     }));
@@ -465,9 +482,17 @@
       if (!confirmReportInvalidation()) { renderComponents(); return; }
       const percentIndex = event.target.dataset.progressPercent;
       const completedIndex = event.target.dataset.progressCompleted;
-      if (percentIndex !== undefined) { const component = state.components[Number(percentIndex)]; component.completionPercent = event.target.value; if (!component.manualCompleted) component.completedCost = calculation(component).calculated; }
+      if (percentIndex !== undefined) { const component = state.components[Number(percentIndex)]; component.completionPercent = event.target.value; component.percentFromPreviousReport = false; if (!component.manualCompleted) component.completedCost = calculation(component).calculated; }
       if (completedIndex !== undefined) { const component = state.components[Number(completedIndex)]; component.completedCost = event.target.value; component.manualCompleted = true; }
-      renderComponents(); renderBankCalculations(); reportInputChanged();
+      const component = state.components[Number(percentIndex ?? completedIndex)];
+      const row = event.target.closest("tr");
+      const current = calculation(component);
+      const completed = row.querySelector("[data-progress-completed]");
+      completed.value = component.manualCompleted ? component.completedCost : current.calculated;
+      FormTabOrder.mark(completed, !component.manualCompleted);
+      row.querySelector("[data-progress-balance]").textContent = current.balance.toFixed(2);
+      row.querySelector("[data-reset-completed]").hidden = !component.manualCompleted;
+      renderComponentTotals(); renderBankCalculations(); reportInputChanged();
     });
     element("component-rows").addEventListener("click", (event) => { const index = event.target.dataset.resetCompleted; if (index === undefined) return; if (!confirmReportInvalidation()) return; const component = state.components[Number(index)]; component.manualCompleted = false; component.completedCost = calculation(component).calculated; renderComponents(); renderBankCalculations(); reportInputChanged(); });
     element("add-release").addEventListener("click", () => { if (!confirmReportInvalidation()) return; state.bank.releases.push({ date: "", amount: "" }); renderReleases(); reportInputChanged(); });
@@ -480,7 +505,7 @@
     element("generate-docx").addEventListener("click", () => requestReport("generate"));
     element("close-preview").addEventListener("click", () => { element("preview-modal").hidden = true; });
     element("preview-modal").addEventListener("click", (event) => { if (event.target === element("preview-modal")) element("preview-modal").hidden = true; });
-    element("discard-draft").addEventListener("click", async () => { if (!window.confirm("Discard this progress/completion draft? The retained report will become outdated and must be previewed and generated again.")) return; try { markDirty(); await ReportData.discard(DRAFT_KEY); state.details = {}; state.bank = { releases: [] }; state.photos = []; loadLinkedEstimate(state.linkedEstimationId); element("status").textContent = "Draft discarded"; renderPhotos(); } catch (error) { element("status").textContent = error.message || "Draft could not be discarded"; } });
+    element("discard-draft").addEventListener("click", async () => { if (!window.confirm("Discard this progress/completion draft? The retained report will become outdated and must be previewed and generated again.")) return; try { markDirty(); await ReportData.discard(DRAFT_KEY); state.details = {}; reportDefaults.clear(); state.bank = { releases: [] }; state.photos = []; loadLinkedEstimate(state.linkedEstimationId); element("status").textContent = "Draft discarded"; renderPhotos(); } catch (error) { element("status").textContent = error.message || "Draft could not be discarded"; } });
   }
 
   async function setPreparationMethod(method) {

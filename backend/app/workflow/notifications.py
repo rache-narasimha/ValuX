@@ -50,6 +50,22 @@ def list_for(session, options):
 
 
 def mark_read(session, payload):
+    identifiers = payload.get("ids")
+    if identifiers is not None:
+        if not isinstance(identifiers, list) or not 1 <= len(identifiers) <= 100:
+            raise AuthError("Select between 1 and 100 notifications to mark as read.")
+        try:
+            identifiers = [uuid.UUID(str(value)) for value in identifiers]
+        except (ValueError, TypeError) as error:
+            raise AuthError("Invalid notification.") from error
+        with connection() as database:
+            database.execute(
+                "UPDATE app.notifications SET read_at = NOW() "
+                "WHERE recipient_user_id = %s AND read_at IS NULL AND id = ANY(%s::uuid[])",
+                (session["user_id"], identifiers),
+            )
+        return
+
     identifier = payload.get("id")
     if identifier is not None:
         try:

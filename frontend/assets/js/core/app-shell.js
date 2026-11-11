@@ -110,7 +110,9 @@
     } else if (path === "/practice" || path.startsWith("/settings/")) {
       context = '<a class="header-context-link" href="/">← Dashboard</a>';
     }
-    return `${context}${shortcut("payment", "Payments", "Payment tracking", "payment-dashboard-card")}${shortcut("activity", "Activity", "Recent activity", "recent-activity-card")}`;
+    const ceo = window.__VALUX_AUTH_CONTEXT__?.user?.role === "father";
+    const payments = shortcut("payment", "Payments", ceo ? "Income &amp; Payments" : "Payment tracking", ceo ? "dashboard-finance" : "payment-dashboard-card");
+    return `${context}${payments}${shortcut("activity", "Activity", "Recent activity", "recent-activity-card")}`;
   }
 
   function sidebarNavigation() {

@@ -161,6 +161,46 @@ html[data-theme="dark"] .app-nav-link.active { background: #513025; color: #ffc4
 .institution-summary-cards article { display: grid; align-content: center; gap: 5px; min-height: 95px; padding: 13px 15px; border-radius: 10px; background: var(--cream); }
 .institution-summary-cards span, .institution-summary-cards small { color: var(--muted); font-size: .68rem; }
 .institution-summary-cards strong { color: var(--ink); font-size: 1.2rem; }
+.payment-drilldown-summary { align-self: center; min-width: 0; }
+#payment-summary-bars { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.payment-summary-bar {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 9.5rem) minmax(3rem, 1fr) minmax(5.5rem, auto);
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink);
+  font-size: .78rem;
+  font-weight: 500;
+  text-align: left;
+}
+button.payment-summary-bar:hover, .payment-summary-bar[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--peach) 11%, var(--surface));
+}
+.payment-summary-bar[aria-pressed="true"] { font-weight: 800; }
+.payment-summary-bar strong { text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.payment-summary-bar .horizontal-track { height: 12px; }
+.payment-summary-bar .horizontal-track i { background: var(--chart-satin-horizontal), var(--chart-color); }
+#payment-status-counts { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 10px 0 0; padding-inline: 10px; }
+#payment-status-counts div { display: flex; align-items: baseline; gap: 7px; }
+#payment-status-counts dt { color: var(--muted); font-size: .72rem; }
+#payment-status-counts dd { margin: 0; color: var(--ink); font-size: .8rem; font-weight: 800; }
+@media (min-width: 1281px) {
+  .is-payment-view .institution-summary-layout { row-gap: 10px; }
+  .is-payment-view .payment-drilldown-summary { display: contents; }
+  .is-payment-view #payment-summary-bars { grid-area: 1 / 1; align-content: space-between; }
+  .is-payment-view .institution-summary-cards { grid-area: 1 / 2; }
+  .is-payment-view .institution-summary-cards article { min-height: 72px; padding-block: 9px; }
+  .is-payment-view #payment-status-counts { grid-area: 2 / 1; margin-top: 0; }
+}
+@media (max-width: 480px) {
+  .payment-summary-bar { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; }
+  .payment-summary-bar .horizontal-track { grid-column: 1 / -1; grid-row: 2; }
+}
 .institution-directory { margin-top: 18px; }
 #institution-directory-list { display: grid; gap: 7px; }
 .institution-directory-row { display: grid; grid-template-columns: 48px minmax(220px, 1.7fr) repeat(4, minmax(90px, .7fr)) 16px; align-items: center; gap: 12px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 9px; color: var(--ink); text-decoration: none; }

@@ -63,6 +63,15 @@ try:
     assert notifications.list_for(employee, {})["unread"] == before
     notifications.mark_read(employee, {"id": target})
     assert notifications.list_for(employee, {})["unread"] == before - 1
+    shown = [item["id"] for item in response["items"][1:3]]
+    assert len(shown) == 2
+    notifications.mark_read(other_employee, {"ids": shown})
+    assert notifications.list_for(employee, {})["unread"] == before - 1
+    notifications.mark_read(employee, {"ids": shown})
+    notifications.mark_read(employee, {"ids": shown})
+    remaining = notifications.list_for(employee, {})
+    assert remaining["unread"] == before - 1 - len(shown)
+    assert all(item["read"] == (item["id"] in {target, *shown}) for item in remaining["items"])
     notifications.mark_read(employee, {"all": True})
     assert notifications.list_for(employee, {})["unread"] == 0
     # A failed transaction must roll back notification and task history together.

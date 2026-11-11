@@ -24,6 +24,7 @@
 
   const $ = (id) => document.getElementById(id);
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
+  const autofilled = (value, system = true) => system && value != null && value !== "" ? " data-tab-autofilled" : "";
   const uid = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   function currentTask() { return ReportData.taskCode && window.TaskStore ? TaskStore.get(ReportData.taskCode) : null; }
@@ -179,7 +180,7 @@
   }
 
   function inputField(id, label, value = "", options = {}) {
-    const attributes = [options.required ? "required" : "", options.min != null ? `min="${options.min}" step="any"` : "", options.max ? `max="${escapeHtml(options.max)}"` : "", options.placeholder ? `placeholder="${escapeHtml(options.placeholder)}"` : ""].filter(Boolean).join(" ");
+    const attributes = [options.required ? "required" : "", autofilled(value, options.autofilled === true), options.min != null ? `min="${options.min}" step="any"` : "", options.max ? `max="${escapeHtml(options.max)}"` : "", options.placeholder ? `placeholder="${escapeHtml(options.placeholder)}"` : ""].filter(Boolean).join(" ");
     const control = options.textarea
       ? `<textarea id="${id}" data-detail="${escapeHtml(options.key || id)}" ${attributes}>${escapeHtml(value)}</textarea>`
       : `<input id="${id}" data-detail="${escapeHtml(options.key || id)}" type="${options.type || "text"}" value="${escapeHtml(value)}" ${attributes}>`;
@@ -190,7 +191,7 @@
     return `<div class="panel" data-key="setup"><h2>Report Setup</h2><section class="subgroup"><h3>Report details</h3><div class="grid">
       ${inputField("estimate-date", "Date of Estimation", state.details.estimateDate, { type: "date", required: true, key: "estimateDate" })}
       ${inputField("place", "Place", state.details.place, { required: true, key: "place" })}
-      ${inputField("applicant-name", "Name of the Applicant", state.details.applicantName, { required: true, key: "applicantName", help: "Enter the applicant name and place, for example: Customer Name, Adoni." })}
+      ${inputField("applicant-name", "Name of the Applicant", state.details.applicantName, { required: true, key: "applicantName", autofilled: state.details.applicantName === currentTask()?.customerName, help: "Enter the applicant name and place, for example: Customer Name, Adoni." })}
       ${inputField("work-description", "Name of the Work", state.details.workDescription, { textarea: true, full: true, required: true, key: "workDescription", help: "Enter the overall proposed work without its address. Put the site address in Address of the Work; the report combines them once." })}
       ${inputField("work-address", "Address of the Work", state.details.workAddress, { textarea: true, full: true, required: true, key: "workAddress" })}
     </div></section><section class="notice"><strong>Next:</strong> choose Preparation Method. Online entry and an optional workbook template use Property Configuration and Component Selection; retrospective uploads need only the report and reviewed component totals.</section></div>`;
@@ -708,8 +709,9 @@
 
   function inputControl(entry, field, data, component, sheet) {
     const value = data.rows[entry.instanceId]?.[field] ?? "";
+    const linked = data.dimensionSetup?.rows?.[entry.instanceId]?.[field];
     const labels = { no: "No.", length: "L", breadth: "B", depth: "D", rate: "Rate", amount: "Amount" };
-    return `<input aria-label="${escapeHtml(`${entry.label} ${labels[field]}`)}" type="number" step="any" inputmode="decimal" value="${escapeHtml(decimalInput(value))}" data-measurement-input="1" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}" data-field="${field}">`;
+    return `<input aria-label="${escapeHtml(`${entry.label} ${labels[field]}`)}" type="number" step="any" inputmode="decimal" value="${escapeHtml(decimalInput(value))}"${autofilled(value, value === linked)} data-measurement-input="1" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}" data-field="${field}">`;
   }
 
   function rowInputFields(calculation) {
@@ -742,12 +744,13 @@
     return amount == null ? null : displayedNumber(amount);
   }
 
-  function quantityControl(entry, value, component, sheet) {
+  function quantityControl(entry, value, data, component, sheet) {
     const derived = ["derived", "derived_expression"].includes(entry.calculation);
     const manual = entry.calculation === "manual_quantity_rate"
       && !["galvalume-roofing", "heavy-foundation"].includes(entry.baseId);
     const field = derived || manual ? "quantity" : "directQuantity";
-    return `<input aria-label="${escapeHtml(`${entry.label} Qty`)}" type="number" step="any" inputmode="decimal" value="${decimalInput(value.quantity)}"${field === "directQuantity" ? ' min="0"' : ""} data-measurement-input="1" data-quantity-input data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}" data-field="${field}">`;
+    const entered = data.rows[entry.instanceId]?.[field];
+    return `<input aria-label="${escapeHtml(`${entry.label} Qty`)}" type="number" step="any" inputmode="decimal" value="${decimalInput(value.quantity)}"${autofilled(value.quantity, numberOrBlank(entered) == null)}${field === "directQuantity" ? ' min="0"' : ""} data-measurement-input="1" data-quantity-input data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}" data-field="${field}">`;
   }
 
   function calculationInfo(entry, data, component, sheet) {
@@ -770,7 +773,7 @@
       : entry.usesItemLabel ? `<span data-custom-item-display>${escapeHtml(entry.label)}</span>` : escapeHtml(entry.label);
     if (entry.calculation === "heading") return `<tr class="worksheet-heading-row"><td></td><td colspan="8">${label}</td><td></td></tr>`;
     const cells = ["no", "length", "breadth", "depth"].map((field) => `<td>${inputs.includes(field) ? inputControl(entry, field, data, component, sheet) : ""}</td>`).join("");
-    const quantityInput = entry.calculation === "lump_sum" ? "" : quantityControl(entry, value, component, sheet);
+    const quantityInput = entry.calculation === "lump_sum" ? "" : quantityControl(entry, value, data, component, sheet);
     const amountInput = entry.calculation === "lump_sum" ? inputControl(entry, "amount", data, component, sheet) : "";
     const quantity = ["derived", "derived_expression"].includes(entry.calculation)
       ? `<span class="derived-quantity-wrap">${quantityInput}${calculationInfo(entry, data, component, sheet)}</span>`
@@ -789,7 +792,7 @@
 
   function editableFinalAmount(value, calculatedValue, attributes, resetAttributes, label, calculatedAttributes) {
     const finalValue = value ?? calculatedValue;
-    return `<label class="final-amount-control"><span>${escapeHtml(label)}</span><input type="number" step="any" inputmode="decimal" value="${decimalInput(finalValue)}" ${attributes}><small>Calculated: ₹ <span ${calculatedAttributes}>${formatNumber(calculatedValue)}</span></small>${value != null ? `<button type="button" class="text-button" ${resetAttributes}>Use calculated</button>` : ""}</label>`;
+    return `<label class="final-amount-control"><span>${escapeHtml(label)}</span><input type="number" step="any" inputmode="decimal" value="${decimalInput(finalValue)}"${autofilled(finalValue, value == null)} ${attributes}><small>Calculated: ₹ <span ${calculatedAttributes}>${formatNumber(calculatedValue)}</span></small>${value != null ? `<button type="button" class="text-button" ${resetAttributes}>Use calculated</button>` : ""}</label>`;
   }
 
   function customItemDetails(item, component, sheet) {
@@ -944,9 +947,12 @@
       return group;
     }).map(({ label, fields }, index) => `<details class="dimension-group"${index === 0 ? " open" : ""}><summary>${escapeHtml(label)}</summary><div class="dimension-fields">${fields.map(({ id, label, value, kind }) => {
       const stored = values[id] ?? value;
-      const displayed = Object.hasOwn(inherited, id) ? inherited[id] : stored;
+      const fromSlab = Object.hasOwn(inherited, id);
+      const displayed = fromSlab ? inherited[id] : stored;
+      const isDefault = !Object.hasOwn(dimensionEdits.get(entry.key) || {}, id)
+        && (values[id] == null || numberOrBlank(values[id]) === numberOrBlank(value));
       const fallback = below && outsideAxes.includes(id) ? ` data-slab-default="${escapeHtml(below[id] ?? "")}"${values.slabLinked?.[id] ? " data-slab-linked" : ""}` : "";
-      return `<div class="field"><label for="dimension-${id}">${escapeHtml(label)}${kind?.startsWith("required") ? ' <span aria-hidden="true">*</span>' : ""}</label><input id="dimension-${id}" data-dimension-field="${id}" type="number" min="0" ${kind === "percent" ? 'max="100"' : ""} step="${kind?.endsWith("count") ? "1" : "any"}" value="${escapeHtml(id === "slabDepth" ? displayed : decimalInput(displayed))}" data-precise-value="${escapeHtml(stored)}"${fallback}${kind?.startsWith("required") ? ' aria-required="true"' : ""}></div>`;
+      return `<div class="field"><label for="dimension-${id}">${escapeHtml(label)}${kind?.startsWith("required") ? ' <span aria-hidden="true">*</span>' : ""}</label><input id="dimension-${id}" data-dimension-field="${id}" type="number" min="0" ${kind === "percent" ? 'max="100"' : ""} step="${kind?.endsWith("count") ? "1" : "any"}" value="${escapeHtml(id === "slabDepth" ? displayed : decimalInput(displayed))}" data-precise-value="${escapeHtml(stored)}"${autofilled(displayed, fromSlab || isDefault)}${fallback}${kind?.startsWith("required") ? ' aria-required="true"' : ""}></div>`;
     }).join("")}</div></details>`).join("");
     const slabNote = below && !ReportData.readOnly
       ? `<p class="hint">Outside dimensions default to the ${escapeHtml(below.label)} roof slab. Edit either dimension to override it, or clear it to use the slab again. Apply the lower floor’s slab dimensions first if they are missing.</p>`
@@ -1790,7 +1796,10 @@
     });
     document.querySelectorAll(`[data-quantity-input]${scope}`).forEach((target) => {
       const result = values[target.dataset.row];
-      if (result && target !== editingInput && !NumericEntry.pending(target)) target.value = decimalInput(result.quantity);
+      if (!result || NumericEntry.pending(target)) return;
+      if (target !== editingInput) target.value = decimalInput(result.quantity);
+      const entered = data.rows[target.dataset.row]?.[target.dataset.field];
+      FormTabOrder.mark(target, numberOrBlank(entered) == null);
     });
     document.querySelectorAll(`[data-item-calculated]${scope}`).forEach((target) => {
       const current = totals.calculations.find(({ item }) => item.itemKey === target.dataset.itemCalculated);
@@ -1798,10 +1807,17 @@
     });
     document.querySelectorAll(`[data-item-final-input]${scope}`).forEach((target) => {
       const current = totals.calculations.find(({ item }) => item.itemKey === target.dataset.item);
-      if (current && current.calculation.overrideAmount == null) target.value = decimalInput(current.calculation.calculatedAmount / typicalMultiplier(sheet));
+      if (!current) return;
+      const calculated = current.calculation.overrideAmount == null;
+      if (calculated) target.value = decimalInput(current.calculation.calculatedAmount / typicalMultiplier(sheet));
+      FormTabOrder.mark(target, calculated);
     });
     document.querySelectorAll(`[data-sheet-calculated]${scope}`).forEach((target) => { target.textContent = formatNumber(totals.calculatedAmount); });
-    document.querySelectorAll(`[data-sheet-final-input]${scope}`).forEach((target) => { if (totals.overrideAmount == null) target.value = decimalInput(totals.calculatedAmount); });
+    document.querySelectorAll(`[data-sheet-final-input]${scope}`).forEach((target) => {
+      const calculated = totals.overrideAmount == null;
+      if (calculated) target.value = decimalInput(totals.calculatedAmount);
+      FormTabOrder.mark(target, calculated);
+    });
   }
 
   function updateItemFinalAmount(input) {
@@ -2021,6 +2037,7 @@
         if (NumericEntry.pending(input)) return;
         const value = input.hasAttribute("data-slab-linked") ? input.dataset.slabDefault : input.dataset.preciseValue;
         input.value = input.dataset.dimensionField === "slabDepth" ? value : decimalInput(value);
+        if (input.hasAttribute("data-slab-linked")) FormTabOrder.mark(input);
       });
     });
     $("dimension-copy-mode")?.addEventListener("change", (event) => {

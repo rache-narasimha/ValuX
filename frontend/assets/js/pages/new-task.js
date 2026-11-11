@@ -174,6 +174,7 @@
     const range = TaskStore.dueDateRange(priority, assignedDate.value);
     dueDate.min = assignedDate.value;
     dueDate.value = range.suggested;
+    FormTabOrder.mark(dueDate);
     document.getElementById("due-date-help").textContent = `${priority} priority: suggested ${range.suggested} (you may choose another calendar date).`;
   }
 
@@ -285,6 +286,7 @@
     try { initialNote.required = Boolean(picker.value()); } catch (_error) { initialNote.required = Boolean(picker.input.value.trim()); }
   });
   assignedDate.value = ValuxTime.today();
+  FormTabOrder.mark(assignedDate);
   refreshDates();
   refreshReportType();
   Object.entries(window.INSTITUTIONS).forEach(([type, institutions]) => {

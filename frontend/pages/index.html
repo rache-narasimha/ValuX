@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="/assets/css/workflow.css" />
     <link rel="stylesheet" href="/assets/css/workflow/dashboard-overview.css" />
     <script src="/assets/js/core/appearance.js"></script>
+    <script src="/assets/js/core/form-tab-order.js"></script>
   </head>
   <body class="workflow-page">
     <header class="app-header">
@@ -87,8 +88,8 @@
               </div>
             </section>
           </article>
-          <article class="work-card finance-overview" id="dashboard-finance" hidden>
-            <div class="analysis-heading"><div class="finance-heading-copy"><h2>Income &amp; Payments</h2><div id="institution-finance-detail" class="finance-selection-caption"></div></div><label class="institution-summary-select" for="finance-institution-select"><span>Institution</span><select id="finance-institution-select"><option value="">All institutions</option></select></label></div>
+          <article class="work-card finance-overview" id="dashboard-finance" tabindex="-1" aria-labelledby="dashboard-finance-heading" hidden>
+            <div class="analysis-heading"><div class="finance-heading-copy"><h2 id="dashboard-finance-heading">Income &amp; Payments</h2><div id="institution-finance-detail" class="finance-selection-caption"></div></div><label class="institution-summary-select" for="finance-institution-select"><span>Institution</span><select id="finance-institution-select"><option value="">All institutions</option></select></label></div>
             <div class="finance-summary-content">
               <div class="finance-strip" aria-label="Selected institution payment summary">
                 <article><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v12c0 4 16 4 16 0V5M4 11c0 4 16 4 16 0"/></svg></span><span>Income earned</span><strong id="income-earned">₹0</strong><small>Agreed / estimated fee</small></article>

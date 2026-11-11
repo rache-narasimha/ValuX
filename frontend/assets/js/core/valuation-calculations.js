@@ -119,6 +119,7 @@
         // Preserve the entered representation in drafts, preview payloads and aliases.
         // Formatting an active edit here would move the caret and alter its fingerprint.
         input.value = node.edited ? String(overrides[node.id]) : node.value === null ? "" : node.format(node.value);
+        global.FormTabOrder?.mark(input, !node.edited);
         input.setCustomValidity(node.edited && !/-?\d[\d,]*(?:\.\d+)?/.test(String(overrides[node.id]))
           ? "Enter a numeric value." : "");
         const wrapper = input.closest(".field");

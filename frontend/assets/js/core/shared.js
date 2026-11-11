@@ -95,6 +95,7 @@
       input.checked = String(value).toLowerCase() === "yes" || value === true;
     } else {
       input.value = value;
+      global.FormTabOrder?.mark(input);
     }
 
     wrapper.append(label, input);

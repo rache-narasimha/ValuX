@@ -114,7 +114,9 @@ const excluded = new Set([
 
 // Dynamic document, land, floor, and media controls.
 function customField(id, label, type = "text", value = "") {
-  return fieldControl({ id, label, type }, { [id]: value });
+  const control = fieldControl({ id, label, type });
+  control.querySelector("input, select, textarea").value = value;
+  return control;
 }
 function calculatedField(id, label) {
   const f = customField(id, label);
@@ -303,12 +305,16 @@ function addSiteMatchControl(block, saved) {
   }
 
   toggle.checked = saved === true && pairs.every(([deed, actual]) => deed.value === actual.value);
-  if (toggle.checked) state.matchedSiteFields[group] = true;
+  if (toggle.checked) {
+    state.matchedSiteFields[group] = true;
+    pairs.forEach(([, actual]) => FormTabOrder.mark(actual));
+  }
   updateMessage(toggle.checked ? "Edit either column to update both." : "");
 
   toggle.addEventListener("change", () => {
     if (!toggle.checked) {
       delete state.matchedSiteFields[group];
+      pairs.flat().forEach((input) => FormTabOrder.mark(input, false));
       updateMessage("");
       saveDraft();
       return;
@@ -324,8 +330,10 @@ function addSiteMatchControl(block, saved) {
       return;
     }
     for (const [deed, actual] of pairs) {
-      const value = deed.value.trim() ? deed.value : actual.value;
-      deed.value = actual.value = value;
+      const [source, target] = deed.value.trim() ? [deed, actual] : [actual, deed];
+      target.value = source.value;
+      FormTabOrder.mark(source, false);
+      FormTabOrder.mark(target);
     }
     state.matchedSiteFields[group] = true;
     updateMessage("Edit either column to update both.");
@@ -333,9 +341,16 @@ function addSiteMatchControl(block, saved) {
     saveDraft();
   });
 
+  function mirror(source, target) {
+    if (!toggle.checked) return;
+    target.value = source.value;
+    FormTabOrder.mark(source, false);
+    FormTabOrder.mark(target);
+  }
+
   for (const [deed, actual] of pairs) {
-    deed.addEventListener("input", () => { if (toggle.checked) actual.value = deed.value; });
-    actual.addEventListener("input", () => { if (toggle.checked) deed.value = actual.value; });
+    deed.addEventListener("input", () => mirror(deed, actual));
+    actual.addEventListener("input", () => mirror(actual, deed));
   }
 }
 function addLandCalculator(panel) {
@@ -673,7 +688,11 @@ function setValues(values) {
     if (!input) return;
     if (input.type === "checkbox")
       input.checked = value === "Yes" || value === true;
-    else input.value = input.type === "date" ? isoDate(value) : value;
+    else {
+      const previous = input.value;
+      input.value = input.type === "date" ? isoDate(value) : value;
+      if (input.value !== previous) FormTabOrder.mark(input, false);
+    }
   });
 }
 let calculations;
@@ -916,6 +935,11 @@ async function init() {
     setValues({ ...initialValues, "institution.type": type });
     applyInstitutionOptions();
     setValues(initialValues);
+    if (!ReportData.readOnly) {
+      Object.entries(linkedTaskValues()).forEach(([id, value]) => {
+        if (initialValues[id] === value) FormTabOrder.mark(byId(id));
+      });
+    }
     renderDocuments(initialValues);
     renderFloors(initialValues);
     if (draft?.values && Object.values(draft.values).some((value) => String(value ?? "").trim()))

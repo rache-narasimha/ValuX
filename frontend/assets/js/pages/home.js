@@ -147,16 +147,22 @@
   function renderFinance(tasks) {
     const entries = InstitutionMetrics.finance(tasks, selectedWorkloadPeriod, selectedWorkloadReference);
     const selector = document.getElementById("finance-institution-select");
-    selector.innerHTML = `<option value="">All institutions</option>${["Bank", "NBFC"].map((type) => `<optgroup label="${type === "Bank" ? "Banks" : "NBFCs"}">${entries.filter((entry) => entry.type === type).map((entry) => `<option value="${WorkflowUI.escape(entry.code)}">${WorkflowUI.escape(entry.code)} · ${WorkflowUI.escape(entry.name)}</option>`).join("")}</optgroup>`).join("")}`;
+    selector.innerHTML = `<option value="">All institutions</option><option value="type:Bank">All Banks</option><option value="type:NBFC">All NBFCs</option>${["Bank", "NBFC"].map((type) => `<optgroup label="${type === "Bank" ? "Banks" : "NBFCs"}">${entries.filter((entry) => entry.type === type).map((entry) => `<option value="${WorkflowUI.escape(entry.code)}">${WorkflowUI.escape(entry.code)} · ${WorkflowUI.escape(entry.name)}</option>`).join("")}</optgroup>`).join("")}`;
     selector.value = selectedFinanceInstitution;
-    const selected = entries.find((entry) => entry.code === selectedFinanceInstitution);
-    const summary = (selected ? [selected] : entries).reduce((total, entry) => ({earned: total.earned + entry.earned, received: total.received + entry.received, outstanding: total.outstanding + entry.outstanding}), {earned: 0, received: 0, outstanding: 0});
+    if (selector.selectedIndex < 0) selector.value = "";
+    selectedFinanceInstitution = selector.value;
+    const institutionType = { "type:Bank": "Bank", "type:NBFC": "NBFC" }[selectedFinanceInstitution];
+    const scopedEntries = entries.filter((entry) => !selectedFinanceInstitution
+      || (institutionType ? entry.type === institutionType : entry.code === selectedFinanceInstitution));
+    const summary = scopedEntries.reduce((total, entry) => ({earned: total.earned + entry.earned, received: total.received + entry.received, outstanding: total.outstanding + entry.outstanding}), {earned: 0, received: 0, outstanding: 0});
     setText("income-earned", WorkflowUI.currency(summary.earned));
-    document.getElementById("institution-finance-detail").innerHTML = `<strong>${WorkflowUI.escape(selected ? selected.code + " · " + selected.name : "All institutions")}</strong><span>${InstitutionMetrics.periodLabel(selectedWorkloadPeriod, selectedWorkloadReference)}</span>`;
-    const financeFilters = { period: selectedWorkloadPeriod, ...(selected && { institution: selected.code }) };
+    document.getElementById("institution-finance-detail").innerHTML = `<strong>${WorkflowUI.escape(selector.selectedOptions[0].textContent)}</strong><span>${InstitutionMetrics.periodLabel(selectedWorkloadPeriod, selectedWorkloadReference)}</span>`;
+    const financeFilters = { period: selectedWorkloadPeriod };
+    if (selectedFinanceInstitution) financeFilters.institution = selectedFinanceInstitution;
+    if (institutionType) financeFilters.institutionScope = "active";
     const paymentSegments = [
-      { id: "income-received", label: "Payment received", value: summary.received, color: "#248c79", payment: TaskStore.PAYMENT_STATUS_PAIRS.received },
-      { id: "income-outstanding", label: "Outstanding", value: summary.outstanding, color: "#c5754f", payment: TaskStore.PAYMENT_STATUS_PAIRS.pending },
+      { id: "income-received", view: "payment-received", label: "Payment received", value: summary.received, color: "#248c79", payment: TaskStore.PAYMENT_STATUS_PAIRS.received },
+      { id: "income-outstanding", view: "payment-outstanding", label: "Outstanding", value: summary.outstanding, color: "#c5754f", payment: TaskStore.PAYMENT_STATUS_PAIRS.pending },
     ].map((entry) => {
       const amount = WorkflowUI.currency(entry.value);
       const href = buildQuery({ ...financeFilters, payment: entry.payment });
@@ -164,10 +170,12 @@
       amountLink.textContent = amount;
       amountLink.href = href;
       amountLink.setAttribute("aria-label", `${entry.label}: ${amount}. View ${entry.payment.split(",").join(" and ")} assignments`);
-      return { ...entry, amount, href };
+      return { ...entry, amount, href: buildQuery({ ...financeFilters, view: entry.view, payment: entry.payment }) };
     });
     document.getElementById("payment-collection-chart").innerHTML = ring(paymentSegments, summary.earned, summary.earned ? `${summary.outstanding ? Math.min(99.9, Math.round(summary.received / summary.earned * 1000) / 10) : 100}%` : "—", summary.earned ? "Collected" : "No fees recorded");
-    const scopedTasks = tasks.filter((task) => task.status !== "Cancelled" && (!selected || task.institutionCode === selected.code) && TaskStore.matchesPeriod(task, selectedWorkloadPeriod, "assignedDate", selectedWorkloadReference));
+    const institutionCodes = new Set(scopedEntries.map((entry) => entry.code));
+    const scopedTasks = tasks.filter((task) => task.status !== "Cancelled" && (!selectedFinanceInstitution || institutionCodes.has(task.institutionCode))
+      && TaskStore.matchesPeriod(task, selectedWorkloadPeriod, "assignedDate", selectedWorkloadReference));
     const notSet = scopedTasks.filter((task) => TaskStore.paymentSummary(task).basis == null).length;
     setText("finance-summary-note", `Current payment position for assignments in this period.${notSet ? ` ${notSet} ${notSet === 1 ? "assignment has" : "assignments have"} no fee recorded.` : ""}`);
   }
@@ -336,7 +344,7 @@
   TaskStore.loadAll().then(() => {
     render();
     const target = location.hash.slice(1);
-    if (target === "payment-dashboard-card" || target === "recent-activity-card") {
+    if (["dashboard-finance", "payment-dashboard-card", "recent-activity-card"].includes(target)) {
       document.getElementById(target).scrollIntoView();
     }
   }).catch((error) => WorkflowUI.fatal(error.message || "Assignments could not be loaded."));

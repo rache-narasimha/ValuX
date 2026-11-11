@@ -10,7 +10,8 @@
     const badge = bell.querySelector(".notification-count");
     const feedback = panel.querySelector(".notification-feedback");
     const readAll = panel.querySelector("[data-notifications-read-all]");
-    let items = [], loading = false, unread = 0;
+    let items = [], loading = null, unread = 0;
+    const shownUnread = new Set();
     const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     function renderBadge() {
       badge.hidden = !unread;
@@ -18,41 +19,78 @@
       bell.setAttribute("aria-label", unread ? `Notifications, ${unread} unread` : "Notifications");
       readAll.disabled = !unread;
     }
+    function rememberShownNotifications() {
+      for (const item of items) {
+        if (!item.read) shownUnread.add(item.id);
+      }
+    }
     function render() {
+      if (!panel.hidden) rememberShownNotifications();
       renderBadge();
       list.innerHTML = items.length ? items.map((item) => {
         const date = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: window.ValuxTime?.timeZone || "Asia/Kolkata", timeZoneName: "short" }).format(new Date(item.createdAt));
         return `<article class="notification-item${item.read ? "" : " unread"}"><a href="/tasks/detail?id=${encodeURIComponent(item.taskCode)}" data-notification-id="${escape(item.id)}"><strong>${escape(item.taskCode)} · ${escape(item.customer)}</strong><span>${escape(item.message)}</span><small>${escape(item.actor)} · ${escape(date)}</small></a><button type="button" class="notification-read" data-read-id="${escape(item.id)}" ${item.read ? "hidden" : ""} title="Mark as read" aria-label="Mark notification as read">✓</button></article>`;
       }).join("") : '<p class="notification-empty">You’re all caught up. New task updates will appear here.</p>';
     }
-    async function load(append = false, badgeOnly = false) {
-      if (loading) return;
-      loading = true;
-      try {
-        const payload = await BusinessApi.get("/api/notifications", { offset: append ? items.length : 0 });
-        unread = payload.unread;
-        feedback.textContent = "";
-        if (badgeOnly) renderBadge();
-        else {
-          items = append ? [...items, ...payload.items.filter((item) => !items.some((existing) => existing.id === item.id))] : payload.items;
-          more.hidden = !payload.hasMore;
-          render();
+    function load(append = false, badgeOnly = false) {
+      if (loading) return loading;
+      loading = (async () => {
+        try {
+          const payload = await BusinessApi.get("/api/notifications", { offset: append ? items.length : 0 });
+          unread = payload.unread;
+          feedback.textContent = "";
+          if (badgeOnly) renderBadge();
+          else {
+            items = append ? [...items, ...payload.items.filter((item) => !items.some((existing) => existing.id === item.id))] : payload.items;
+            more.hidden = !payload.hasMore;
+            render();
+          }
+        } catch (error) {
+          if (error.status === 401) { window.location.assign("/auth"); return; }
+          feedback.textContent = "Notifications are temporarily unavailable. Open this panel to retry.";
         }
-      } catch (error) {
-        if (error.status === 401) { window.location.assign("/auth"); return; }
-        feedback.textContent = "Notifications are temporarily unavailable. Open this panel to retry.";
-      } finally { loading = false; }
+      })().finally(() => { loading = null; });
+      return loading;
     }
     async function mark(id, all = false) {
+      const marked = all ? [...shownUnread] : [id];
       await BusinessApi.post("/api/notifications/read", all ? { all: true } : { id });
+      await loading;
+      marked.forEach((id) => shownUnread.delete(id));
       await load();
     }
+    async function close() {
+      if (panel.hidden) return;
+      panel.hidden = true;
+      bell.setAttribute("aria-expanded", "false");
+      const ids = [...shownUnread];
+      shownUnread.clear();
+      if (!ids.length) return;
+      try {
+        for (let offset = 0; offset < ids.length; offset += 100) {
+          await BusinessApi.post("/api/notifications/read", { ids: ids.slice(offset, offset + 100) });
+        }
+        await loading;
+        const marked = new Set(ids);
+        items = items.map((item) => marked.has(item.id) ? { ...item, read: true } : item);
+        ids.forEach((id) => shownUnread.delete(id));
+        render();
+        await load(false, panel.hidden);
+      } catch (error) {
+        if (error.status === 401) { window.location.assign("/auth"); return; }
+        feedback.textContent = "Read status could not be saved. Open and close the panel to retry.";
+      }
+    }
     bell.addEventListener("click", () => {
-      panel.hidden = !panel.hidden;
-      bell.setAttribute("aria-expanded", String(!panel.hidden));
-      if (!panel.hidden) { document.querySelector(".account-menu")?.removeAttribute("open"); load(); }
+      if (!panel.hidden) { close(); return; }
+      panel.hidden = false;
+      bell.setAttribute("aria-expanded", "true");
+      document.querySelector(".account-menu")?.removeAttribute("open");
+      rememberShownNotifications();
+      // An in-flight badge poll will not populate the panel.
+      if (loading) loading.then(() => { if (!panel.hidden) load(); });
+      else load();
     });
-    const close = () => { panel.hidden = true; bell.setAttribute("aria-expanded", "false"); };
     document.addEventListener("click", (event) => { if (!event.target.closest(".notification-menu")) close(); });
     document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !panel.hidden) { close(); bell.focus(); } });
     panel.addEventListener("click", async (event) => {

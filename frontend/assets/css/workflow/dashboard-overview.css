@@ -396,4 +396,4 @@ html[data-theme="dark"] #dashboard .dashboard-ring-finish { opacity: .8; }
   #dashboard .period-switch { flex-wrap: wrap; flex: 0 1 auto; }
 }
 
-#payment-dashboard-card, #recent-activity-card { scroll-margin-top: 84px; }
+#dashboard-finance, #payment-dashboard-card, #recent-activity-card { scroll-margin-top: 84px; }

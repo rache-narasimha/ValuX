@@ -3,6 +3,7 @@
   "use strict";
 
   const PAGE_SIZE = 10;
+  const FEE_RECORDED = "fee-recorded";
   const list = document.getElementById("task-list");
   const loadMore = document.getElementById("load-more");
   const fields = {
@@ -20,6 +21,7 @@
   let periodReference = ValuxTime.todayDate();
   let directoryMode = false;
   let summaryMode = false;
+  let paymentView = "";
   let activeInstitutionScope = false;
   let analyticsLoadPromise = null;
   let renderSequence = 0;
@@ -42,6 +44,13 @@
 
   // Filter state, query construction, and task-row rendering.
   function populateFilters() {
+    const initial = new URLSearchParams(window.location.search);
+    const view = initial.get("view");
+    directoryMode = view === "institutions";
+    summaryMode = view === "summary";
+    if (WorkflowAccess.currentRole() === "father" && ["payment-received", "payment-outstanding"].includes(view)) {
+      paymentView = view;
+    }
     TaskStore.STATUSES.forEach((item) => fields.status.add(new Option(item, item)));
     fields.assignee.innerHTML = '<option value="">Everyone</option>';
     TaskStore.EMPLOYEES.forEach((employee) => fields.assignee.add(new Option(employee.name, employee.name)));
@@ -59,11 +68,9 @@
       for (const pair of Object.values(TaskStore.PAYMENT_STATUS_PAIRS)) {
         collection.append(new Option(pair.split(",").join(" + "), pair));
       }
+      if (paymentView) collection.append(new Option("Fee recorded", FEE_RECORDED));
       fields.payment.append(collection);
     }
-    const initial = new URLSearchParams(window.location.search);
-    directoryMode = initial.get("view") === "institutions";
-    summaryMode = initial.get("view") === "summary";
     if (initial.get("periodReference")) periodReference = ValuxTime.parseDate(initial.get("periodReference")) || ValuxTime.todayDate();
     fields.group.value = initial.get("group") || "all";
     fields.preparationSource.value = WorkflowAccess.currentRole() === "father" ? initial.get("preparationSource") || "" : "";
@@ -251,15 +258,66 @@
     return { Bank: "All banks", NBFC: "All NBFCs" }[selectedInstitutionType()] || "All banks and NBFCs";
   }
 
+  function renderPaymentBars({ earned, received, outstanding, counts }) {
+    const earnedBar = { label: "Total Earned", amount: earned, color: "var(--blue)", filter: FEE_RECORDED };
+    const receivedBar = { label: "Payment Received", amount: received, color: "#248c79", filter: TaskStore.PAYMENT_STATUS_PAIRS.received };
+    const outstandingBar = { label: "Outstanding", amount: outstanding, color: "#c5754f", filter: TaskStore.PAYMENT_STATUS_PAIRS.pending };
+    const bars = paymentView === "payment-outstanding"
+      ? [outstandingBar, receivedBar, earnedBar]
+      : [receivedBar, outstandingBar, earnedBar];
+    const scale = Math.max(earned, received, outstanding) || 1;
+    const chart = document.getElementById("payment-summary-bars");
+    const focusedFilter = document.activeElement?.dataset.paymentBarFilter;
+    chart.innerHTML = bars.map(({ label, amount, color, filter }) => {
+      const selected = filter === fields.payment.value;
+      return `<li><button type="button" class="payment-summary-bar" data-payment-bar-filter="${filter}" aria-pressed="${selected}">
+        <span>${label}</span><span class="horizontal-track" aria-hidden="true"><i style="--width:${amount / scale * 100}%;--chart-color:${color}"></i></span>
+        <strong>${WorkflowUI.currency(amount)}</strong>
+      </button></li>`;
+    }).join("");
+    if (focusedFilter !== undefined) {
+      Array.from(chart.querySelectorAll("[data-payment-bar-filter]"))
+        .find((button) => button.dataset.paymentBarFilter === focusedFilter)?.focus({ preventScroll: true });
+    }
+    const statuses = ["Received", "Partially Received", "Pending"];
+    for (const status of ["Overdue", "Not Set"]) {
+      if (counts.has(status)) statuses.push(status);
+    }
+    document.getElementById("payment-status-counts").innerHTML = statuses.map((status) =>
+      `<div><dt>${status}</dt><dd>${counts.get(status) || 0}</dd></div>`,
+    ).join("");
+  }
+
+  function paymentScopeTasks(options) {
+    const activeCodes = new Set(InstitutionMetrics.configured().map(({ code }) => code));
+    return TaskStore.query({
+      ...options, institutionScope: "active", periodReference, limit: Number.MAX_SAFE_INTEGER,
+    }).items.filter((task) => task.status !== "Cancelled" && activeCodes.has(task.institutionCode));
+  }
+
+  function queryCachedTasks(limit = visible) {
+    const options = queryOptions(limit);
+    if (options.payment !== FEE_RECORDED) return TaskStore.query(options);
+    const tasks = paymentScopeTasks({ ...options, payment: "" }).filter((task) => TaskStore.paymentSummary(task).basis !== null);
+    return { total: tasks.length, items: tasks.slice(0, limit), hasMore: tasks.length > limit };
+  }
+
   // Institution drill-down and all-institutions directory rendering.
   function renderInstitutionDrilldown() {
     const institution = selectedInstitution();
     const host = document.getElementById("institution-drilldown");
-    host.hidden = !institution && !summaryMode && !selectedInstitutionType();
+    host.hidden = !paymentView && !institution && !summaryMode && !selectedInstitutionType();
     if (host.hidden) return;
-    const tasks = TaskStore.query(queryOptions(Number.MAX_SAFE_INTEGER)).items;
-    const mix = InstitutionMetrics.workflowMix(tasks);
-    const maximum = Math.max(1, ...mix.map((item) => item.count));
+    const { group, institution: institutionCode, institutionType, period } = queryOptions();
+    const tasks = paymentView
+      ? paymentScopeTasks({ group, institution: institutionCode, institutionType, period })
+      : TaskStore.query(queryOptions(Number.MAX_SAFE_INTEGER)).items;
+    const workflowChart = document.getElementById("institution-workflow-mix");
+    const paymentChart = document.getElementById("institution-payment-summary");
+    host.classList.toggle("is-payment-view", Boolean(paymentView));
+    workflowChart.hidden = Boolean(paymentView);
+    paymentChart.hidden = !paymentView;
+    document.getElementById("institution-drilldown-label").textContent = paymentView ? "Payment summary" : "Institution view";
     document.getElementById("institution-drilldown-title").textContent = institution ? `${institution.code} · ${institution.name}` : summaryLabel();
     document.getElementById("institution-monogram").textContent = institution ? institution.code.slice(0, 4) : selectedInstitutionType() === "NBFC" ? "NBFC" : "ALL";
     document.getElementById("institution-monogram").style.setProperty("--institution-color", institution?.color || "#087ea4");
@@ -269,16 +327,27 @@
     document.getElementById("institution-drilldown-subtitle").textContent = fields.period.value
       ? `${tasks.length} assignments · ${InstitutionMetrics.periodLabel(fields.period.value, periodReference)}`
       : `${tasks.length} assignments · all dates`;
-    document.getElementById("institution-workflow-mix").innerHTML = mix.map((item) => {
-      const width = item.count ? Math.max(5, Math.round((item.count / maximum) * 100)) : 0;
-      return `<button type="button" data-workflow-state="${WorkflowUI.escape(item.key)}"${item.count ? "" : " disabled"}>
-        <span>${WorkflowUI.escape(item.label)}</span><i><b style="--width:${width}%;--state-color:${item.color}"></b></i><strong>${item.count}</strong>
-      </button>`;
-    }).join("");
+    if (!paymentView) {
+      const mix = InstitutionMetrics.workflowMix(tasks);
+      const maximum = Math.max(1, ...mix.map((item) => item.count));
+      workflowChart.innerHTML = mix.map((item) => {
+        const width = item.count ? Math.max(5, Math.round((item.count / maximum) * 100)) : 0;
+        return `<button type="button" data-workflow-state="${WorkflowUI.escape(item.key)}"${item.count ? "" : " disabled"}>
+          <span>${WorkflowUI.escape(item.label)}</span><i><b style="--width:${width}%;--state-color:${item.color}"></b></i><strong>${item.count}</strong>
+        </button>`;
+      }).join("");
+    }
     const billable = tasks.filter((task) => task.status !== "Cancelled");
-    const earned = billable.reduce((sum, task) => sum + Number(TaskStore.paymentSummary(task).basis || 0), 0);
-    const received = billable.reduce((sum, task) => sum + Number(task.payment.received || 0), 0);
-    const outstanding = billable.reduce((sum, task) => sum + Number(TaskStore.paymentSummary(task).outstanding || 0), 0);
+    let earned = 0, received = 0, outstanding = 0;
+    const counts = new Map();
+    for (const task of billable) {
+      const payment = TaskStore.paymentSummary(task);
+      earned += Number(payment.basis || 0);
+      received += Number(task.payment.received || 0);
+      outstanding += Number(payment.outstanding || 0);
+      counts.set(payment.status, (counts.get(payment.status) || 0) + 1);
+    }
+    if (paymentView) renderPaymentBars({ earned, received, outstanding, counts });
     const percent = (value) => earned ? `${Math.round((value / earned) * 100)}%` : "0%";
     document.getElementById("institution-total").textContent = tasks.length;
     document.getElementById("institution-earned").textContent = WorkflowUI.currency(earned);
@@ -287,7 +356,7 @@
     document.getElementById("institution-received-percent").textContent = percent(received);
     document.getElementById("institution-outstanding").textContent = WorkflowUI.currency(outstanding);
     document.getElementById("institution-outstanding-percent").textContent = percent(outstanding);
-    document.querySelectorAll("[data-workflow-state]").forEach((button) => button.addEventListener("click", () => {
+    workflowChart.querySelectorAll("[data-workflow-state]").forEach((button) => button.addEventListener("click", () => {
       fields.status.value = button.dataset.workflowState;
       reset();
       document.querySelector(".task-list-card").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -313,7 +382,7 @@
     const institution = selectedInstitution();
     document.getElementById("task-list-title").textContent = institution
       ? `${label} · ${institution.code} tasks`
-      : summaryMode || selectedInstitutionType() ? `${label} · ${summaryLabel()}` : `${label} tasks`;
+      : paymentView || summaryMode || selectedInstitutionType() ? `${label} · ${summaryLabel()}` : `${label} tasks`;
     document.getElementById("task-list-description").textContent = institution
       ? `Showing ${fields.group.value === "all" ? "all report types" : label.toLowerCase()} for ${institution.name}. Change any filter below when required.`
       : `Search and filter ${label.toLowerCase()} assignments.`;
@@ -326,7 +395,8 @@
   // Page render cycle, URL synchronization, and event wiring.
   function updateUrl() {
     const params = new URLSearchParams();
-    if (directoryMode && !selectedInstitution()) params.set("view", "institutions");
+    if (paymentView) params.set("view", paymentView);
+    else if (directoryMode && !selectedInstitution()) params.set("view", "institutions");
     else if (summaryMode || selectedInstitutionType()) params.set("view", "summary");
     if (fields.group.value !== "all") params.set("group", fields.group.value);
     if (activeInstitutionScope) params.set("institutionScope", "active");
@@ -339,7 +409,7 @@
   }
 
   function needsFullAnalytics() {
-    return directoryMode || summaryMode || Boolean(selectedInstitution()) || Boolean(selectedInstitutionType());
+    return Boolean(paymentView) || directoryMode || summaryMode || Boolean(selectedInstitution()) || Boolean(selectedInstitutionType());
   }
 
   async function ensureFullAnalytics() {
@@ -355,7 +425,7 @@
   async function resultForCurrentView() {
     if (needsFullAnalytics()) {
       await ensureFullAnalytics();
-      return TaskStore.query(queryOptions());
+      return queryCachedTasks();
     }
     const items = [];
     let offset = 0;
@@ -407,7 +477,7 @@
   async function allFilteredTasks() {
     if (needsFullAnalytics()) {
       await ensureFullAnalytics();
-      return TaskStore.query(queryOptions(Number.MAX_SAFE_INTEGER)).items;
+      return queryCachedTasks(Number.MAX_SAFE_INTEGER).items;
     }
     const items = [];
     let offset = 0;
@@ -446,12 +516,18 @@
     if (key !== "period") field.addEventListener(key === "search" ? "input" : "change", () => {
       if (key === "institution") {
         summaryMode = true;
-        activeInstitutionScope = false;
+        activeInstitutionScope = Boolean(paymentView && selectedInstitutionType());
       }
       reset();
     });
   });
   document.getElementById("clear-institution").addEventListener("click", () => { window.location.href = "/tasks?view=institutions"; });
+  document.getElementById("payment-summary-bars").addEventListener("click", (event) => {
+    const bar = event.target.closest("[data-payment-bar-filter]");
+    if (!bar || fields.payment.value === bar.dataset.paymentBarFilter) return;
+    fields.payment.value = bar.dataset.paymentBarFilter;
+    reset();
+  });
   loadMore.addEventListener("click", () => { visible += PAGE_SIZE; render(); });
   document.getElementById("export-tasks").addEventListener("click", (event) => exportTasks(event.currentTarget));
   const institutionExport = document.getElementById("export-institutions");

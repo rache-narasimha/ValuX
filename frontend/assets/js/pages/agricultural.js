@@ -209,7 +209,11 @@ function setValues(values) {
     if (!input || input.readOnly) return;
     if (input.type === "checkbox")
       input.checked = String(value).toLowerCase() === "yes" || value === true;
-    else input.value = value ?? "";
+    else {
+      const previous = input.value;
+      input.value = value ?? "";
+      if (input.value !== previous) FormTabOrder.mark(input, false);
+    }
   });
 }
 
@@ -635,6 +639,11 @@ async function init() {
     setValues({ ...initialValues, "institution.type": type });
     applyInstitutionOptions();
     setValues(initialValues);
+    if (!ReportData.readOnly) {
+      Object.entries(linkedTaskValues()).forEach(([id, value]) => {
+        if (initialValues[id] === value) FormTabOrder.mark(byId(id));
+      });
+    }
     renderDocuments(initialValues);
     if (draft?.values && Object.values(draft.values).some((value) => String(value ?? "").trim()))
       byId("status").textContent = "Draft restored";
