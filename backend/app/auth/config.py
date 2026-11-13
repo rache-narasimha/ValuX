@@ -8,7 +8,7 @@ AUTH_ROOT = Path(__file__).resolve().parent
 MIGRATIONS_DIR = AUTH_ROOT / "migrations"
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 MIGRATION_DATABASE_URL = os.environ.get("MIGRATION_DATABASE_URL", "")
-APP_DATABASE_USER = os.environ.get("APP_DATABASE_USER", "valsphere_app")
+APP_DATABASE_USER = os.environ.get("APP_DATABASE_USER", "valux_app")
 APP_DATABASE_PASSWORD = os.environ.get("APP_DATABASE_PASSWORD", "")
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:4180").rstrip("/")
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "false").lower() == "true"

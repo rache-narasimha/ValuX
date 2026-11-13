@@ -69,6 +69,34 @@ def controlled_industrial_state():
     }
 
 
+def assert_component_work_names(generate):
+    state = {
+        "propertyType": "residential",
+        "details": {"applicantName": "Work Name QA", "workDescription": "Proposed residential development", "workAddress": "Adoni"},
+        "components": [
+            {
+                "kind": "residential_building",
+                "name": name,
+                "sheets": [{"key": "ground", "label": "Ground Floor", "level": 1, "formData": {}}],
+            }
+            for name in ("Residential Building / Block 1", "Block 2")
+        ],
+    }
+    for mode in ("completed", "offline"):
+        workbook = workbook_from(generate(state, mode=mode))
+        try:
+            assert workbook.sheetnames == ["Abstract", "Building 1 GF", "Block 2 GF"]
+            assert workbook["Building 1 GF"]["A8"].value == (
+                "Name of the Work : Proposed construction of a residential building comprising Ground Floor at Adoni"
+            )
+            assert workbook["Block 2 GF"]["A8"].value == (
+                "Name of the Work : Proposed construction of a Block 2 comprising Ground Floor at Adoni"
+            )
+            assert row_containing(workbook["Abstract"], "Proposed residential development at Adoni", 1)
+        finally:
+            workbook.close()
+
+
 def assert_controlled_steel(generate):
     result = generate(controlled_industrial_state())
     workbook = workbook_from(result)
@@ -184,7 +212,7 @@ def assert_centre_line_and_abstract(generate):
                 "key": "ground",
                 "label": "Ground Floor",
                 "level": 1,
-                "formData": {"finalAmount": 100000, "rows": {"excavation-centre-1": {"no": 1, "length": 10, "breadth": 1, "depth": 1}}},
+                "formData": {"sheetTotalOverride": 100000, "rows": {"excavation-centre-1": {"no": 1, "length": 10, "breadth": 1, "depth": 1}}},
             }],
         }],
     }
@@ -217,7 +245,7 @@ def assert_compact_typical_and_offline(generate):
                 "label": "Typical GF, FF & SF",
                 "level": 1,
                 "typicalFloorKeys": ["ground", "first", "second"],
-                "formData": {"finalAmount": 300000},
+                "formData": {"sheetTotalOverride": 300000},
             }],
         }],
     }
@@ -499,6 +527,7 @@ def main():
     assert "Name of the Applicant : Controlled QA, QA Location" in identity_text
     assert "QA Address" not in identity_text
     identity_book.close()
+    assert_component_work_names(generate)
     assert_controlled_steel(generate)
     assert_industrial_centre_line_requires_upload(generate)
     assert_custom_rows_and_items(generate)

@@ -5,11 +5,11 @@ services:
       # Local pgAdmin access only; the database is not exposed to the Wi-Fi network.
       - "127.0.0.1:5434:5432"
     environment:
-      POSTGRES_DB: "${POSTGRES_DB:-valsphere}"
-      POSTGRES_USER: "${POSTGRES_USER:-valsphere}"
+      POSTGRES_DB: "${POSTGRES_DB:-valux}"
+      POSTGRES_USER: "${POSTGRES_USER:-valux}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
     volumes:
-      - valsphere-postgres-data:/var/lib/postgresql/data
+      - valux-postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
@@ -30,8 +30,8 @@ services:
     working_dir: /app
     command: ["python", "-m", "backend.app.migrations"]
     environment:
-      MIGRATION_DATABASE_URL: "postgresql://${POSTGRES_USER:-valsphere}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-valsphere}"
-      APP_DATABASE_USER: "${APP_DATABASE_USER:-valsphere_app}"
+      MIGRATION_DATABASE_URL: "postgresql://${POSTGRES_USER:-valux}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-valux}"
+      APP_DATABASE_USER: "${APP_DATABASE_USER:-valux_app}"
       APP_DATABASE_PASSWORD: "${APP_DATABASE_PASSWORD:?Set APP_DATABASE_PASSWORD in .env}"
     volumes:
       - ./backend:/app/backend:ro
@@ -49,7 +49,7 @@ services:
     working_dir: /app
     command: ["python", "-m", "backend.server"]
     environment:
-      DATABASE_URL: "postgresql://${APP_DATABASE_USER:-valsphere_app}:${APP_DATABASE_PASSWORD:?Set APP_DATABASE_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-valsphere}"
+      DATABASE_URL: "postgresql://${APP_DATABASE_USER:-valux_app}:${APP_DATABASE_PASSWORD:?Set APP_DATABASE_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-valux}"
       AUTH_ENCRYPTION_KEY: "${AUTH_ENCRYPTION_KEY:?Set AUTH_ENCRYPTION_KEY in .env}"
       AUTH_RECOVERY_PEPPER: "${AUTH_RECOVERY_PEPPER:?Set AUTH_RECOVERY_PEPPER in .env}"
       APP_BASE_URL: "${APP_BASE_URL:-http://localhost:4180}"
@@ -95,4 +95,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  valsphere-postgres-data:
+  valux-postgres-data:
+    name: "${POSTGRES_DATA_VOLUME:-${COMPOSE_PROJECT_NAME}_valux-postgres-data}"
+    external: ${POSTGRES_DATA_VOLUME_EXTERNAL:-false}

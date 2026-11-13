@@ -104,13 +104,22 @@ try:
     png = base64.b64encode(
         b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
     ).decode("ascii")
+    example_fill = {"active": True, "values": {"site.shape": {"before": "", "inserted": "Rectangular"}}}
     draft = reports.save_draft(
         valuation["id"],
         {
             "reportKey": "valuation-general",
             "schemaVersion": "3",
             "revision": 0,
-            "payload": {"values": {"applicant": "Durable", "calculation.overrides": json.dumps({"valuation.present_market_value": "1234567", "valuation.distress_value": "0"})}, "photos": [{"name": "site.png", "data": f"data:image/png;base64,{png}"}]},
+            "payload": {
+                "values": {
+                    "applicant": "Durable",
+                    "site.shape": "Rectangular",
+                    "calculation.overrides": json.dumps({"valuation.present_market_value": "1234567", "valuation.distress_value": "0"}),
+                },
+                "exampleFill": example_fill,
+                "photos": [{"name": "site.png", "data": f"data:image/png;base64,{png}"}],
+            },
         },
         father,
     )
@@ -120,8 +129,11 @@ try:
     assert photo["storedFileId"] and photo["data"].startswith(f"/api/tasks/{valuation['id']}/draft-files/")
     loaded = reports.get_draft(valuation["id"], father)
     assert loaded and loaded["payload"]["values"]["applicant"] == "Durable"
+    assert loaded["payload"]["exampleFill"] == example_fill
     assert json.loads(loaded["payload"]["values"]["calculation.overrides"])["valuation.distress_value"] == "0"
     before_override = reports.report_input_fingerprint(loaded["payload"], "valuation-general")
+    without_example_tracking = {key: value for key, value in loaded["payload"].items() if key != "exampleFill"}
+    assert before_override == reports.report_input_fingerprint(without_example_tracking, "valuation-general")
     edited_payload = {**loaded["payload"], "values": {**loaded["payload"]["values"], "calculation.overrides": "{}"}}
     assert before_override != reports.report_input_fingerprint(edited_payload, "valuation-general"), "Manual adjustments must participate in preview freshness"
     hydrated = reports.hydrate_media(valuation["id"], loaded["payload"], father)

@@ -12,7 +12,7 @@ cleanup() {
   user_id=$2
   storage_key=$3
   docker compose exec -T valuation-report python -m tests.test_development_persistence cleanup-files >/dev/null 2>&1 || true
-  docker compose exec -T postgres psql -X -U "${POSTGRES_USER:-valsphere}" -d "${POSTGRES_DB:-valsphere}" \
+  docker compose exec -T postgres sh -c 'exec psql -X -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"' psql \
     -v ON_ERROR_STOP=1 -v task_code="$task_code" -v user_id="$user_id" -v storage_key="$storage_key" >/dev/null <<'SQL'
 BEGIN;
 UPDATE app.tasks SET latest_artifact_id = NULL, final_artifact_id = NULL WHERE task_code = :'task_code';

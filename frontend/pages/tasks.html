@@ -16,7 +16,7 @@
       <div class="top-actions"><button class="appearance-toggle" type="button" data-appearance-toggle></button><div data-role-switcher></div><a class="button-link primary compact-button" href="/tasks/new"><span class="app-inline-icon" data-app-icon="add" aria-hidden="true"></span> New assignment</a></div>
     </header>
     <main class="page-frame">
-      <section class="page-intro list-intro"><div><p class="eyebrow">Work queue</p><h1 id="task-list-title">All work tasks</h1><p id="task-list-description">Search and filter assignments, then open a row for full details.</p></div><div class="list-intro-actions"><div class="field task-period-filter"><label id="period-filter-label" for="period-filter"><span class="app-inline-icon" data-app-icon="calendar" aria-hidden="true"></span>Assigned during</label><input id="period-filter" type="hidden" value="" /><div id="task-period-switch" class="period-switch" aria-labelledby="period-filter-label"></div><div id="task-period-picker" class="period-picker" hidden></div></div><a class="quiet-link" href="/">← Dashboard</a></div></section>
+      <section class="page-intro list-intro"><div><p class="eyebrow">Work queue</p><h1 id="task-list-title">All work tasks</h1><p id="task-list-description">Search and filter assignments, then open a row for full details.</p></div><div class="list-intro-actions"><div class="field task-period-filter"><label id="period-filter-label" for="period-filter"><span class="app-inline-icon" data-app-icon="calendar" aria-hidden="true"></span><span id="task-period-label-text">Assigned during</span></label><input id="period-filter" type="hidden" value="" /><div id="task-period-switch" class="period-switch" aria-labelledby="period-filter-label"></div><div id="task-period-picker" class="period-picker" hidden></div></div><a class="quiet-link" id="tasks-dashboard-link" href="/">← Dashboard</a></div></section>
       <form id="task-filters" class="filter-bar filter-bar-extended task-filter-grid">
         <div class="field search-field"><label for="task-search"><span class="app-inline-icon" data-app-icon="search" aria-hidden="true"></span>Search</label><input id="task-search" type="search" placeholder="Task ID, applicant, report, assignee or institution" /></div>
         <div class="field"><label for="group-filter"><span class="app-inline-icon" data-app-icon="practice" aria-hidden="true"></span>Report section</label><select id="group-filter"><option value="all">All work</option><option value="valuation">Valuation</option><option value="revaluation">Re-Valuation</option><option value="estimation">Estimation</option><option value="progress">Progress</option><option value="completion">Completion</option></select></div>
@@ -40,7 +40,20 @@
       </section>
       <section class="work-card institution-directory" id="institution-directory" hidden><div class="section-heading"><div><p class="eyebrow">Institution overview</p><h2><span class="app-inline-icon" data-app-icon="institution" aria-hidden="true"></span>All banks and NBFCs</h2><p>Select an institution to view its assignments, status and payment position.</p></div><button id="export-institutions" class="secondary compact-button export-icon-button" type="button" title="Export to Excel" aria-label="Export to Excel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></button></div><div id="institution-directory-list"></div></section>
       <section class="work-card task-list-card">
-        <div class="section-heading"><div><h2><span class="app-inline-icon" data-app-icon="assignments" aria-hidden="true"></span>Assignments</h2><p id="result-count">0 tasks</p></div><button id="export-tasks" class="secondary compact-button export-icon-button" type="button" title="Export to Excel" aria-label="Export to Excel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></button></div>
+        <div class="section-heading assignment-list-heading">
+          <div><h2><span class="app-inline-icon" data-app-icon="assignments" aria-hidden="true"></span>Assignments</h2><p id="result-count">0 tasks</p></div>
+          <div class="assignment-heading-controls">
+            <label class="valuation-type-control" id="valuation-type-filter-wrap" hidden>
+              <span>Valuation type</span>
+              <select id="valuation-type-filter"><option value="">All</option><option value="general">General</option><option value="agricultural">Agricultural</option></select>
+            </label>
+            <div id="task-date-basis" class="period-switch assignment-date-basis" role="group" aria-label="Filter by date" hidden>
+              <button type="button" data-date-basis="assigned" class="active" aria-pressed="true">Assigned during</button>
+              <button type="button" data-date-basis="status" aria-pressed="false">Completed during</button>
+            </div>
+            <button id="export-tasks" class="secondary compact-button export-icon-button" type="button" title="Export to Excel" aria-label="Export to Excel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></button>
+          </div>
+        </div>
         <div class="task-table-viewport"><div class="task-table-head" aria-hidden="true"><span>Task ID</span><span>Applicant / report type</span><span>Property</span><span>Assigned to</span><span>Due date</span><span>Status</span><span>Payment</span><span>Action</span></div>
         <div id="task-list" class="task-stack"></div></div>
         <button id="load-more" class="load-more" type="button" hidden>Load more tasks</button>

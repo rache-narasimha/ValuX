@@ -89,7 +89,7 @@ The archive is retained for reference but is not copied into the Docker image an
   audit events are durable in PostgreSQL's dedicated `auth` schema. PostgreSQL
   is exposed only on this Mac's loopback interface for pgAdmin access.
 - A one-shot migration service connects as the database owner. The web service
-  connects as `valsphere_app`, which has DML access to auth data but no schema,
+  connects as the configured application role (`valux_app` by default), which has DML access to auth data but no schema,
   migration-ledger, database-creation, or role-management privileges.
 - Every account is operator-provisioned. Full activation requires a permanent
   password, authenticator enrollment, saved recovery codes and a verified

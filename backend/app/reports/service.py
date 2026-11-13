@@ -329,6 +329,27 @@ def preview_input_fingerprint(task_code: str, session: dict[str, Any]) -> str:
     return row["input_fingerprint"]
 
 
+def online_estimation_draft(task_code: str, session: dict[str, Any], preview_token: str | None = None):
+    """Capture the saved workbook inputs and their approved preview in one read."""
+    with connection() as database:
+        task = _task(database, task_code)
+        _require_editable(_actor(session), task)
+        if task["report_key"] != "estimation":
+            raise ReportDataError("This assignment is not an estimation.")
+        draft = database.execute(
+            """SELECT payload, schema_version, input_fingerprint, preview_token, preview_fingerprint
+               FROM app.report_drafts WHERE task_id = %s""", (task["id"],),
+        ).fetchone()
+    if not draft or draft["payload"].get("details", {}).get("workMode") != "online":
+        raise ReportDataError("Save the online estimation before preparing its workbook.", 409, "draft_required")
+    fingerprint = report_input_fingerprint(draft["payload"], "estimation", draft["schema_version"], _current_template_version("estimation"))
+    if draft["input_fingerprint"] != fingerprint or (preview_token is not None and (
+        not preview_token or preview_token != draft["preview_token"] or draft["preview_fingerprint"] != fingerprint
+    )):
+        raise ReportDataError("Preview the current estimation before generating Excel.", 409, "preview_required")
+    return draft["payload"], fingerprint
+
+
 def require_current_preview(task_code: str, session: dict[str, Any], preview_token: str) -> None:
     """Require a preview that still belongs to the task's current saved inputs."""
     actor = _actor(session)
@@ -812,6 +833,7 @@ def register_artifact(
     current: bool = True,
     preview_token: str = "",
     preview_input: str | None = None,
+    estimation_preview: tuple[str, str] | None = None,
     work_note: str = "",
 ) -> dict[str, Any]:
     actor = _actor(session)
@@ -847,7 +869,7 @@ def register_artifact(
             draft_meta = None
             if task["report_key"] in {"valuation-general", "valuation-agricultural", "estimation", "progress", "completion"}:
                 draft_meta = database.execute(
-                    "SELECT schema_version, payload, input_fingerprint, preview_token FROM app.report_drafts WHERE task_id = %s",
+                    "SELECT schema_version, payload, input_fingerprint, preview_token, preview_fingerprint FROM app.report_drafts WHERE task_id = %s",
                     (task["id"],),
                 ).fetchone()
                 if draft_meta:
@@ -859,6 +881,12 @@ def register_artifact(
                     or (previous_preview.isdecimal() and preview_token.isdecimal() and int(previous_preview) > int(preview_token))
                 ):
                     raise ReportDataError("The preview was superseded. Open the latest preview.", 409, "preview_superseded")
+            if estimation_preview is not None:
+                token, fingerprint = estimation_preview
+                if not draft_meta or draft_meta["preview_token"] != token or (
+                    draft_meta["input_fingerprint"] != fingerprint or draft_meta["preview_fingerprint"] != fingerprint
+                ):
+                    raise ReportDataError("The estimation changed while Excel was being prepared. Preview it again.", 409, "preview_required")
             if task["report_key"] == "estimation" and industrial_centre_line((draft_meta or {}).get("payload") or {}):
                 if source == "generated":
                     raise ReportDataError("Prepare the industrial Centre Line estimate offline and upload the completed report.")

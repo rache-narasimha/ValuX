@@ -23,14 +23,14 @@
           <div class="form-grid">
             <div class="field"><label class="required" for="institution-type">Institution type</label><select id="institution-type" required><option value="">Select type</option><option value="Bank">Bank</option><option value="NBFC">NBFC</option></select></div>
             <div class="field"><label class="required" for="institution">Bank / NBFC</label><select id="institution" required disabled><option value="">Select institution</option></select></div>
-            <div class="field full"><label class="required" for="branch">Branch</label><input id="branch" required autocomplete="organization" placeholder="Example: Adoni Branch" /></div>
+            <div class="field full"><label class="required" for="branch">Branch</label><input id="branch" required autocomplete="organization" aria-describedby="branch-help" /><small class="field-help" id="branch-help">Enter the branch location.</small></div>
           </div>
         </section>
         <section class="form-section">
           <div class="form-section-heading"><span>2</span><div><h2>Customer and property</h2><p>This identifies the assignment; it does not alter the report form.</p></div></div>
           <div class="form-grid">
-            <div class="field full"><label class="required" for="customer-name">Applicant / customer name</label><input id="customer-name" required autocomplete="name" placeholder="Enter the full name" /></div>
-            <div class="field full"><label class="required" for="property-brief">Property description</label><textarea id="property-brief" required placeholder="Describe the property and its location"></textarea></div>
+            <div class="field full"><label class="required" for="customer-name">Applicant / customer name</label><input id="customer-name" required autocomplete="name" /></div>
+            <div class="field full"><label class="required" for="property-brief">Property description</label><textarea id="property-brief" required></textarea></div>
           </div>
         </section>
         <section class="form-section">

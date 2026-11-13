@@ -8,6 +8,7 @@ from lxml import etree
 
 from .config import NS, qn
 from .formatting import document_indexes, floor_indexes
+from .narrative import NUMBERING_PART, WordNarrative
 
 def replace_sdt_text(sdt, value):
     content = sdt.find(qn("sdtContent"))
@@ -227,10 +228,13 @@ def relabel_revaluation(root):
                 offset -= len(value)
 
 
-def replace_plain_tokens(template_path, output_path, replacements, document_count=1, *, revaluation=False):
+def replace_plain_tokens(template_path, output_path, replacements, document_count=1, *, revaluation=False, formatted_tokens=None):
     token_map = {f"{{{{{key}}}}}": str(value or "") for key, value in replacements.items()}
     with ZipFile(template_path) as zin, ZipFile(output_path, "w", ZIP_DEFLATED) as zout:
+        narrative = WordNarrative(zin.read(NUMBERING_PART)) if formatted_tokens else None
         for item in zin.infolist():
+            if narrative and item.filename == NUMBERING_PART:
+                continue
             data = zin.read(item.filename)
             if item.filename == "word/document.xml":
                 root = etree.fromstring(data)
@@ -238,7 +242,15 @@ def replace_plain_tokens(template_path, output_path, replacements, document_coun
                 prepare_agricultural_party_rows(root)
                 if revaluation:
                     relabel_revaluation(root)
+                rich_paragraphs = {}
+                if narrative:
+                    for paragraph in root.xpath(".//w:p", namespaces=NS):
+                        token = "".join(paragraph.xpath(".//w:t/text()", namespaces=NS)).strip()
+                        if token in formatted_tokens:
+                            rich_paragraphs[paragraph] = formatted_tokens[token]
                 for text_node in root.xpath(".//w:t", namespaces=NS):
+                    if rich_paragraphs and next(text_node.iterancestors(qn("p")), None) in rich_paragraphs:
+                        continue
                     text = text_node.text or ""
                     for token, value in token_map.items():
                         if token in text:
@@ -248,6 +260,9 @@ def replace_plain_tokens(template_path, output_path, replacements, document_coun
                     else:
                         text_node.text = text
                 for paragraph in root.xpath(".//w:p", namespaces=NS):
+                    if paragraph in rich_paragraphs:
+                        narrative.render(paragraph, rich_paragraphs[paragraph])
+                        continue
                     nodes = paragraph.xpath(".//w:t", namespaces=NS)
                     joined = "".join(node.text or "" for node in nodes)
                     if "{{" not in joined or any(media in joined for media in ("{{PROPERTY_PHOTOGRAPHS}}", "{{ROUTE_MAP}}")):
@@ -262,3 +277,5 @@ def replace_plain_tokens(template_path, output_path, replacements, document_coun
                             node.text = ""
                 data = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone="yes")
             zout.writestr(item, data)
+        if narrative:
+            zout.writestr(NUMBERING_PART, narrative.to_xml())

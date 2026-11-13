@@ -1,12 +1,57 @@
 """Read the final abstract/component costs from a completed estimation workbook."""
 
 from io import BytesIO
+from pathlib import Path
 import re
+import subprocess
+from tempfile import TemporaryDirectory
 from typing import Any
 
 from openpyxl import load_workbook
 
-from .generator import COMMON_EXTERNAL_WORKS, expected_estimation_sheet_names
+from .generator import COMMON_EXTERNAL_WORKS, expected_estimation_sheet_names, _money
+
+
+class WorkbookTotalsMismatch(ValueError):
+    """The generated spreadsheet differs from the estimate calculated on the server."""
+
+
+def verify_generated_estimation(generated, soffice):
+    """Independently recalculate the exported cells without rewriting the download."""
+    with TemporaryDirectory(prefix="valux-estimation-check-") as temporary:
+        root = Path(temporary)
+        source = generated.save(root / "source.xlsx")
+        output = root / "recalculated"
+        output.mkdir()
+        subprocess.run(
+            [str(soffice), f"-env:UserInstallation={(root / 'profile').as_uri()}",
+             "--headless", "--convert-to", "xlsx", "--outdir", str(output), str(source)],
+            check=True, capture_output=True, timeout=90,
+        )
+        workbook = load_workbook(output / source.name, read_only=True, data_only=True)
+        try:
+            # Load each sheet once. A read-only worksheet would otherwise scan
+            # from the start on every cell lookup.
+            sheet_values = {}
+            for sheet, cell, expected in generated.checks:
+                if sheet not in sheet_values:
+                    sheet_values[sheet] = [row[0] for row in workbook[sheet].iter_rows(min_col=12, max_col=12, values_only=True)]
+                row = int(cell[1:]) - 1
+                actual = sheet_values[sheet][row] if row < len(sheet_values[sheet]) else None
+                # A detail sheet with no priced rows displays a blank calculated cost.
+                if actual is None and expected == 0:
+                    actual = 0
+                try:
+                    matches = _money(actual, signed=True) == expected
+                except ValueError:
+                    matches = False
+                if not matches:
+                    raise WorkbookTotalsMismatch(
+                        f"The Excel total for {sheet} ({cell}) differs from the server calculation. "
+                        "The draft was preserved. Review the measurements and generate a fresh preview."
+                    )
+        finally:
+            workbook.close()
 
 
 def _text(value: Any) -> str:

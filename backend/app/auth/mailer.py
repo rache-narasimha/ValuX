@@ -1,6 +1,7 @@
 """Email delivery for verification and password recovery."""
 
 import smtplib
+import ssl
 from email.message import EmailMessage
 
 from .config import (
@@ -22,7 +23,7 @@ def send_email(recipient: str, subject: str, body: str) -> None:
     message.set_content(body)
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as smtp:
         if SMTP_USE_TLS:
-            smtp.starttls()
+            smtp.starttls(context=ssl.create_default_context())
         if SMTP_USERNAME:
             smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
         smtp.send_message(message)

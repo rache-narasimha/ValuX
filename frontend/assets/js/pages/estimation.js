@@ -500,7 +500,7 @@
     const outdated = Boolean(task?.reportFresh === false || retained && !finalReport);
     const ready = Boolean(finalReport && !outdated);
     const fileName = finalReport?.fileName || retained?.filename || "";
-    const previewReady = Boolean(ReportData.preview()?.id);
+    const previewReady = Boolean(ReportData.preview()?.totalsReviewed);
     const retainedDownload = ready && finalReport.url
       ? `<a class="button-link secondary report-file-download" href="${escapeHtml(finalReport.url)}${finalReport.url.includes("?") ? "&" : "?"}download=1" download title="Download Excel report" aria-label="Download Excel report"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4h14v-4"/></svg></a>` : "";
     return `<section class="output-grid"><div class="output-card ${ready ? "is-complete" : "is-pending"}"><div class="report-output-record"><span class="report-output-icon" aria-hidden="true">${ready ? "✓" : outdated ? "!" : "↓"}</span><div class="report-output-copy"><h3>${ready ? "Excel report ready" : outdated ? "Report outdated—generate again" : "Prepare Excel report"}</h3>${fileName ? `<p class="report-output-filename" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</p>` : ""}<p>${ready ? task?.status === "In Progress" ? "Saved to this report. Mark the task Completed when your review is finished." : "Generated from the current workbook inputs." : "Preview the current workbook, then generate a fresh Excel report."}</p></div><div class="output-actions"><button type="button" class="primary" id="generate-from-review" ${previewReady ? "" : "disabled"}>${ready ? "Generate again" : "Generate Excel"}</button>${retainedDownload}</div></div></div></section>`;
@@ -653,7 +653,10 @@
       if (factors[entry.calculation]) values[entry.instanceId].quantity = completeProduct(factors[entry.calculation]);
       if (entry.calculation === "count_rate") values[entry.instanceId].quantity = numberOrBlank(input.no);
       if (entry.calculation === "manual_quantity_rate") values[entry.instanceId].quantity = numberOrBlank(input.quantity);
-      if (entry.calculation === "lump_sum") values[entry.instanceId].amount = numberOrBlank(input.amount);
+      if (entry.calculation === "lump_sum") {
+        const entered = numberOrBlank(input.amount);
+        values[entry.instanceId].amount = entered == null || !roundPricing ? entered : displayedNumber(entered);
+      }
     });
 
     // Resolve derived rows after their RCC source rows. An entered quantity on
@@ -699,12 +702,14 @@
     const calculations = prepared.map(({ item, rows: itemRows }) => {
       const calculatedAmount = itemRows.reduce((total, entry) => total + (values[entry.instanceId].amount || 0), 0);
       const perFloorOverride = numberOrBlank(data.itemOverrides[item.itemKey]);
-      const overrideAmount = perFloorOverride == null ? null : perFloorOverride * multiplier;
+      const overrideAmount = perFloorOverride == null ? null : (roundPricing ? displayedNumber(perFloorOverride) : perFloorOverride) * multiplier;
       return { item, calculation: { rows: itemRows, values, calculatedAmount, overrideAmount, perFloorOverride, amount: overrideAmount ?? calculatedAmount } };
     });
     const calculatedAmount = calculations.reduce((sum, entry) => sum + entry.calculation.amount, 0);
-    const overrideAmount = numberOrBlank(data.sheetTotalOverride);
-    return { items, calculations, calculatedAmount, overrideAmount, amount: overrideAmount ?? calculatedAmount };
+    const entered = numberOrBlank(data.sheetTotalOverride);
+    const overrideAmount = entered == null || !roundPricing ? entered : displayedNumber(entered);
+    const amount = overrideAmount ?? (roundPricing ? displayedNumber(calculatedAmount) : calculatedAmount);
+    return { items, calculations, calculatedAmount, overrideAmount, amount };
   }
 
   function inputControl(entry, field, data, component, sheet) {
@@ -1304,7 +1309,12 @@
   }
 
   function customAbstractTotal(key) {
-    return customAbstractEntries(key).reduce((sum, item) => sum + (numberOrBlank(item.amount) || 0), 0);
+    return customAbstractEntries(key).reduce((sum, item) => sum + abstractAmount(item.amount), 0);
+  }
+
+  function abstractAmount(value) {
+    const number = numberOrBlank(value) ?? 0;
+    return ReportData.readOnly && state.details.pricingBasis !== "displayed" ? number : displayedNumber(number);
   }
 
   function customAbstractRows(entries, offset, type) {
@@ -1319,7 +1329,7 @@
     const customCommonWorks = customAbstractEntries("customCommonExternalWorks");
     const calculatedComponentTotal = componentRows.reduce((sum, row) => sum + (row.totals?.amount || 0), 0);
     const componentTotal = calculatedComponentTotal + customAbstractTotal("customComponentEstimates");
-    const commonTotal = COMMON_EXTERNAL_WORKS.reduce((sum, label) => sum + (numberOrBlank(commonWorks[label]) || 0), 0) + customAbstractTotal("customCommonExternalWorks");
+    const commonTotal = COMMON_EXTERNAL_WORKS.reduce((sum, label) => sum + abstractAmount(commonWorks[label]), 0) + customAbstractTotal("customCommonExternalWorks");
     const compact = !requiresSeparateAbstract();
     const commonWorksSection = abstractIncludesCommonWorks() ? `<section class="abstract-section"><div class="abstract-section-heading"><div><h3>Common External Works and Project Charges</h3><p class="hint">These values are entered directly by the valuer.</p></div><button type="button" class="text-button" data-action="add-abstract-custom" data-abstract-custom-type="common">Add custom field</button></div><div class="abstract-table-wrap"><table class="abstract-table abstract-edit-table"><thead><tr><th>S.No.</th><th>Description</th><th>Amount (Rs.)</th><th aria-label="Remove custom field"></th></tr></thead><tbody>${COMMON_EXTERNAL_WORKS.map((label, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(label)}</td><td><input type="number" step="any" inputmode="decimal" value="${escapeHtml(commonWorks[label] ?? "")}" data-common-work="${escapeHtml(label)}"></td><td></td></tr>`).join("")}${customAbstractRows(customCommonWorks, COMMON_EXTERNAL_WORKS.length, "common")}</tbody><tfoot><tr><th colspan="2">Total common works and charges</th><th colspan="2">₹ <span data-common-works-total>${formatNumber(commonTotal)}</span></th></tr><tr class="abstract-grand-total"><th colspan="2">Total estimated project cost</th><th colspan="2">₹ <span data-abstract-total>${formatNumber(componentTotal + commonTotal)}</span></th></tr></tfoot></table></div></section>` : `<section class="abstract-section"><div class="abstract-table-wrap"><table class="abstract-table"><tfoot><tr class="abstract-grand-total"><th colspan="2">Total estimated project cost</th><th colspan="2">₹ <span data-abstract-total>${formatNumber(componentTotal)}</span></th></tr></tfoot></table></div></section>`;
     return `<div class="panel" data-key="abstract"><h2>${compact ? "Compact Abstract" : "Abstract"}</h2><p class="hint">This is the final online-form section. Component values remain linked to their source sheets. Editing a component amount here changes the same final sheet total after confirmation.</p><section class="abstract-section"><div class="abstract-section-heading"><h3>Component estimates</h3><button type="button" class="text-button" data-action="add-abstract-custom" data-abstract-custom-type="component">Add custom field</button></div><div class="abstract-table-wrap"><table class="abstract-table abstract-edit-table"><thead><tr><th>S.No.</th><th>Component / Work</th><th>Calculated amount (Rs.)</th><th>Final amount (Rs.)</th><th aria-label="Remove custom field"></th></tr></thead><tbody>${componentRows.length ? componentRows.map(({ entry, totals }, index) => {
@@ -1466,7 +1476,7 @@
 
   function updateOutputControls() {
     const enabled = workbookIssues().length === 0;
-    const currentPreview = Boolean(ReportData.preview()?.id);
+    const currentPreview = Boolean(ReportData.preview()?.totalsReviewed);
     $("generate-xlsx").disabled = !enabled || state.details.workMode !== "online" || !currentPreview;
     $("download-offline").disabled = !enabled || state.details.workMode !== "offline";
     const online = state.details.workMode === "online" && !industrialCentreLine();
@@ -1482,69 +1492,25 @@
       : "The workbook could not be prepared. Check your connection and try again.";
   }
 
-  function workbookState(mode) {
-    const snapshot = JSON.parse(JSON.stringify(state));
-    if (mode !== "completed") return snapshot;
-    snapshot.components.forEach((component) => {
-      const liveComponent = state.components.find((entry) => entry.id === component.id);
-      if (!liveComponent) return;
-      if (component.sheets?.length) {
-        component.sheets.forEach((sheet) => {
-          const liveSheet = (liveComponent.sheets || []).find((entry) => entry.id === sheet.id);
-          if (!liveSheet) return;
-          sheet.formData = sheet.formData || {};
-          const totals = componentSheetTotals({ component: liveComponent, sheet: liveSheet });
-          if (totals) sheet.formData.finalAmount = totals.amount;
-        });
-      } else {
-        component.formData = component.formData || {};
-        const totals = componentSheetTotals({ component: liveComponent, sheet: null });
-        if (totals) component.formData.finalAmount = totals.amount;
-      }
-    });
-    return snapshot;
-  }
-
-  function estimationLinkSummary(extracted = null) {
-    const worksheetComponents = componentMeasurementEntries().map((entry, index) => ({
+  function browserEstimateTotals() {
+    const worksheetComponents = componentMeasurementEntries().map((entry) => ({
       id: entry.key,
-      legacyLabel: entry.sheet ? `${entry.component.name} - ${entry.sheet.label}` : entry.component.name,
       label: entry.label,
       estimatedCost: componentSheetTotals(entry)?.amount || 0,
-      plinthArea: measurementData(entry.component, entry.sheet).plinthArea ?? null,
-      source: "component",
     }));
     const customComponents = customAbstractEntries("customComponentEstimates")
       .filter((entry) => String(entry.description || "").trim() || numberOrBlank(entry.amount) !== null)
-      .map((entry) => ({ id: entry.id, label: String(entry.description || "Custom component").trim(), estimatedCost: numberOrBlank(entry.amount) || 0, source: "component" }));
+      .map((entry) => ({ id: entry.id, estimatedCost: abstractAmount(entry.amount) }));
     const commonWorks = abstractIncludesCommonWorks()
-      ? COMMON_EXTERNAL_WORKS.map((label, index) => ({ id: `common-${index + 1}`, label, estimatedCost: numberOrBlank(state.details.commonExternalWorks?.[label]) || 0, source: "common" }))
-        .filter((entry) => entry.estimatedCost !== 0)
+      ? COMMON_EXTERNAL_WORKS.flatMap((label, index) => !abstractAmount(state.details.commonExternalWorks?.[label]) ? []
+        : [{ id: `common-${index + 1}`, estimatedCost: abstractAmount(state.details.commonExternalWorks[label]) }])
       : [];
     const customCommon = abstractIncludesCommonWorks()
       ? customAbstractEntries("customCommonExternalWorks")
         .filter((entry) => String(entry.description || "").trim() || numberOrBlank(entry.amount) !== null)
-        .map((entry) => ({ id: entry.id, label: String(entry.description || "Custom external work").trim(), estimatedCost: numberOrBlank(entry.amount) || 0, source: "common" }))
+        .map((entry) => ({ id: entry.id, estimatedCost: abstractAmount(entry.amount) }))
       : [];
-    const components = Array.isArray(extracted?.components) && extracted.components.length
-      ? extracted.components.map((entry, index) => ({ id: entry.id || `workbook-${index + 1}`, label: entry.label, estimatedCost: Number(entry.estimatedCost) || 0, source: entry.source || "workbook" }))
-      : [...worksheetComponents, ...customComponents, ...commonWorks, ...customCommon];
-    return {
-      version: 1,
-      propertyType: state.propertyType,
-      propertyTypeLabel: propertyProfile()?.label || state.propertyType,
-      construction: state.construction,
-      subtype: state.subtype,
-      estimateDate: state.details.estimateDate || "",
-      identityVersion: 2,
-      applicantName: state.details.applicantName || "",
-      applicantAddress: state.details.applicantAddress || "",
-      workAddress: state.details.workAddress || "",
-      projectLocation: state.details.workAddress || "",
-      workDescription: state.details.workDescription || "",
-      components,
-      totalEstimatedCost: extracted?.totalEstimatedCost ?? components.reduce((sum, entry) => sum + (Number(entry.estimatedCost) || 0), 0),
-    };
+    return [...worksheetComponents, ...customComponents, ...commonWorks, ...customCommon];
   }
 
   async function downloadWorkbook(mode) {
@@ -1563,7 +1529,7 @@
       window.alert(`Complete these items before preparing a workbook:\n\n${issues.map((issue) => `• ${issue}`).join("\n")}`);
       return;
     }
-    if (mode === "completed" && !ReportData.preview()?.id) {
+    if (mode === "completed" && !ReportData.preview()?.totalsReviewed) {
       window.alert("Preview the current workbook before generating the completed Excel report.");
       return;
     }
@@ -1577,10 +1543,11 @@
         const response = await fetch("/api/estimation/workbook", {
           method: "POST",
           headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }),
-          body: JSON.stringify(ReportData.requestPayload({ state: workbookState(mode), mode, summary: estimationLinkSummary() })),
+          body: JSON.stringify(ReportData.requestPayload({ state, mode, preview_id: ReportData.preview()?.id })),
         });
         if (!response.ok) {
           const message = await response.json().catch(() => ({}));
+          if (message.code === "preview_required" || message.code === "estimation_workbook_mismatch") ReportData.setPreview(null);
           throw new Error(message.error || "Workbook preparation failed.");
         }
         const fileName = (response.headers.get("content-disposition")?.match(/filename="?([^";]+)"?/i)?.[1]) || "Estimation_Report.xlsx";
@@ -1600,7 +1567,7 @@
           if (registered && ReportData.taskCode) await TaskStore.refresh(ReportData.taskCode);
           state.details.finalReport = { source: "Generated Excel", fileName, generatedAt, url: reportUrl };
           generatedChangeAcknowledged = false;
-          window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: "xlsx", download: reportUrl, filename: fileName, source: "Generated Excel", estimationSummary: estimationLinkSummary(), registered } }));
+          window.dispatchEvent(new CustomEvent("sln:report-generated", { detail: { format: "xlsx", download: reportUrl, filename: fileName, source: "Generated Excel", registered } }));
         }
         scheduleSave({ reportDirty: false });
         $("status").textContent = mode === "offline" ? "Offline workbook downloaded" : "Completed Excel downloaded";
@@ -1611,6 +1578,7 @@
       $("status").textContent = "Workbook preparation failed";
     } finally {
       updateOutputControls();
+      if ($("generate-from-review")) $("generate-from-review").disabled = !ReportData.preview()?.totalsReviewed;
     }
   }
 
@@ -1625,38 +1593,52 @@
     });
   }
 
+  function showServerTotals(summary, browserTotals) {
+    const local = new Map(browserTotals.map((item) => [item.id, item.estimatedCost]));
+    const changed = local.size !== summary.components.length
+      || summary.components.some((item) => local.get(item.id) !== item.estimatedCost);
+    $("estimation-server-totals").innerHTML = `${changed
+      ? '<p class="notice">The server calculation differs from the form. Review the corrected amounts below before generating Excel.</p>'
+      : ""}<table class="review-table"><thead><tr><th>Component or work</th><th>Server amount (Rs.)</th></tr></thead><tbody>${summary.components.map((item) =>
+      `<tr><td>${escapeHtml(item.label)}</td><td>₹ ${formatNumber(item.estimatedCost)}</td></tr>`).join("")}</tbody><tfoot><tr><th>Total estimated project cost</th><th>₹ ${formatNumber(summary.totalEstimatedCost)}</th></tr></tfoot></table>`;
+  }
+
   async function showReview() {
     if (EstimationProcessing.isBusy()) return;
     const issues = workbookIssues();
     const previewMode = state.details.workMode === "offline" ? "offline" : "completed";
     const sheets = allWorksheetNames();
     const worksheets = sheets.length && requiresSeparateAbstract() ? ["Abstract", ...sheets] : sheets;
-    const componentTotals = componentMeasurementEntries().map((entry) => ({ label: entry.label, total: componentSheetTotals(entry)?.amount || 0 }));
     const previewDescription = previewMode === "offline"
       ? "Previewing the configured blank workbook that will be downloaded for completion in Excel."
       : "Previewing the completed workbook generated from the current online entries.";
-    $("review-content").innerHTML = `${issues.length ? `<div class="notice"><strong>${issues.length} item${issues.length === 1 ? "" : "s"} need attention</strong><ul>${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul></div>` : `<div class="notice"><strong>${escapeHtml(previewDescription)}</strong></div>`}<div class="review-grid"><div class="review-stat"><small>Draft scope</small><strong>${escapeHtml(draftScope)}</strong></div><div class="review-stat"><small>Property</small><strong>${escapeHtml(propertyProfile()?.label || "—")}</strong></div><div class="review-stat"><small>Worksheets</small><strong>${worksheets.length}</strong></div><div class="review-stat"><small>Abstract</small><strong>${worksheets.length ? (requiresSeparateAbstract() ? "Separate" : "Compact") : "—"}</strong></div></div>${worksheets.length ? `<p><strong>Workbook order:</strong> ${worksheets.map(escapeHtml).join(" → ")}</p><table class="review-table"><thead><tr><th>Component sheet</th><th>Final amount (Rs.)</th></tr></thead><tbody>${componentTotals.map((entry) => `<tr><td>${escapeHtml(entry.label)}</td><td>₹ ${formatNumber(entry.total)}</td></tr>`).join("")}</tbody></table>` : ""}<div id="workbook-preview" class="workbook-preview"><p class="hint">${issues.length ? "Resolve the listed items to render the workbook preview." : "Rendering the workbook…"}</p></div>`;
+    $("review-content").innerHTML = `${issues.length ? `<div class="notice"><strong>${issues.length} item${issues.length === 1 ? "" : "s"} need attention</strong><ul>${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul></div>` : `<div class="notice"><strong>${escapeHtml(previewDescription)}</strong></div>`}<div class="review-grid"><div class="review-stat"><small>Draft scope</small><strong>${escapeHtml(draftScope)}</strong></div><div class="review-stat"><small>Property</small><strong>${escapeHtml(propertyProfile()?.label || "—")}</strong></div><div class="review-stat"><small>Worksheets</small><strong>${worksheets.length}</strong></div><div class="review-stat"><small>Abstract</small><strong>${worksheets.length ? (requiresSeparateAbstract() ? "Separate" : "Compact") : "—"}</strong></div></div>${worksheets.length ? `<p><strong>Workbook order:</strong> ${worksheets.map(escapeHtml).join(" → ")}</p><div id="estimation-server-totals"></div>` : ""}<div id="workbook-preview" class="workbook-preview"><p class="hint">${issues.length ? "Resolve the listed items to render the workbook preview." : "Rendering the workbook…"}</p></div>`;
     $("review-modal").hidden = false;
     if (issues.length) return;
     const restoredPreview = ReportData.preview();
-    if (restoredPreview?.url) {
-      $("workbook-preview").innerHTML = `<iframe class="workbook-preview-frame" src="${escapeHtml(restoredPreview.url)}" title="Rendered estimation workbook preview"></iframe>`;
-      $("status").textContent = "Latest workbook preview restored";
-      updateOutputControls();
-      if ($("generate-from-review")) $("generate-from-review").disabled = false;
-      return;
-    }
     $("status").textContent = "Rendering workbook preview…";
     try {
       await EstimationProcessing.run("Preparing workbook preview", "Saving report details and rendering the workbook…", async (_stage, signal) => {
+        const browserTotals = previewMode === "completed" ? browserEstimateTotals() : [];
         await persistDraftNow();
-        const response = await fetch("/api/estimation/preview", { method: "POST", signal, headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(ReportData.requestPayload({ state: workbookState(previewMode), mode: previewMode })) });
+        const restore = previewMode === "completed" && restoredPreview?.url;
+        const response = await fetch(restore ? "/api/estimation/totals" : "/api/estimation/preview", {
+          method: "POST",
+          signal,
+          headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify(ReportData.requestPayload({ state, mode: previewMode, preview_id: restoredPreview?.id })),
+        });
         const preview = await response.json();
         signal.throwIfAborted();
-        if (!response.ok) throw new Error(preview.error || "Workbook preview failed.");
-        $("workbook-preview").innerHTML = `<iframe class="workbook-preview-frame" src="${escapeHtml(preview.preview)}" title="Rendered estimation workbook preview"></iframe>`;
-        ReportData.setPreview({ id: preview.preview_id, url: preview.preview });
-        $("status").textContent = "Workbook preview ready";
+        if (!response.ok) {
+          if (preview.code === "preview_required") ReportData.setPreview(null);
+          throw new Error(preview.error || "Workbook preview failed.");
+        }
+        if (preview.summary) showServerTotals(preview.summary, browserTotals);
+        const url = restore ? restoredPreview.url : preview.preview;
+        $("workbook-preview").innerHTML = `<iframe class="workbook-preview-frame" src="${escapeHtml(url)}" title="Rendered estimation workbook preview"></iframe>`;
+        ReportData.setPreview({ id: restore ? restoredPreview.id : preview.preview_id, url, totalsReviewed: true });
+        $("status").textContent = restore ? "Latest workbook preview restored" : "Workbook preview ready";
         updateOutputControls();
         if ($("generate-from-review")) $("generate-from-review").disabled = false;
       }, "Cancel preview");
@@ -1907,7 +1889,7 @@
   }
 
   function refreshAbstractTotals() {
-    const commonTotal = abstractIncludesCommonWorks() ? COMMON_EXTERNAL_WORKS.reduce((sum, label) => sum + (numberOrBlank(state.details.commonExternalWorks?.[label]) || 0), 0) + customAbstractTotal("customCommonExternalWorks") : 0;
+    const commonTotal = abstractIncludesCommonWorks() ? COMMON_EXTERNAL_WORKS.reduce((sum, label) => sum + abstractAmount(state.details.commonExternalWorks?.[label]), 0) + customAbstractTotal("customCommonExternalWorks") : 0;
     const componentTotal = componentMeasurementEntries().reduce((sum, entry) => sum + (componentSheetTotals(entry)?.amount || 0), 0) + customAbstractTotal("customComponentEstimates");
     document.querySelectorAll("[data-common-works-total]").forEach((target) => { target.textContent = formatNumber(commonTotal); });
     document.querySelectorAll("[data-abstract-total]").forEach((target) => { target.textContent = formatNumber(componentTotal + commonTotal); });

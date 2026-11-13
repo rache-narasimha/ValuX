@@ -34,7 +34,6 @@ const {
   fieldControl,
   fileData,
   institutionTypeFor,
-  installExampleAssistance,
   isoDate,
   money,
   numeric,
@@ -175,6 +174,7 @@ function renderDocuments(saved = {}) {
     byId(typeId).value = existing[typeId] || "";
     byId(customId).value = existing[customId] || "";
     byId(detailsId).value = existing[detailsId] || "";
+    ValuationWriting.restoreField(byId(detailsId), existing);
     custom.hidden = byId(typeId).value !== "Custom";
     byId(typeId).addEventListener("change", () => {
       custom.hidden = byId(typeId).value !== "Custom";
@@ -212,6 +212,7 @@ function removeDocument(index) {
       shifted[`documents.${Number(match[1]) - 1}.${match[2]}`] = value;
   });
   state.documentCount--;
+  exampleAssistance?.shift("documents.", index);
   renderDocuments(shifted);
   setValues(shifted);
   wireInputs();
@@ -316,6 +317,7 @@ function addSiteMatchControl(block, saved) {
       delete state.matchedSiteFields[group];
       pairs.flat().forEach((input) => FormTabOrder.mark(input, false));
       updateMessage("");
+      exampleAssistance?.refresh();
       saveDraft();
       return;
     }
@@ -336,7 +338,9 @@ function addSiteMatchControl(block, saved) {
       FormTabOrder.mark(target);
     }
     state.matchedSiteFields[group] = true;
+    pairs.flat().forEach((field) => exampleAssistance?.forget(field));
     updateMessage("Edit either column to update both.");
+    exampleAssistance?.refresh();
     if (needsCopy) markDirty();
     saveDraft();
   });
@@ -344,6 +348,7 @@ function addSiteMatchControl(block, saved) {
   function mirror(source, target) {
     if (!toggle.checked) return;
     target.value = source.value;
+    exampleAssistance?.forget(target);
     FormTabOrder.mark(source, false);
     FormTabOrder.mark(target);
   }
@@ -404,6 +409,7 @@ function collectValues() {
         i.type === "checkbox" ? (i.checked ? "Yes" : "No") : NumericEntry.read(i);
     });
   values[window.ValuationCalculations.overridesKey] = calculations?.serialize() || "{}";
+  ValuationWriting.collectFormatting(byId("valuation-form"), values);
   return values;
 }
 function addFloor() {
@@ -420,6 +426,7 @@ function removeFloor(index) {
   if (!confirmReportInvalidation()) return;
   const existing = collectValues();
   state.floorCount--;
+  exampleAssistance?.shift("building.floors.", index);
   calculations?.shiftFloor(index);
   const shifted = {};
   Object.entries(existing).forEach(([key, value]) => {
@@ -671,12 +678,13 @@ function validateRequiredFields(form) {
     const panel = invalid.closest(".panel");
     const index = state.sections.indexOf(panel);
     if (index >= 0) show(index);
-    invalid.classList.add("validation-target");
-    invalid.addEventListener("input", () => invalid.classList.remove("validation-target"), { once: true });
+    const visibleInput = ValuationWriting.narrativeFor(invalid) || invalid;
+    visibleInput.classList.add("validation-target");
+    invalid.addEventListener("input", () => visibleInput.classList.remove("validation-target"), { once: true });
     window.setTimeout(() => {
-      invalid.focus({ preventScroll: true });
-      invalid.scrollIntoView({ behavior: "smooth", block: "center" });
-      invalid.reportValidity();
+      visibleInput.focus({ preventScroll: true });
+      visibleInput.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (visibleInput === invalid) invalid.reportValidity();
     }, 250);
   }
   window.alert(message);
@@ -694,8 +702,11 @@ function setValues(values) {
       if (input.value !== previous) FormTabOrder.mark(input, false);
     }
   });
+  ValuationWriting.restoreFormatting(byId("valuation-form"), values);
 }
 let calculations;
+let addressAutofill;
+let exampleAssistance;
 function calculateAll(changedId) {
   if (ReportData.readOnly) return;
   calculations?.refresh(changedId);
@@ -708,6 +719,8 @@ async function persistDraftNow() {
   saveTimer = null;
   const saved = await ReportData.save(STORAGE_KEY, "valuation-general", {
     values: collectValues(),
+    postalAddressMode: addressAutofill?.mode || undefined,
+    exampleFill: exampleAssistance?.serialize(),
     preparationMethod: state.preparationMethod,
     uploadType: byId("valuation-upload-type")?.value || "",
     floorCount: state.floorCount,
@@ -771,6 +784,7 @@ function applyRules() {
   if (state.current === index && !hasBuilding) show(index + 1);
   else if (state.sections[state.current]?.hidden) show(sectionPlan.findIndex((section) => section.id === "preparation"));
   else updateSectionNavigation();
+  exampleAssistance?.refresh();
 }
 function wireInputs() {
   document
@@ -795,6 +809,7 @@ function wireInputs() {
       }
       i.addEventListener("input", () => {
         if (i.id === "institution.type") applyInstitutionOptions();
+        addressAutofill?.changed(i.id);
         calculateAll(i.id);
         markDirty();
         saveDraft();
@@ -808,12 +823,15 @@ function wireInputs() {
         i.dataset.previousValue = i.value;
         i.dataset.previousChecked = String(i.checked);
         if (i.id === "institution.type") applyInstitutionOptions();
+        addressAutofill?.changed(i.id);
         calculateAll(i.id);
         applyRules();
         markDirty();
         saveDraft();
       });
     });
+  ValuationWriting.wireNarratives(byId("valuation-form"), confirmReportInvalidation);
+  exampleAssistance?.refresh();
 }
 
 
@@ -949,11 +967,33 @@ async function init() {
     addSiteMatchControl(block, draft?.matchedSiteFields?.[block.dataset.siteMatchGroup]);
   });
   calculations.restore(initialValues);
+  addressAutofill = ValuationWriting.installAddress(byId("valuation-form"), "general", draft?.postalAddressMode, {
+    beforeEdit: confirmReportInvalidation,
+    onEdit: (changesReport) => { if (changesReport) markDirty(); saveDraft(); },
+    hasRetainedReport: Boolean(currentTask()?.reportGeneratedAt || ReportData.preview()?.id),
+  });
   wireInputs();
-  installExampleAssistance(byId("valuation-form"), "general");
   calculateAll();
   applyRules();
   show(0);
+  exampleAssistance = ValuationExamples.install(byId("valuation-form"), "general", {
+    saved: draft?.exampleFill,
+    savedValues: initialValues,
+    assignmentFields: new Set(Object.keys(linkedTaskValues())),
+    available: () => state.preparationMethod === "online",
+    beforeEdit: confirmReportInvalidation,
+    updateSections: applyRules,
+    afterBulk: (changed) => {
+      if (changed.length) {
+        if (changed.includes("institution.type")) applyInstitutionOptions();
+        changed.forEach((id) => addressAutofill?.changed(id));
+        calculateAll();
+        applyRules();
+        markDirty();
+      }
+      saveDraft();
+    },
+  });
   const restoredPreview = ReportData.preview();
   if (restoredPreview?.id) {
     state.previewId = restoredPreview.id;

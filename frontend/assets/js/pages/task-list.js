@@ -6,10 +6,12 @@
   const FEE_RECORDED = "fee-recorded";
   const list = document.getElementById("task-list");
   const loadMore = document.getElementById("load-more");
+  const dateBasisControl = document.getElementById("task-date-basis");
   const fields = {
     search: document.getElementById("task-search"),
     preparationSource: document.getElementById("preparation-filter"),
     group: document.getElementById("group-filter"),
+    valuationType: document.getElementById("valuation-type-filter"),
     institution: document.getElementById("institution-filter"),
     period: document.getElementById("period-filter"),
     status: document.getElementById("status-filter"),
@@ -19,6 +21,7 @@
   };
   let visible = PAGE_SIZE;
   let periodReference = ValuxTime.todayDate();
+  let dateBasis = "assigned";
   let directoryMode = false;
   let summaryMode = false;
   let paymentView = "";
@@ -73,11 +76,13 @@
     }
     if (initial.get("periodReference")) periodReference = ValuxTime.parseDate(initial.get("periodReference")) || ValuxTime.todayDate();
     fields.group.value = initial.get("group") || "all";
+    fields.valuationType.value = TaskStore.VALUATION_TYPES.includes(initial.get("valuationType")) ? initial.get("valuationType") : "";
     fields.preparationSource.value = WorkflowAccess.currentRole() === "father" ? initial.get("preparationSource") || "" : "";
     fields.institution.value = initial.get("institution") || "";
     activeInstitutionScope = Boolean(selectedInstitutionType() && initial.get("institutionScope") === "active");
     fields.period.value = initial.get("period") || "";
     fields.status.value = initial.get("status") || "";
+    dateBasis = initial.get("dateBasis") === "status" && TaskStore.STATUS_DATE_FIELDS[fields.status.value] ? "status" : "assigned";
     fields.assignee.value = initial.get("assignee") || "";
     fields.holdReason.value = initial.get("holdReason") || "";
     fields.payment.value = initial.get("payment") || "";
@@ -87,6 +92,46 @@
 
   function isoDate(value) {
     return ValuxTime.isoDate(value);
+  }
+
+  function selectedValuationType() {
+    return ["valuation", "revaluation"].includes(fields.group.value) ? fields.valuationType.value : "";
+  }
+
+  function selectedDateBasis() {
+    return TaskStore.STATUS_DATE_FIELDS[fields.status.value] && dateBasis === "status" ? "status" : "assigned";
+  }
+
+  function periodBasisLabel() {
+    return selectedDateBasis() === "status" ? `${fields.status.value} during` : "Assigned during";
+  }
+
+  function renderAssignmentFilters() {
+    const typeFilter = document.getElementById("valuation-type-filter-wrap");
+    typeFilter.hidden = !["valuation", "revaluation"].includes(fields.group.value);
+    if (!typeFilter.hidden) typeFilter.firstElementChild.textContent = `${GROUP_LABELS[fields.group.value]} type`;
+    dateBasisControl.hidden = !TaskStore.STATUS_DATE_FIELDS[fields.status.value];
+    const basis = selectedDateBasis();
+    dateBasisControl.querySelectorAll("[data-date-basis]").forEach((button) => {
+      const active = button.dataset.dateBasis === basis;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+      if (button.dataset.dateBasis === "status" && !dateBasisControl.hidden) {
+        button.textContent = `${fields.status.value} during`;
+      }
+    });
+    document.getElementById("task-period-label-text").textContent = periodBasisLabel();
+
+    const dashboard = document.getElementById("tasks-dashboard-link");
+    const params = new URLSearchParams();
+    if (selectedValuationType()) params.set("valuationType", selectedValuationType());
+    if (basis === "status") params.set("dateBasis", basis);
+    if (params.size || fields.period.value) {
+      params.set("group", fields.group.value);
+      params.set("period", fields.period.value);
+      if (fields.period.value) params.set("periodReference", isoDate(periodReference));
+    }
+    dashboard.href = params.size ? `/?${params}` : "/";
   }
 
   function weekOptions() {
@@ -151,6 +196,7 @@
   function queryOptions(limit = visible) {
     return Object.fromEntries([
       ["preparationSource", WorkflowAccess.currentRole() === "father" ? fields.preparationSource.value : ""], ["group", fields.group.value], ["institution", selectedInstitutionType() ? "" : fields.institution.value],
+      ["valuationType", selectedValuationType()], ["dateBasis", selectedDateBasis() === "status" ? "status" : ""],
       ["institutionType", selectedInstitutionType()], ["institutionScope", activeInstitutionScope ? "active" : ""],
       ["period", fields.period.value], ["status", fields.status.value],
       ["assignee", fields.assignee.value], ["holdReason", fields.holdReason.value],
@@ -162,8 +208,9 @@
   function exportSubtitle() {
     const parts = [];
     if (fields.group.value !== "all") parts.push(`Report section: ${GROUP_LABELS[fields.group.value]}`);
+    if (selectedValuationType()) parts.push(`${GROUP_LABELS[fields.group.value]} type: ${fields.valuationType.selectedOptions[0].textContent}`);
     if (fields.institution.value) parts.push(`Institution: ${fields.institution.options[fields.institution.selectedIndex]?.textContent || fields.institution.value}`);
-    if (fields.period.value) parts.push(`Assigned during: ${InstitutionMetrics.periodLabel(fields.period.value, periodReference)}`);
+    if (fields.period.value) parts.push(`${periodBasisLabel()}: ${InstitutionMetrics.periodLabel(fields.period.value, periodReference)}`);
     if (fields.status.value) parts.push(`Status: ${fields.status.value}`);
     if (fields.assignee.value) parts.push(`Assigned to: ${fields.assignee.value}`);
     if (fields.holdReason.value) parts.push(`On hold: ${fields.holdReason.value}`);
@@ -174,12 +221,34 @@
     return parts.length ? parts.join(" · ") : "All assignments visible to the signed-in user";
   }
 
-  function taskExportOptions(tasks = TaskStore.query(queryOptions(Number.MAX_SAFE_INTEGER)).items) {
+  function taskExportFileName(options) {
+    const institution = { Bank: "All Banks", NBFC: "All NBFCs" }[options.institutionType] || options.institution;
+    const payment = {
+      [TaskStore.PAYMENT_STATUS_PAIRS.received]: "Received and Partially Received",
+      [TaskStore.PAYMENT_STATUS_PAIRS.pending]: "Outstanding",
+      [FEE_RECORDED]: "Fee Recorded",
+    }[options.payment] || options.payment;
+    const report = options.valuationType ? `${fields.valuationType.selectedOptions[0].textContent} ${GROUP_LABELS[options.group]}`
+      : options.group === "all" ? "" : GROUP_LABELS[options.group];
+    const period = options.period ? InstitutionMetrics.periodLabel(options.period, options.periodReference) : "";
+    const preparation = options.preparationSource ? fields.preparationSource.selectedOptions[0].textContent : "";
+    const section = paymentView ? "Payments" : "Assignments";
+    let status = options.status;
+    if (!status && !paymentView && !report && !institution && !payment && !period && !preparation) {
+      status = options.search.trim() || options.assignee || options.holdReason ? "Filtered" : "All";
+    }
+    const basis = options.period && options.dateBasis === "status" ? `${options.status} Date` : "";
+    const parts = ["ValuX", status, report, section, institution, payment, basis, period, preparation];
+    const name = parts.filter(Boolean).join("_").replace(/[^a-z0-9_-]+/gi, "_").replace(/_+/g, "_");
+    return `${name.slice(0, 115).replace(/_$/, "")}.xlsx`;
+  }
+
+  function taskExportOptions(tasks, { subtitle, fileName }) {
     return {
       title: "ValuX assignments",
-      subtitle: exportSubtitle(),
+      subtitle,
       sheetName: "Assignments",
-      fileName: "ValuX_Assignments.xlsx",
+      fileName,
       columns: [
         { key: "taskId", label: "Task ID" }, { key: "applicant", label: "Applicant / customer" },
         { key: "report", label: "Report type" }, { key: "property", label: "Property" },
@@ -222,7 +291,7 @@
     });
     return {
       title: "ValuX institution overview", subtitle: "Configured banks and NBFCs · all visible assignments",
-      sheetName: "Institutions", fileName: "ValuX_Institutions.xlsx",
+      sheetName: "Institutions", fileName: "ValuX_Institution_Overview.xlsx",
       columns: [
         { key: "code", label: "Code" }, { key: "institution", label: "Institution" }, { key: "type", label: "Type" },
         { key: "total", label: "Total assignments", type: "integer" }, { key: "unassigned", label: "Unassigned", type: "integer" },
@@ -291,14 +360,14 @@
   function paymentScopeTasks(options) {
     const activeCodes = new Set(InstitutionMetrics.configured().map(({ code }) => code));
     return TaskStore.query({
-      ...options, institutionScope: "active", periodReference, limit: Number.MAX_SAFE_INTEGER,
+      periodReference, ...options, institutionScope: "active", limit: Number.MAX_SAFE_INTEGER,
     }).items.filter((task) => task.status !== "Cancelled" && activeCodes.has(task.institutionCode));
   }
 
-  function queryCachedTasks(limit = visible) {
-    const options = queryOptions(limit);
+  function queryCachedTasks(options = queryOptions()) {
     if (options.payment !== FEE_RECORDED) return TaskStore.query(options);
     const tasks = paymentScopeTasks({ ...options, payment: "" }).filter((task) => TaskStore.paymentSummary(task).basis !== null);
+    const { limit } = options;
     return { total: tasks.length, items: tasks.slice(0, limit), hasMore: tasks.length > limit };
   }
 
@@ -308,9 +377,9 @@
     const host = document.getElementById("institution-drilldown");
     host.hidden = !paymentView && !institution && !summaryMode && !selectedInstitutionType();
     if (host.hidden) return;
-    const { group, institution: institutionCode, institutionType, period } = queryOptions();
+    const { group, institution: institutionCode, institutionType, period, valuationType } = queryOptions();
     const tasks = paymentView
-      ? paymentScopeTasks({ group, institution: institutionCode, institutionType, period })
+      ? paymentScopeTasks({ group, institution: institutionCode, institutionType, period, valuationType })
       : TaskStore.query(queryOptions(Number.MAX_SAFE_INTEGER)).items;
     const workflowChart = document.getElementById("institution-workflow-mix");
     const paymentChart = document.getElementById("institution-payment-summary");
@@ -324,8 +393,9 @@
     document.querySelectorAll(".institution-summary-cards article:not(:first-child)").forEach((card) => {
       card.hidden = !institution && WorkflowAccess.currentRole() !== "father";
     });
+    const summaryBasis = selectedDateBasis() === "status" ? `${paymentView ? "Assigned during" : periodBasisLabel()} ` : "";
     document.getElementById("institution-drilldown-subtitle").textContent = fields.period.value
-      ? `${tasks.length} assignments · ${InstitutionMetrics.periodLabel(fields.period.value, periodReference)}`
+      ? `${tasks.length} assignments · ${summaryBasis}${InstitutionMetrics.periodLabel(fields.period.value, periodReference)}`
       : `${tasks.length} assignments · all dates`;
     if (!paymentView) {
       const mix = InstitutionMetrics.workflowMix(tasks);
@@ -399,6 +469,8 @@
     else if (directoryMode && !selectedInstitution()) params.set("view", "institutions");
     else if (summaryMode || selectedInstitutionType()) params.set("view", "summary");
     if (fields.group.value !== "all") params.set("group", fields.group.value);
+    if (selectedValuationType()) params.set("valuationType", selectedValuationType());
+    if (selectedDateBasis() === "status") params.set("dateBasis", "status");
     if (activeInstitutionScope) params.set("institutionScope", "active");
     if (fields.period.value) params.set("periodReference", isoDate(periodReference));
     ["institution", "period", "status", "assignee", "holdReason", "payment", "preparationSource"].forEach((key) => {
@@ -444,6 +516,7 @@
 
   async function render() {
     const sequence = ++renderSequence;
+    renderAssignmentFilters();
     list.setAttribute("aria-busy", "true");
     let result;
     try {
@@ -474,16 +547,16 @@
     render();
   }
 
-  async function allFilteredTasks() {
-    if (needsFullAnalytics()) {
+  async function allFilteredTasks(options, useCache) {
+    if (useCache) {
       await ensureFullAnalytics();
-      return queryCachedTasks(Number.MAX_SAFE_INTEGER).items;
+      return queryCachedTasks(options).items;
     }
     const items = [];
     let offset = 0;
     let hasMore = true;
     while (hasMore) {
-      const result = await TaskStore.fetchTasks({ ...queryOptions(100), offset });
+      const result = await TaskStore.fetchTasks({ ...options, limit: 100, offset });
       items.push(...result.items);
       offset += result.items.length;
       hasMore = result.hasMore && result.items.length > 0;
@@ -496,8 +569,10 @@
       button.disabled = true;
       button.setAttribute("aria-busy", "true");
       button.setAttribute("title", "Loading assignments…");
-      const tasks = await allFilteredTasks();
-      await WorkbookExport.fromButton(button, taskExportOptions(tasks));
+      const options = queryOptions(Number.MAX_SAFE_INTEGER);
+      const details = { subtitle: exportSubtitle(), fileName: taskExportFileName(options) };
+      const tasks = await allFilteredTasks(options, needsFullAnalytics());
+      await WorkbookExport.fromButton(button, taskExportOptions(tasks, details));
     } catch (error) {
       window.alert(error.message || "The assignments could not be loaded for export.");
     } finally {
@@ -512,6 +587,12 @@
   document.getElementById("task-filters").classList.toggle("has-preparation-filter", preparationFilterEnabled);
   populateFilters();
   renderPeriodFilter();
+  dateBasisControl.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-date-basis]");
+    if (!button || dateBasisControl.hidden || dateBasis === button.dataset.dateBasis) return;
+    dateBasis = button.dataset.dateBasis;
+    reset();
+  });
   Object.entries(fields).forEach(([key, field]) => {
     if (key !== "period") field.addEventListener(key === "search" ? "input" : "change", () => {
       if (key === "institution") {

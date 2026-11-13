@@ -121,10 +121,20 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Task lists remain searchable and filterable. Search includes task ID,
   applicant/customer, report, institution, assignee, property details, state,
   hold reason, and payment state where supported.
-- The task-list “Assigned during” filter supports an arbitrary selected day,
-  month, or year. Its weekly picker exposes the current tenant-calendar week
-  and the preceding 51 weeks, with no future week ranges. Older work remains
-  accessible through All time, Monthly, Yearly and search.
+- New Assignment offers **Show examples** in the left sidebar. The hints use
+  Adoni for the branch location, the signed-in user's display name in a sample
+  applicant relationship, and a property description suited to the selected
+  valuation type. Double-click inserts an editable example in an empty field.
+  Linked read-only fields are excluded. The toggle only changes hint visibility.
+- The task-list period defaults to “Assigned during.” With status set to
+  Completed or Closed, the Assignments header offers “Completed during” or
+  “Closed during,” using that event's date in the tenant time zone. The period
+  supports an arbitrary day, month, or year. Its weekly picker exposes the
+  current tenant-calendar week and the preceding 51 weeks, with no future week
+  ranges. Older work remains accessible through All time, Monthly, Yearly and search.
+- Valuation and Re-Valuation offer All, General, or Agricultural from their
+  dashboard category buttons and the Assignments header. The task list,
+  drill-downs and assignment exports carry the selected type.
 - Lists load bounded pages of records and fetch/show more rather than rendering
   an unbounded task collection at once.
 - A non-Cancelled valuation or estimation assignment blocks creation of another
@@ -205,6 +215,12 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   download icon without requiring the task to be opened. The task detail view
   also exposes the retained report download. Completed uses the latest valid
   artifact; Closed uses the immutable final artifact.
+- Dashboard task cards show the assigned date alongside the due, completion,
+  or closure date in their date area. Payment Tracking and Recent Activity use
+  aligned columns, with the applicant and report type on separate lines.
+  The Assignments table shows the assigned
+  date below the Task ID and the completion or closure date below the status
+  badge. The Due date cell is blank for Completed and Closed tasks.
 - The layout should use available horizontal space efficiently, show useful
   task details before opening a record, and become compact on smaller screens.
 - Normal action buttons share a 14px-equivalent font, with 13px-equivalent
@@ -220,8 +236,11 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Dashboard category counts, status cards, institution workload/finance,
   assignment-status distribution and report-type totals share one Assigned
   during period (All time, daily, weekly, monthly or yearly). All time hides
-  only the supplementary picker. Dates are assignment dates; finance shows
-  the current payment position of assignments in that period. Recent activity
+  only the supplementary picker. Returning to the dashboard from a task list
+  using status dates applies completion and closure dates to the Completed and
+  Closed cards and their assignment-status chart entries. Their drill-downs
+  carry that date basis. Workload and finance use assignment dates, and finance
+  shows the current payment position of assignments in that period. Recent activity
   and the actionable Completed payment-tracking list retain their existing
   scopes. Status-card and workload drill-downs carry the selected period.
 - Report-category and Assigned during controls share one compact filter panel,
@@ -258,7 +277,7 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   Panels stack before their content becomes cramped, with content-led chart
   heights and consistent heading/section spacing. Task-status colours match their
   distribution legend. Cancelled work appears in that distribution when present
-  so its total agrees with category counts; finance still excludes Cancelled
+  so its assigned-date total agrees with category counts; finance still excludes Cancelled
   assignments. Empty fee totals do not show a fabricated collection percentage.
 - Workload totals link to the existing task-summary page for Banks, NBFCs or
   both together, preserving the selected report group and assigned-date
@@ -283,9 +302,11 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Employee dashboards contain task and per-task payment information but no
   aggregate business-income analytics.
 - Assignment lists export the complete currently filtered result set to a
-  typed Excel workbook. The father/CEO institution directory also exports its
-  workload and financial overview; employees do not receive that aggregate
-  institution export.
+  typed Excel workbook. Its filename identifies the assignment or payment
+  view and applicable report, institution, period, and status filters.
+  The father/CEO institution directory exports its workload and financial
+  overview as ValuX_Institution_Overview.xlsx. Employees do not receive that
+  aggregate institution export.
 
 ## 7. Report-form boundary
 
@@ -353,11 +374,27 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   Intermediate calculations and component totals are not rounded to thousands;
   manually entered results are not automatically rounded. Calculated zero
   section/consolidated amounts appear as 0/- rather than blanks or dashes.
-- General and agricultural forms expose fictional examples through a
-  Show/Hide examples preference at the end of the existing report-section
-  navigation, outside the main form. Double-click fills only an empty,
-  editable eligible field; examples never overwrite data and do not use
-  completion-count tracking.
+- Online general and agricultural forms show fictional examples through
+  **Show examples** in the report-section sidebar. Double-click inserts an
+  editable example in an eligible empty text field. Selects and checkboxes
+  expose **Use example** beside their hint. Dates, extracted assignment
+  details, generated addresses, mirrored controls, and calculated fields
+  are excluded. Personal and property identifiers use bracketed prompts.
+  **Fill empty fields** is a separate toggle in practice and live drafts.
+  It fills eligible blanks once, excluding dimensions, areas, rates, and
+  checkboxes with an existing Yes/No state. Turning it off clears only
+  untouched values inserted by bulk fill, even after reopening a draft.
+  Turning off **Show examples** only hides the hints and bulk control.
+- General and agricultural Postal address fields can autofill from the door
+  number, plot or survey number, locality, ward or taluka, and mandal or
+  district. Automatic addresses follow their source fields. Manual and
+  previously saved addresses are preserved until the user chooses
+  “Use address from fields.” Preview and reports use the final address text.
+- Document details and Special remarks in both valuation forms support bold,
+  bulleted and numbered lists from compact controls on the field label row.
+  Typing a list marker starts a list, Enter continues it, Enter on a blank
+  item ends it, and Shift+Enter inserts a line break. Formatting is retained
+  with the draft and rendered in previews and generated reports.
 - Agricultural rate unit labels use “per unit” without repeating “rate per
   unit” in the selected unit label. This agricultural wording must not be
   copied into general valuation unless explicitly requested.
@@ -438,7 +475,9 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   description without its address) and Address of the Work. The overall report
   joins them with one "at" connector. Component descriptions are derived from
   component names and floor configurations using that same address, without
-  per-component work-description inputs. Progress/Completion construction-site
+  per-component work-description inputs. The worksheet's Name of the Work
+  omits numbering from default component names and keeps distinct named
+  blocks. Progress/Completion construction-site
   fields use Name of the Work, Address of the Work. Karnataka Bank's site
   certificate uses Address of the Work alone. Older
   saved descriptions/identities remain intact until reviewed; no automatic
@@ -583,6 +622,11 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   report inputs reset completion qualification.
 - An online estimation preview remains approved across reloads while saved workbook
   inputs, component configuration, schema and template version remain unchanged.
+  The server calculates final component amounts from the saved measurements and
+  explicit overrides. Review shows the server amounts and flags a difference
+  from the browser calculation. Final generation checks the recalculated Excel
+  totals against the server amounts before storing the workbook and the linked
+  estimation snapshot. A mismatch leaves the draft available for correction.
   Changed report inputs invalidate the preview and retained report; workflow-only
   changes do not. Switching preparation methods retains entered data but requires
   a newly generated or attached report.
@@ -672,8 +716,9 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   valuation methods, including existing bank-specific routes. When only an
   uploaded file is available, the original remains selectable and users can refer
   to the retained file to enter missing details. Revaluation has its own task ID,
-  workflow and payment. The original task shows the count and links for its
-  Revaluations and receives audit events for creation, completion, reopening,
+  workflow and payment. The original task shows the Re-Valuation count and
+  a newest-first table of linked Task IDs, assignment dates, and statuses.
+  It receives audit events for creation, completion, reopening,
   cancellation and closure.
 - A task-linked Progress/Completion preview remains approved across reloads
   while its saved details, component completion values, Karnataka Bank inputs,

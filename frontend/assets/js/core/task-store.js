@@ -3,6 +3,8 @@
   "use strict";
 
   const STATUSES = ["Unassigned", "In Progress", "On Hold", "Completed", "Closed", "Cancelled"];
+  const STATUS_DATE_FIELDS = { Completed: "completedAt", Closed: "closedAt" };
+  const VALUATION_TYPES = ["general", "agricultural"];
   const PAYMENT_STATUS_PAIRS = {
     received: "Partially Received,Received",
     pending: "Partially Received,Pending",
@@ -63,7 +65,7 @@
 
   function matchesPeriod(task, period = "monthly", field = "assignedDate", reference = ValuxTime.todayDate()) {
     if (!period) return true;
-    const value = localDate(task[field]);
+    const value = task[field] ? ValuxTime.parseDate(task[field]) : null;
     if (!value) return false;
     const { start, end } = periodBounds(period, reference);
     return value >= start && value < end;
@@ -247,6 +249,7 @@
     const limit = Math.max(1, Number(options.limit) || 20);
     const collectionPair = Object.values(PAYMENT_STATUS_PAIRS).includes(options.payment);
     const paymentStatuses = collectionPair ? options.payment.split(",") : [options.payment];
+    const dateField = options.dateBasis === "status" ? STATUS_DATE_FIELDS[options.status] : "assignedDate";
     if (collectionPair && window.WorkflowAccess?.currentRole() !== "father") return { total: 0, items: [], hasMore: false };
     const activeTypes = options.institutionScope === "active" || collectionPair
       ? new Map(window.InstitutionStore.active().map(({ code, type }) => [code, type]))
@@ -254,6 +257,7 @@
     let tasks = all().filter((task) => {
       if (window.WorkflowAccess && !WorkflowAccess.visible(task)) return false;
       if (options.group && options.group !== "all" && task.reportGroup !== options.group) return false;
+      if (["valuation", "revaluation"].includes(options.group) && options.valuationType && task.reportKey !== `valuation-${options.valuationType}`) return false;
       if (options.status && task.status !== options.status) return false;
       if (options.assignee && task.assignee !== options.assignee) return false;
       if (options.holdReason && task.holdReason !== options.holdReason) return false;
@@ -263,7 +267,7 @@
       if (options.preparationSource && (task.preparationSource || "unknown") !== options.preparationSource) return false;
       const institutionType = options.institutionScope === "active" ? activeTypes.get(task.institutionCode) : task.institutionType;
       if (options.institutionType && institutionType !== options.institutionType) return false;
-      if (options.period && !matchesPeriod(task, options.period, "assignedDate", options.periodReference)) return false;
+      if (options.period && !matchesPeriod(task, options.period, dateField, options.periodReference)) return false;
       if (search) {
         const haystack = [task.id, task.customerName, task.reportName, task.assignee, task.institutionName, task.institutionCode, task.branch, task.propertyBrief, task.status, task.holdReason, task.payment.status].join(" ").toLowerCase();
         if (!haystack.includes(search)) return false;
@@ -309,7 +313,7 @@
   if (window.__VALUX_BUSINESS_CONTEXT__?.linkedTask) cacheRemote(window.__VALUX_BUSINESS_CONTEXT__.linkedTask, null, true);
 
   window.TaskStore = {
-    STATUSES, PAYMENT_STATUS_PAIRS, HOLD_REASONS, CANCELLATION_REASONS, EMPLOYEES, REPORTS,
+    STATUSES, STATUS_DATE_FIELDS, VALUATION_TYPES, PAYMENT_STATUS_PAIRS, HOLD_REASONS, CANCELLATION_REASONS, EMPLOYEES, REPORTS,
     create, get, query, summary, addNote, assign, putOnHold, resume,
     markReportGenerated, complete, updatePayment, close, reopen, cancel, removeInstitutionArtifact,
     matchesPeriod, periodBounds, dueDateRange, billingBasis, paymentSummary, all,

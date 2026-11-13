@@ -6,6 +6,21 @@ FLOORS = {"cellar": "Cellar", "stilt": "Stilt Floor", "ground": "Ground Floor", 
 ABBREVIATIONS = {"cellar": "Cellar", "stilt": "Stilt", "ground": "GF", "first": "FF", "second": "SF", "third": "TF", "fourth": "4F", "fifth": "5F", "sixth": "6F", "seventh": "7F", "eighth": "8F", "ninth": "9F", "tenth": "10F"}
 LEVELS = {key: index - 1 for index, key in enumerate(FLOORS)}
 
+NUMBERED_WORK_NAMES = {
+    "residential_building": (
+        (r"Residential Building(?:\s*/\s*Block)?", "residential building"),
+        (r"Building", "building"),
+    ),
+    "rcc_building": (
+        (r"RCC Building", "RCC building"),
+        (r"RCC Commercial Building", "RCC commercial building"),
+        (r"Commercial Building", "commercial building"),
+        (r"Building", "building"),
+    ),
+    "office_amenity": ((r"Office\s*/\s*Amenity Building", "office building"),),
+    "utility_structure": ((r"Utility Structure", "utility structure"),),
+}
+
 
 def industrial_centre_line(state):
     return (
@@ -92,6 +107,10 @@ def applicant_text(details):
 
 def component_work(component):
     name = re.sub(r"\s+", " ", str(component.get("name") or "building")).strip()
+    for default_label, work_name in NUMBERED_WORK_NAMES.get(component.get("kind"), ()):
+        if re.fullmatch(rf"{default_label} [1-9][0-9]*", name, flags=re.I):
+            name = work_name
+            break
     name = re.sub(r"Residential Building\s*/\s*Block", "Residential Building", name, flags=re.I)
     name = re.sub(r"Office\s*/\s*Amenity Building", "Office Building", name, flags=re.I)
     floors = []

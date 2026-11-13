@@ -81,7 +81,13 @@ Do not copy their contents into source, issue reports or command output.
 The one-shot `db-migrate` Compose service applies authentication migrations
 first and durable business-data migrations second before the web service
 starts. It uses the owner connection only for DDL and grants. The long-running
-web service uses the restricted `valsphere_app` role.
+web service uses the configured restricted role (`valux_app` by default).
+
+For an existing development installation, keep its configured database and
+role names. Before applying Compose changes to the PostgreSQL volume key,
+find the physical volume name attached to the running PostgreSQL container
+and set `POSTGRES_DATA_VOLUME` to that name and
+`POSTGRES_DATA_VOLUME_EXTERNAL=true` in the ignored `.env` file.
 
 To run migrations explicitly:
 

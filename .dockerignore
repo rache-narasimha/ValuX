@@ -2,6 +2,11 @@ archive
 docs
 tests
 outputs
-__pycache__
-*.pyc
-.DS_Store
+.git
+.env
+.env.*
+development-credentials.txt
+**/__pycache__
+**/*.pyc
+**/.DS_Store
+**/~$*.xlsx

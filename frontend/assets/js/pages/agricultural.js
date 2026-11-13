@@ -30,7 +30,6 @@ const {
   fieldControl: createFieldControl,
   fileData,
   institutionTypeFor,
-  installExampleAssistance,
   money,
   numeric,
   title,
@@ -111,6 +110,7 @@ function renderDocuments(saved = {}) {
     byId(typeId).value = existing[typeId] || "";
     byId(customId).value = existing[customId] || "";
     byId(detailsId).value = existing[detailsId] || "";
+    ValuationWriting.restoreField(byId(detailsId), existing);
     custom.hidden = byId(typeId).value !== "Custom";
     byId(typeId).addEventListener("change", () => {
       custom.hidden = byId(typeId).value !== "Custom";
@@ -148,6 +148,7 @@ function removeDocument(index) {
       shifted[`documents.${Number(match[1]) - 1}.${match[2]}`] = value;
   });
   state.documentCount--;
+  exampleAssistance?.shift("documents.", index);
   renderDocuments(shifted);
   setValues(shifted);
   wireInputs();
@@ -200,6 +201,7 @@ function collectValues() {
             : NumericEntry.read(input);
     });
   values[window.ValuationCalculations.overridesKey] = calculations?.serialize() || "{}";
+  ValuationWriting.collectFormatting(byId("agricultural-form"), values);
   return values;
 }
 
@@ -215,6 +217,7 @@ function setValues(values) {
       if (input.value !== previous) FormTabOrder.mark(input, false);
     }
   });
+  ValuationWriting.restoreFormatting(byId("agricultural-form"), values);
 }
 
 function applySaleAgreementRule() {
@@ -228,6 +231,8 @@ function applySaleAgreementRule() {
 }
 
 let calculations;
+let addressAutofill;
+let exampleAssistance;
 function calculateAll(changedId) {
   if (ReportData.readOnly) return;
   calculations?.refresh(changedId);
@@ -450,6 +455,7 @@ function applyPreparationMode() {
   ["preview-report", "generate-docx", "generate-pdf"].forEach((id) => byId(id).toggleAttribute("hidden", !online));
   if (state.sections[state.current]?.hidden) show(state.sectionPlan.findIndex((section) => section.id === "preparation"));
   else updateNavigation();
+  exampleAssistance?.refresh();
 }
 function validateRequiredFields(form) {
   if (form.checkValidity()) return true;
@@ -460,12 +466,13 @@ function validateRequiredFields(form) {
     const panel = invalid.closest(".panel");
     const index = state.sections.indexOf(panel);
     if (index >= 0) show(index);
-    invalid.classList.add("validation-target");
-    invalid.addEventListener("input", () => invalid.classList.remove("validation-target"), { once: true });
+    const visibleInput = ValuationWriting.narrativeFor(invalid) || invalid;
+    visibleInput.classList.add("validation-target");
+    invalid.addEventListener("input", () => visibleInput.classList.remove("validation-target"), { once: true });
     window.setTimeout(() => {
-      invalid.focus({ preventScroll: true });
-      invalid.scrollIntoView({ behavior: "smooth", block: "center" });
-      invalid.reportValidity();
+      visibleInput.focus({ preventScroll: true });
+      visibleInput.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (visibleInput === invalid) invalid.reportValidity();
     }, 250);
   }
   window.alert(message);
@@ -479,6 +486,8 @@ async function persistDraftNow() {
   saveTimer = null;
   const saved = await ReportData.save(STORAGE_KEY, "valuation-agricultural", {
     values: collectValues(),
+    postalAddressMode: addressAutofill?.mode || undefined,
+    exampleFill: exampleAssistance?.serialize(),
     preparationMethod: state.preparationMethod,
     uploadType: byId("valuation-upload-type")?.value || "",
     documentCount: state.documentCount,
@@ -541,6 +550,7 @@ function wireInputs() {
         input.dataset.previousValue = input.value;
         input.dataset.previousChecked = String(input.checked);
         if (input.id === "institution.type") applyInstitutionOptions();
+        addressAutofill?.changed(input.id);
         calculateAll(input.id);
         applySaleAgreementRule();
         markDirty();
@@ -549,6 +559,8 @@ function wireInputs() {
       input.addEventListener("input", changed);
       input.addEventListener("change", changed);
     });
+  ValuationWriting.wireNarratives(byId("agricultural-form"), confirmReportInvalidation);
+  exampleAssistance?.refresh();
 }
 
 
@@ -649,12 +661,33 @@ async function init() {
       byId("status").textContent = "Draft restored";
   } else applyInstitutionOptions();
   calculations.restore(initialValues);
+  addressAutofill = ValuationWriting.installAddress(byId("agricultural-form"), "agricultural", draft?.postalAddressMode, {
+    beforeEdit: confirmReportInvalidation,
+    onEdit: (changesReport) => { if (changesReport) markDirty(); saveDraft(); },
+    hasRetainedReport: Boolean(currentTask()?.reportGeneratedAt || ReportData.preview()?.id),
+  });
   wireInputs();
-  installExampleAssistance(byId("agricultural-form"), "agricultural");
   calculateAll();
   applySaleAgreementRule();
   applyPreparationMode();
   show(0);
+  exampleAssistance = ValuationExamples.install(byId("agricultural-form"), "agricultural", {
+    saved: draft?.exampleFill,
+    savedValues: initialValues,
+    assignmentFields: new Set(Object.keys(linkedTaskValues())),
+    available: () => state.preparationMethod === "online",
+    beforeEdit: confirmReportInvalidation,
+    afterBulk: (changed) => {
+      if (changed.length) {
+        if (changed.includes("institution.type")) applyInstitutionOptions();
+        changed.forEach((id) => addressAutofill?.changed(id));
+        calculateAll();
+        applySaleAgreementRule();
+        markDirty();
+      }
+      saveDraft();
+    },
+  });
   const restoredPreview = ReportData.preview();
   if (restoredPreview?.id) {
     state.previewId = restoredPreview.id;

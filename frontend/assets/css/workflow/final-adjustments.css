@@ -21,7 +21,8 @@
   stroke-width: 2;
 }
 .export-icon-button[aria-busy="true"] svg { opacity: .35; }
-.section-heading > button.export-icon-button {
+.section-heading > button.export-icon-button,
+.assignment-heading-controls > button.export-icon-button {
   box-sizing: border-box;
   display: inline-grid;
   flex: 0 0 38px;
@@ -37,7 +38,35 @@
   align-self: center;
   line-height: 1;
 }
-.section-heading > button.export-icon-button svg { display: block; margin: 0; }
+.section-heading > button.export-icon-button svg,
+.assignment-heading-controls > button.export-icon-button svg { display: block; margin: 0; }
+.assignment-list-heading { align-items: center; flex-wrap: wrap; gap: 8px 14px; }
+.assignment-heading-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+.valuation-type-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .76rem;
+  font-weight: 700;
+}
+.valuation-type-control select {
+  width: auto;
+  min-width: 0;
+  min-height: 34px;
+  padding: 5px 8px;
+  font-size: .78rem;
+}
+.assignment-heading-controls .assignment-date-basis { width: auto; }
+.assignment-date-basis button { min-height: 28px; white-space: nowrap; }
+html[data-theme="dark"] .assignment-date-basis { background: var(--surface); }
+html[data-theme="dark"] .assignment-date-basis button:not(.active) { color: var(--ink); }
 body:not(.workflow-page) .mobile-menu-button { display: none; }
 #sidebar-toggle.sidebar-collapse {
   display: flex;
@@ -154,14 +183,17 @@ body:not(.workflow-page) .mobile-menu-button { display: none; }
   white-space: normal;
   word-break: break-word;
 }
+.task-table-id { display: grid; justify-items: start; gap: 4px; }
 .task-table-row .task-row-link { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
 .task-table-status,
 .task-table-payment { display: grid; min-width: 0; justify-items: start; gap: 4px; pointer-events: none; }
 .task-row-payment .row-payment-action,
 .task-table-payment .row-payment-action { pointer-events: auto; }
 .task-table-action .row-open { width: 36px; }
+.task-table-date,
 .task-table-status .task-secondary,
 .task-table-payment small { color: var(--muted); font-size: .64rem; }
+.task-table-date span { white-space: nowrap; }
 .task-list-group { min-width: 0; gap: 0; }
 .task-list-group-heading { margin: 14px 0 8px; }
 .task-list-group:first-child .task-list-group-heading { margin-top: 6px; }

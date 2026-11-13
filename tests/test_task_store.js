@@ -80,6 +80,18 @@ const store = context.window.TaskStore;
   }), historicalPdf);
   const page = await store.fetchTasks({ offset: 0, limit: 20 });
   assert.equal(page.total, 1);
+  const boundaryTask = {
+    ...task, id: "NOV-AGRICULTURAL", reportKey: "valuation-agricultural", status: "Completed",
+    assignedDate: "2026-10-30", completedAt: "2026-10-31T18:30:00Z",
+  };
+  store.acceptServerTask(boundaryTask);
+  const november = { group: "valuation", period: "monthly", periodReference: "2026-11-01" };
+  assert.equal(store.query({ ...november, status: "Completed", valuationType: "agricultural" }).total, 0);
+  assert.equal(store.query({ ...november, status: "Completed", valuationType: "agricultural", dateBasis: "status" }).items[0].id, boundaryTask.id);
+  assert.equal(store.query({ ...november, status: "Completed", valuationType: "general", dateBasis: "status" }).total, 0);
+  store.acceptServerTask({ ...boundaryTask, status: "Closed", closedAt: "2026-11-09T18:30:00Z" });
+  assert.equal(store.query({ ...november, status: "Completed", dateBasis: "status" }).total, 0);
+  assert.equal(store.query({ ...november, status: "Closed", dateBasis: "status", period: "daily", periodReference: "2026-11-10" }).total, 1);
   await store.progressReportsFor("CANARA-EST-291026");
   await store.removeInstitutionArtifact(task.id);
   assert.ok(requests.some((entry) => entry.path === "/api/tasks"));

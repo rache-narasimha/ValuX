@@ -17,6 +17,7 @@ from .calculations import agricultural_replacements, calculated_replacements
 from .config import AGRICULTURAL_TEMPLATE, NS, SOFFICE, TEMPLATE, qn
 from .formatting import valuation_amount_in_words, document_indexes, normalized_document_values
 from .media import insert_uploaded_media
+from .narrative import NUMBERING_PART, WordNarrative, formatted_fields
 from .ooxml import (
     prepare_floor_rows,
     prepare_general_document_rows,
@@ -236,7 +237,13 @@ def finalize_agricultural_pagination(docx_path):
 def generate_agricultural_docx(values, output_path, photos=None, map_image=None, *, revaluation=False):
     values = normalized_document_values(values)
     replacements = agricultural_replacements(values)
-    replace_plain_tokens(AGRICULTURAL_TEMPLATE, output_path, replacements, len(document_indexes(values)), revaluation=revaluation)
+    rich_fields = formatted_fields(values)
+    tokens = {"site.special_remarks": "{{SPECIAL_REMARKS}}"}
+    tokens.update({f"documents.{index}.details": f"{{{{DOCUMENT_{index}_DETAILS}}}}" for index in document_indexes(values)})
+    replace_plain_tokens(
+        AGRICULTURAL_TEMPLATE, output_path, replacements, len(document_indexes(values)),
+        revaluation=revaluation, formatted_tokens={token: rich_fields[key] for key, token in tokens.items() if key in rich_fields},
+    )
     normalize_agricultural_typography(output_path)
     insert_uploaded_media(output_path, photos or [], map_image, valuation_map=True)
     finalize_agricultural_pagination(output_path)
@@ -294,7 +301,11 @@ def _generate_general_docx(values, output_path, photos=None, map_image=None, *, 
         replacements["PMV_WORDS"] = replacements["REALIZABLE_WORDS"] = "________________________________"
 
     with ZipFile(TEMPLATE) as zin, ZipFile(output_path, "w", ZIP_DEFLATED) as zout:
+        rich_fields = formatted_fields(values)
+        narrative = WordNarrative(zin.read(NUMBERING_PART)) if rich_fields else None
         for item in zin.infolist():
+            if narrative and item.filename == NUMBERING_PART:
+                continue
             data = zin.read(item.filename)
             if item.filename == "word/document.xml":
                 root = etree.fromstring(data)
@@ -303,11 +314,20 @@ def _generate_general_docx(values, output_path, photos=None, map_image=None, *, 
                 prepare_floor_rows(root, values)
                 if revaluation:
                     relabel_revaluation(root)
+                rich_paragraphs = {}
                 for sdt in root.xpath(".//w:sdt", namespaces=NS):
                     tags = sdt.xpath("./w:sdtPr/w:tag/@w:val", namespaces=NS)
+                    if tags and tags[0] in rich_fields:
+                        paragraph = sdt.find(f"./{qn('sdtContent')}/{qn('p')}")
+                        if paragraph is not None:
+                            rich_paragraphs[paragraph] = rich_fields[tags[0]]
+                            continue
                     if tags and tags[0] in replacements:
                         replace_sdt_text(sdt, str(replacements[tags[0]]))
                 for paragraph in root.xpath(".//w:p", namespaces=NS):
+                    if paragraph in rich_paragraphs:
+                        narrative.render(paragraph, rich_paragraphs[paragraph])
+                        continue
                     # Replace only tokens from the master. User-entered text is
                     # never normalized or searched again for further tokens.
                     for node in paragraph.xpath("./w:r/w:t", namespaces=NS):
@@ -319,6 +339,8 @@ def _generate_general_docx(values, output_path, photos=None, map_image=None, *, 
                         set_construction_heading(paragraph, values.get("property.status") == "proposed")
                 data = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone="yes")
             zout.writestr(item, data)
+        if narrative:
+            zout.writestr(NUMBERING_PART, narrative.to_xml())
     document = Document(output_path)
     keep_table_opening_together(document)
     document.save(output_path)

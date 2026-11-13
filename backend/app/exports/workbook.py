@@ -143,15 +143,16 @@ def generate_table_export(payload):
             elif kind == "date":
                 cell.number_format = 'dd-mmm-yyyy'
 
-    final_row = max(3, len(rows) + 3)
+    table_range = f"A3:{last_column}{len(rows) + 3}"
     if rows:
-        table = Table(displayName="ValuXExport", ref=f"A3:{last_column}{final_row}")
+        table = Table(displayName="ValuXExport", ref=table_range)
         table.tableStyleInfo = TableStyleInfo(
             name="TableStyleMedium2", showFirstColumn=False, showLastColumn=False,
             showRowStripes=True, showColumnStripes=False,
         )
         sheet.add_table(table)
-        sheet.auto_filter.ref = f"A3:{last_column}{final_row}"
+    else:
+        sheet.auto_filter.ref = table_range
 
     for column_index, (_, label, kind) in enumerate(normalized_columns, start=1):
         values = [label] + [_clean_text(row.get(normalized_columns[column_index - 1][0]), 120) for row in rows[:500]]
@@ -160,7 +161,6 @@ def generate_table_export(payload):
             width = max(width, 14)
         sheet.column_dimensions[get_column_letter(column_index)].width = min(max(width, 11), 38)
 
-    sheet.auto_filter.ref = f"A3:{last_column}{final_row}"
     sheet.print_title_rows = "1:3"
     sheet.page_setup.orientation = "landscape"
     sheet.page_setup.paperSize = sheet.PAPERSIZE_A4

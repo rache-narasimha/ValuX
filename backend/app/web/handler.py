@@ -7,6 +7,8 @@ import re
 import shutil
 import subprocess
 import time
+from datetime import date
+from tempfile import TemporaryDirectory
 from zipfile import BadZipFile, ZipFile
 from io import BytesIO
 from http.server import BaseHTTPRequestHandler
@@ -19,6 +21,8 @@ from openpyxl.utils.exceptions import InvalidFileException
 from ..auth import routes as auth_routes
 from ..auth.service import AuthError
 from ..estimation import extract_estimation_summary, generate_estimation_workbook
+from ..estimation.generator import online_estimation_summary
+from ..estimation.summary import WorkbookTotalsMismatch, verify_generated_estimation
 from ..exports import generate_table_export
 from ..progress import generate_progress_report
 from ..progress.generator import generate_progress_template
@@ -82,6 +86,33 @@ def estimation_summary(state, extracted=None):
 
 def task_code_from(handler, payload=None):
     return str((payload or {}).get("taskCode") or handler.headers.get("X-Task-Code") or "").strip()
+
+
+def validate_online_estimation(state):
+    details = state.get("details")
+    if not isinstance(details, dict) or details.get("workMode") != "online":
+        raise ValueError("Select Fill online before preparing a completed estimate.")
+    fields = {"estimateDate": "Date of Estimation", "place": "Place", "applicantName": "Name of the Applicant",
+              "workAddress": "Address of the Work", "workDescription": "Name of the Work"}
+    for key, label in fields.items():
+        if not isinstance(details.get(key), str) or not details[key].strip():
+            raise ValueError(f"Enter {label} before preparing the estimate.")
+    try:
+        date.fromisoformat(details["estimateDate"])
+    except ValueError:
+        raise ValueError("Enter a valid Date of Estimation.") from None
+    if state.get("propertyType") not in {"residential", "commercial", "industrial"} or not all(
+        isinstance(state.get(key), str) and state[key].strip() for key in ("construction", "subtype")
+    ):
+        raise ValueError("Complete the property configuration before preparing the estimate.")
+    if not isinstance(state.get("components"), list) or not state["components"]:
+        raise ValueError("Add at least one property component.")
+    for component in state["components"]:
+        if not isinstance(component, dict) or not isinstance(component.get("sheets", []), list):
+            raise ValueError("Review the estimation component configuration.")
+        if any(not isinstance(sheet, dict) for sheet in component.get("sheets", [])):
+            raise ValueError("Review the estimation floor configuration.")
+
 
 class Handler(BaseHTTPRequestHandler):
     def send_json(self, payload, status=200, headers=None):
@@ -282,7 +313,7 @@ class Handler(BaseHTTPRequestHandler):
         if request_path in {"/api/valuation/retrospective/upload", "/api/progress/retrospective/upload"}:
             self.handle_retrospective_report_upload(progress=request_path.startswith("/api/progress/"))
             return
-        if request_path in {"/api/estimation/workbook", "/api/estimation/preview"}:
+        if request_path in {"/api/estimation/workbook", "/api/estimation/preview", "/api/estimation/totals"}:
             self.handle_estimation_generation(request_path)
             return
         if request_path in {"/api/progress/generate", "/api/progress/preview", "/api/progress/template"}:
@@ -406,36 +437,50 @@ class Handler(BaseHTTPRequestHandler):
             state = payload.get("state")
             if not isinstance(state, dict):
                 raise ValueError("The estimation form state is missing.")
-            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
             is_preview = request_path.endswith("/preview")
             mode = "offline" if payload.get("mode") == "offline" else "completed"
+            preview_id = str(payload.get("preview_id") or "")
+            preview_input = None
+            totals_only = request_path.endswith("/totals")
+            if task_code and mode == "completed":
+                state, preview_input = report_service.online_estimation_draft(
+                    task_code, session, None if is_preview else preview_id,
+                )
+            if mode == "completed":
+                validate_online_estimation(state)
+            if totals_only:
+                if mode != "completed":
+                    raise ValueError("Select Fill online to calculate estimation totals.")
+                self.send_json({"ok": True, "summary": online_estimation_summary(state)})
+                return
+            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
             generation_id = str(time.time_ns())
-            preview_input = report_service.preview_input_fingerprint(task_code, session) if task_code and is_preview else None
             generated = generate_estimation_workbook(state, mode=mode)
             if is_preview:
-                xlsx_path = OUTPUT_DIR / f"estimation-preview-{generation_id}.xlsx"
-                pdf_path = xlsx_path.with_suffix(".pdf")
-                xlsx_path.write_bytes(generated.content)
-                try:
+                pdf_name = f"estimation-preview-{generation_id}.pdf"
+                with TemporaryDirectory(prefix="valux-estimation-preview-") as temporary:
+                    root = Path(temporary)
+                    xlsx_path = generated.save(root / Path(pdf_name).with_suffix(".xlsx"))
                     subprocess.run(
-                        [str(SOFFICE), "--headless", "--convert-to", "pdf", "--outdir", str(OUTPUT_DIR), str(xlsx_path)],
+                        [str(SOFFICE), f"-env:UserInstallation={(root / 'profile').as_uri()}",
+                         "--headless", "--convert-to", "pdf", "--outdir", str(root), str(xlsx_path)],
                         check=True,
                         capture_output=True,
                         text=True,
                         timeout=90,
                     )
-                finally:
-                    xlsx_path.unlink(missing_ok=True)
-                if not pdf_path.exists():
-                    raise RuntimeError("Workbook preview conversion did not produce a PDF.")
+                    pdf = (root / pdf_name).read_bytes()
                 artifact = None
-                if task_code:
+                if task_code and mode == "completed":
                     artifact = report_service.register_artifact(
-                        task_code, session, content=pdf_path.read_bytes(), filename=pdf_path.name,
+                        task_code, session, content=pdf, filename=pdf_name,
                         artifact_type="preview_pdf", source="generated", payload=state, current=False,
                         preview_token=generation_id, preview_input=preview_input,
                     )
-                self.send_json({"ok": True, "preview": artifact["download"] if artifact else f"/previews/{pdf_path.name}?v={generation_id}", "preview_id": generation_id})
+                else:
+                    (OUTPUT_DIR / pdf_name).write_bytes(pdf)
+                self.send_json({"ok": True, "preview": artifact["download"] if artifact else f"/previews/{pdf_name}?v={generation_id}",
+                                "preview_id": generation_id, "summary": generated.summary})
                 return
 
             if mode == "offline" and task_code:
@@ -443,13 +488,16 @@ class Handler(BaseHTTPRequestHandler):
             report_url = ""
             registered = False
             if mode == "completed":
+                try:
+                    verify_generated_estimation(generated, SOFFICE)
+                except WorkbookTotalsMismatch as error:
+                    raise report_service.ReportDataError(str(error), 409, "estimation_workbook_mismatch") from error
                 if task_code:
-                    extracted = extract_estimation_summary(generated.content)
-                    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else estimation_summary(state, extracted)
                     artifact = report_service.register_artifact(
                         task_code, session, content=generated.content, filename=generated.file_name,
                         artifact_type="estimation_xlsx", source="generated", payload=state,
-                        summary=summary,
+                        summary=generated.summary,
+                        estimation_preview=(preview_id, preview_input),
                     )
                     report_url = artifact["download"]
                     registered = True

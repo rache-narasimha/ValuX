@@ -11,7 +11,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from backend.app.auth.config import DATABASE_URL
-from backend.app.business_time import tenant_today
+from backend.app.business_time import TENANT_TIME_ZONE, tenant_today
 from backend.app.reports import service as report_service
 from backend.app.workflow import service
 
@@ -173,6 +173,10 @@ try:
     assert service.eligible_valuations({"search": suffix})["items"][0]["id"] == original_code
     child = service.create_task(child_input, father)
     assert child["reportGroup"] == "revaluation" and child["reportKey"] == "valuation-general"
+    revaluation_filter = {"group": "revaluation", "search": child["id"]}
+    assert [item["id"] for item in service.list_tasks({**revaluation_filter, "valuationType": "general"}, employee)["items"]] == [child["id"]]
+    assert service.list_tasks({**revaluation_filter, "valuationType": "agricultural"}, employee)["total"] == 0
+    assert service.list_tasks({**revaluation_filter, "group": "valuation", "valuationType": "general"}, employee)["total"] == 0
     assert child["linkedValuationId"] == original_code and child["linkedValuationArtifactId"] == original_file
     assert child["preparationSource"] == "online" and not child["revaluationManualEntry"]
     child_draft = report_service.get_draft(child["id"], father)
@@ -243,6 +247,42 @@ try:
         expect_error(lambda: service.list_tasks(options, employee), "forbidden")
     valuation = service.close(valuation["id"], {"version": valuation["version"], "note": "Settled."}, employee)
     assert valuation["status"] == "Closed"
+
+    # Match local calendar boundaries even when they fall on the previous UTC day.
+    reference = today.replace(day=1)
+    assigned = reference - timedelta(days=1)
+    local_midnight = datetime.combine(reference, time.min, TENANT_TIME_ZONE)
+    filter_tasks = {}
+    for report_type, status, completed, closed in (
+        ("agricultural", "Completed", local_midnight, None),
+        ("general", "Closed", local_midnight - timedelta(days=1), local_midnight),
+    ):
+        task = service.create_task({
+            **payload(f"valuation-{report_type}", f"Date basis {suffix} {report_type}"),
+            "assignedDate": assigned.isoformat(),
+            "dueDate": reference.isoformat(),
+        }, father)
+        database.execute(
+            "UPDATE app.tasks SET status=%s, completed_at=%s, closed_at=%s WHERE id=%s",
+            (status, completed, closed, uuid.UUID(task["internalId"])),
+        )
+        filter_tasks[report_type] = task["id"]
+        options = {
+            "group": "valuation", "status": status, "search": f"Date basis {suffix}",
+            "period": "monthly", "periodReference": reference.isoformat(),
+        }
+        assert service.list_tasks(options, employee)["total"] == 0
+        results = service.list_tasks({**options, "dateBasis": "status", "valuationType": report_type}, employee)
+        assert results["total"] == 1 and results["items"][0]["id"] == task["id"]
+        other_type = "general" if report_type == "agricultural" else "agricultural"
+        assert service.list_tasks({**options, "dateBasis": "status", "valuationType": other_type}, employee)["total"] == 0
+        assert service.list_tasks({**options, "periodReference": assigned.isoformat()}, employee)["total"] == 1
+    for report_type, task_id in filter_tasks.items():
+        result = service.list_tasks({"group": "valuation", "valuationType": report_type, "search": f"Date basis {suffix}"}, father)
+        assert result["total"] == 1 and result["items"][0]["id"] == task_id
+    expect_error(lambda: service.list_tasks({"group": "estimation", "valuationType": "general"}, father), "invalid_request")
+    expect_error(lambda: service.list_tasks({"status": "In Progress", "dateBasis": "status"}, father), "invalid_request")
+
     def age_closed(days):
         database.execute("UPDATE app.tasks SET closed_at=%s WHERE id=%s",
                          (datetime.combine(today - timedelta(days=days), time(12), UTC), uuid.UUID(valuation["internalId"])))

@@ -67,28 +67,36 @@
     const payment = paymentSummary.status;
     const paymentAction = paymentControl(task, options);
     const rowAction = reportDownloadControl(task) || openTaskControl(task);
+    const statusDateField = TaskStore.STATUS_DATE_FIELDS[task.status];
+    const statusDate = statusDateField ? task[statusDateField] : null;
     if (options.variant === "table") {
+      const assignedDateNote = task.assignedDate ? `<small class="task-table-date">Assigned <span>${date(task.assignedDate)}</span></small>` : "";
+      const statusDateNote = statusDate ? `<small class="task-table-date">${escape(task.status)} on <span>${date(statusDate)}</span></small>` : "";
       return `<article class="task-table-row" data-task-id="${escape(task.id)}">
         <a class="task-row-link" href="${taskUrl(task)}" aria-hidden="true" tabindex="-1"></a>
-        <div class="task-table-id"><span class="task-id">${escape(task.id)}</span></div>
+        <div class="task-table-id"><span class="task-id">${escape(task.id)}</span>${assignedDateNote}</div>
         <div class="task-table-person"><strong>${escape(task.customerName)}</strong><small>${escape(task.reportLabel)} ${preparationBadge(task)}</small></div>
         <div class="task-table-property"><span>${escape(task.propertyBrief)}</span><small>${escape(task.institutionName)} · ${escape(task.branch)}</small></div>
         <div class="task-table-assignee"><span class="table-avatar">${escape(assignee.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase())}</span><strong>${escape(assignee)}</strong></div>
-        <div class="task-table-due"><strong>${date(task.dueDate)}</strong></div>
-        <div class="task-table-status"><span class="status-badge ${statusClass(task.status)}">${escape(task.status)}</span>${hold}</div>
+        <div class="task-table-due">${statusDateField ? "" : `<strong>${date(task.dueDate)}</strong>`}</div>
+        <div class="task-table-status"><span class="status-badge ${statusClass(task.status)}">${escape(task.status)}</span>${statusDateNote}${hold}</div>
         <div class="task-table-payment"><span class="payment-badge ${paymentClass(payment)}">${escape(payment)}</span><small>${paymentSummary.outstanding === null ? "N/A" : `${currency(paymentSummary.outstanding)} due`}</small>${paymentAction}</div>
         <div class="task-table-action">${rowAction}</div>
       </article>`;
     }
     return `<article class="task-row" data-task-id="${escape(task.id)}">
-      <a class="task-row-link" href="${taskUrl(task)}" aria-hidden="true" tabindex="-1"></a>
+      <a class="task-row-link" href="${taskUrl(task)}" title="${escape(task.reportName)}" aria-hidden="true" tabindex="-1"></a>
       <div class="task-row-main">
         <p class="task-id">${escape(task.id)}</p>
-        <h3>${escape(task.reportName)}</h3>
+        <h3>${escape(task.customerName)}</h3>
+        <p class="task-row-report-type">${escape(task.reportLabel)}</p>
         <p>${escape(task.institutionName)} · ${escape(task.branch)}</p>
       </div>
       <div class="task-row-detail task-wide"><small>Assigned to</small><strong>${escape(assignee)}</strong></div>
-      <div class="task-row-detail task-wide"><small>Due date</small><strong>${date(task.dueDate)}</strong></div>
+      <div class="task-row-detail task-row-dates task-wide">
+        <small>Assigned</small><strong>${date(task.assignedDate)}</strong>
+        <small>${statusDateField ? escape(task.status) : "Due"}</small><strong>${date(statusDateField ? statusDate : task.dueDate)}</strong>
+      </div>
       <div class="task-row-meta">
         <span class="status-badge ${statusClass(task.status)}">${escape(task.status)}</span>${hold}
       </div>

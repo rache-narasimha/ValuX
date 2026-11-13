@@ -31,12 +31,12 @@ const browserStorageUsers = filesUnder(javascriptRoot)
 assert.deepEqual(browserStorageUsers.sort(), [
   "frontend/assets/js/components/report-calculator.js",
   "frontend/assets/js/components/report-layout.js",
+  "frontend/assets/js/components/valuation-examples.js",
   "frontend/assets/js/core/app-shell.js",
   "frontend/assets/js/core/appearance.js",
   "frontend/assets/js/core/report-data.js",
-  "frontend/assets/js/core/shared.js",
   "frontend/assets/js/pages/auth.js",
-].sort(), "Browser storage must remain limited to appearance/navigation, practice drafts, task-scoped daily calculator history, and temporary auth recovery codes");
+].sort(), "Browser storage must remain limited to UI preferences, practice drafts, task-scoped daily calculator history, and temporary auth recovery codes");
 
 for (const [htmlPath, scriptPath] of pairs) {
   const html = fs.readFileSync(path.join(root, htmlPath), "utf8");
@@ -221,8 +221,8 @@ assert.match(
 );
 assert.match(
   estimationController,
-  /ReportData\.setPreview\(\{ id: preview\.preview_id, url: preview\.preview \}\)/,
-  "Estimation preview approval must be retained by the shared report-data boundary",
+  /ReportData\.setPreview\(\{ id: restore \? restoredPreview\.id : preview\.preview_id, url, totalsReviewed: true \}\)/,
+  "Estimation preview approval must be retained by the shared report-data boundary after showing server totals",
 );
 
 console.log("PASS: frontend pages, controllers, IDs, and local assets are consistent");

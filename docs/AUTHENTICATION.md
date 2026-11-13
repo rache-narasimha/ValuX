@@ -13,7 +13,7 @@ codes during activation.
 All identity objects live in the dedicated `auth` schema. The `public` schema
 contains no ValuX tables and does not allow general object creation. A
 one-shot migration service uses the database owner account; the web process
-uses the non-superuser `valsphere_app` role with only the DML privileges needed
+uses the configured non-superuser role (`valux_app` by default) with only the DML privileges needed
 by authentication workflows. The migration ledger is not readable or writable
 by the web role.
 
@@ -78,10 +78,10 @@ For manual Gmail testing, run:
 python3 scripts/configure_gmail_smtp.py
 ```
 
-The script uses the same safe approach as Everyday Tools: it hides the Google
-App Password, sends a test message before changing configuration, writes only
-to ignored `.env`, sets file permissions to owner-only, and recreates the app
-container. It never reads or copies the Everyday Tools credential.
+The script defaults to `support.valux@gmail.com`. Enter a Google App Password
+created for the selected sender account. The script hides the password,
+verifies the SMTP server's TLS certificate, and sends a test message before
+updating the ignored, owner-only `.env` and recreating the app container.
 
 Set `APP_BASE_URL` to the address that the recipient device can open, such as
 `http://192.168.1.3:4180`. Verification and reset tokens are carried in the URL

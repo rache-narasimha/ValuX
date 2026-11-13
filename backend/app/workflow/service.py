@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from copy import deepcopy
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher
 from typing import Any
@@ -14,7 +14,7 @@ from psycopg import IntegrityError
 from psycopg.types.json import Jsonb
 
 from ..auth.database import connection
-from ..business_time import TENANT_TIME_ZONE_NAME, tenant_date, tenant_today
+from ..business_time import TENANT_TIME_ZONE, TENANT_TIME_ZONE_NAME, tenant_date, tenant_today
 
 
 STATUSES = ("Unassigned", "In Progress", "On Hold", "Completed", "Closed", "Cancelled")
@@ -640,6 +640,12 @@ def list_tasks(options: dict[str, Any], session: dict[str, Any] | None = None) -
         if value and not (key == "group" and value == "all"):
             conditions.append(clause)
             params.append(value)
+    valuation_type = _text(options.get("valuationType"))
+    if valuation_type:
+        if options.get("group") not in {"valuation", "revaluation"} or valuation_type not in {"general", "agricultural"}:
+            raise WorkflowError("Select a valid valuation type for Valuation or Re-Valuation tasks.")
+        conditions.append("t.report_key = %s")
+        params.append(f"valuation-{valuation_type}")
     preparation = _text(options.get("preparationSource"))
     if preparation:
         if not session or session.get("role") != "father":
@@ -668,6 +674,11 @@ def list_tasks(options: dict[str, Any], session: dict[str, Any] | None = None) -
         conditions.append(f"CONCAT_WS(' ', t.task_code, t.report_key, t.report_group, ({report_label_case}), t.customer_name, t.property_brief, t.assignee_name_snapshot, t.institution_name_snapshot, t.institution_code_snapshot, t.branch, t.status, t.hold_reason, ({payment_case})) ILIKE %s")
         params.append(f"%{search}%")
     period = _text(options.get("period"))
+    date_basis = _text(options.get("dateBasis")) or "assigned"
+    status_dates = {"Completed": "completed_at", "Closed": "closed_at"}
+    status_date = status_dates.get(_text(options.get("status")))
+    if date_basis not in {"assigned", "status"} or (date_basis == "status" and not status_date):
+        raise WorkflowError("Select a valid date basis for this task status.")
     if period:
         reference = _date(options.get("periodReference") or tenant_today().isoformat(), "Select a valid period date.")
         if period == "daily":
@@ -681,8 +692,12 @@ def list_tasks(options: dict[str, Any], session: dict[str, Any] | None = None) -
             end = date(reference.year + (reference.month == 12), 1 if reference.month == 12 else reference.month + 1, 1)
         else:
             raise WorkflowError("Select a valid task-list period.")
-        conditions.append("t.assigned_date >= %s AND t.assigned_date < %s")
-        params.extend((start, end))
+        if date_basis == "status":
+            conditions.append(f"t.{status_date} >= %s AND t.{status_date} < %s")
+            params.extend(datetime.combine(day, time.min, tzinfo=TENANT_TIME_ZONE) for day in (start, end))
+        else:
+            conditions.append("t.assigned_date >= %s AND t.assigned_date < %s")
+            params.extend((start, end))
     payment_filter = _text(options.get("payment"))
     if payment_filter in {"Partially Received,Received", "Partially Received,Pending"}:
         if not session or session.get("role") != "father":

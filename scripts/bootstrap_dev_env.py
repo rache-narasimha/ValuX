@@ -57,10 +57,10 @@ def main() -> int:
     if ENV_FILE.exists():
         existing = ENV_FILE.read_text(encoding="utf-8")
         current = parsed_environment(existing)
-        owner_user = current.get("POSTGRES_USER", "valsphere")
+        owner_user = current.get("POSTGRES_USER", "valux")
         owner_password = current.get("POSTGRES_PASSWORD", "")
-        database_name = "valsphere"
-        runtime_user = current.get("APP_DATABASE_USER", "valsphere_app")
+        database_name = current.get("POSTGRES_DB", owner_user)
+        runtime_user = current.get("APP_DATABASE_USER", f"{owner_user}_app")
         runtime_password = current.get(
             "APP_DATABASE_PASSWORD", secrets.token_urlsafe(30)
         )
@@ -86,17 +86,17 @@ def main() -> int:
     father_password = password()
     employee_password = password()
     values = {
-        "POSTGRES_DB": "valsphere",
-        "POSTGRES_USER": "valsphere",
+        "POSTGRES_DB": "valux",
+        "POSTGRES_USER": "valux",
         "POSTGRES_PASSWORD": database_password,
         "MIGRATION_DATABASE_URL": (
-            f"postgresql://valsphere:{database_password}@postgres:5432/valsphere"
+            f"postgresql://valux:{database_password}@postgres:5432/valux"
         ),
-        "APP_DATABASE_USER": "valsphere_app",
+        "APP_DATABASE_USER": "valux_app",
         "APP_DATABASE_PASSWORD": runtime_database_password,
         "DATABASE_URL": (
-            "postgresql://valsphere_app:"
-            f"{runtime_database_password}@postgres:5432/valsphere"
+            "postgresql://valux_app:"
+            f"{runtime_database_password}@postgres:5432/valux"
         ),
         "AUTH_ENCRYPTION_KEY": base64.urlsafe_b64encode(
             secrets.token_bytes(32)
@@ -104,8 +104,8 @@ def main() -> int:
         "AUTH_RECOVERY_PEPPER": secrets.token_urlsafe(48),
         "APP_BASE_URL": "http://192.168.1.3:4180",
         "COOKIE_SECURE": "false",
-        "SESSION_IDLE_MINUTES": "30",
-        "SESSION_ABSOLUTE_HOURS": "12",
+        "SESSION_IDLE_MINUTES": "60",
+        "SESSION_ABSOLUTE_HOURS": "24",
         "EMAIL_MODE": "mailpit",
         "SMTP_HOST": "mailpit",
         "SMTP_PORT": "1025",

@@ -47,8 +47,20 @@
         <section class="dashboard-filters" aria-label="Dashboard filters">
           <section class="report-category-tabs" id="report-navigation" aria-label="Report workspaces">
             <button type="button" class="active" data-group="all"><span>All reports</span><strong id="count-all">0</strong></button>
-            <button type="button" data-group="valuation"><span>Valuation</span><strong id="count-valuation">0</strong></button>
-            <button type="button" data-group="revaluation"><span>Re-Valuation</span><strong id="count-revaluation">0</strong></button>
+            <div class="report-type-split">
+              <button type="button" data-group="valuation"><span>Valuation</span><strong id="count-valuation">0</strong></button>
+              <button type="button" class="report-type-chevron" aria-label="Valuation type" aria-expanded="false" aria-controls="dashboard-valuation-types"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+              <div id="dashboard-valuation-types" class="report-type-options" role="group" aria-label="Valuation type" hidden>
+                <button type="button" data-type="">All</button><button type="button" data-type="general">General</button><button type="button" data-type="agricultural">Agricultural</button>
+              </div>
+            </div>
+            <div class="report-type-split">
+              <button type="button" data-group="revaluation"><span>Re-Valuation</span><strong id="count-revaluation">0</strong></button>
+              <button type="button" class="report-type-chevron" aria-label="Re-Valuation type" aria-expanded="false" aria-controls="dashboard-revaluation-types"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+              <div id="dashboard-revaluation-types" class="report-type-options" role="group" aria-label="Re-Valuation type" hidden>
+                <button type="button" data-type="">All</button><button type="button" data-type="general">General</button><button type="button" data-type="agricultural">Agricultural</button>
+              </div>
+            </div>
             <button type="button" data-group="estimation"><span>Estimation</span><strong id="count-estimation">0</strong></button>
             <button type="button" data-group="progress"><span>Progress</span><strong id="count-progress">0</strong></button>
             <button type="button" data-group="completion"><span>Completion</span><strong id="count-completion">0</strong></button>

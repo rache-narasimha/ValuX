@@ -201,7 +201,10 @@
     } else if (task.reportGroup === "valuation") {
       const children = task.revaluations || [];
       title.textContent = `Re-Valuations (${children.length})`;
-      list.innerHTML = children.length ? `<ul>${children.map((child) => `<li>${taskLink(child.id)} · ${WorkflowUI.date(child.assignedDate)} · ${WorkflowUI.escape(child.status)}</li>`).join("")}</ul>`
+      list.innerHTML = children.length ? `<table class="revaluation-history" aria-labelledby="revaluation-links-title">
+        <thead><tr><th scope="col">Task ID</th><th scope="col">Assigned on</th><th scope="col">Status</th></tr></thead>
+        <tbody>${children.map((child) => `<tr><td>${taskLink(child.id)}</td><td>${WorkflowUI.date(child.assignedDate)}</td><td><span class="status-badge ${WorkflowUI.statusClass(child.status)}">${WorkflowUI.escape(child.status)}</span></td></tr>`).join("")}</tbody>
+      </table>`
         : "<p>No linked Re-Valuations.</p>";
     }
   }

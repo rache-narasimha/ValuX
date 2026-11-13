@@ -64,8 +64,8 @@
 }
 .task-row {
   position: relative;
-  grid-template-columns: minmax(250px, 2fr) minmax(110px, .75fr) minmax(105px, .7fr) minmax(110px, .75fr) minmax(175px, 1.15fr) 44px;
-  gap: 14px;
+  grid-template-columns: minmax(0, 2.35fr) minmax(110px, .78fr) minmax(156px, 1fr) minmax(110px, .68fr) 8rem 36px;
+  gap: clamp(12px, 1.5vw, 28px);
 }
 .task-row > * { min-width: 0; }
 .task-row-link { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
@@ -73,12 +73,17 @@
 .task-row-detail,
 .task-row-meta,
 .task-row-payment { pointer-events: none; }
+.task-row-main h3,
+.task-row-main .task-row-report-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-row-main h3 { margin-bottom: 2px; }
+.task-row-report-type { margin: 0 0 4px; color: var(--ink); font-size: .78rem; font-weight: 650; }
 .task-row-detail,
 .task-row-payment { display: grid; gap: 4px; min-width: 0; }
 .task-row-detail small,
 .task-row-payment small,
 .task-secondary { color: var(--muted); font-size: 0.68rem; }
 .task-row-detail strong { overflow: hidden; color: var(--ink); font-size: 0.76rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.task-row-dates { grid-template-columns: 4rem max-content; align-items: baseline; column-gap: 8px; font-variant-numeric: tabular-nums; }
 .task-row-meta { justify-items: start; }
 .task-row-payment { justify-items: start; }
 .task-row-action,
@@ -233,7 +238,7 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 1250px) {
   .metric-grid-five { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .filter-bar-extended { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .task-row { grid-template-columns: minmax(230px, 2fr) minmax(110px, .8fr) minmax(110px, .8fr) 40px; }
+  .task-row { grid-template-columns: minmax(0, 1fr) 110px 8rem 36px; }
   .task-row-detail.task-wide { display: none; }
 }
 
@@ -244,7 +249,7 @@ body.modal-open { overflow: hidden; }
   .practice-grid { grid-template-columns: 1fr; }
   .dashboard-span-two,
   .pending-card { grid-column: auto; }
-  .task-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .task-row { grid-template-columns: minmax(0, 1fr) 36px; }
   .task-row .task-wide { display: none; }
   .task-row-meta { grid-column: 1; grid-row: 2; }
   .task-row .task-row-action { grid-column: 2; grid-row: 1 / span 2; }

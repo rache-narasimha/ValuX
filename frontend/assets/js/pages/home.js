@@ -10,10 +10,20 @@
     progress: "Construction progress assessment assignments.",
     completion: "Completion report assignments.",
   };
-  let selectedGroup = "all";
-  let selectedWorkloadPeriod = "monthly";
-  let selectedWorkloadReference = ValuxTime.todayDate();
+  const initial = new URLSearchParams(window.location.search);
+  const initialPeriod = initial.get("period");
+  const categoryButtons = document.querySelectorAll("#report-navigation button[data-group]");
+  const typePickers = document.querySelectorAll("#report-navigation .report-type-split");
+  const valuationTypes = { valuation: "", revaluation: "" };
+  const useStatusDates = initial.get("dateBasis") === "status";
+  let selectedGroup = Object.hasOwn(descriptions, initial.get("group")) ? initial.get("group") : "all";
+  let selectedWorkloadPeriod = ["", "daily", "weekly", "monthly", "yearly"].includes(initialPeriod) ? initialPeriod : "monthly";
+  let selectedWorkloadReference = ValuxTime.parseDate(initial.get("periodReference") || "") || ValuxTime.todayDate();
   let selectedFinanceInstitution = "";
+  const initialType = initial.get("valuationType");
+  if (Object.hasOwn(valuationTypes, selectedGroup) && TaskStore.VALUATION_TYPES.includes(initialType)) {
+    valuationTypes[selectedGroup] = initialType;
+  }
 
   const storage = TaskStore.storageStatus();
   if (!storage.ok) {
@@ -31,14 +41,27 @@
   }
 
   function groupTasks() {
-    return allVisibleTasks().filter((task) => selectedGroup === "all" || task.reportGroup === selectedGroup);
+    return allVisibleTasks().filter((task) => {
+      if (selectedGroup !== "all" && task.reportGroup !== selectedGroup) return false;
+      const type = valuationTypes[selectedGroup];
+      return !type || task.reportKey === `valuation-${type}`;
+    });
   }
 
   function buildQuery(values = {}) {
     const params = new URLSearchParams(values);
     if (selectedGroup !== "all" && !params.has("group")) params.set("group", selectedGroup);
+    if (params.get("group") === selectedGroup && valuationTypes[selectedGroup]) {
+      params.set("valuationType", valuationTypes[selectedGroup]);
+    }
     if (values.period) params.set("periodReference", isoDate(selectedWorkloadReference));
     return `/tasks${params.size ? `?${params}` : ""}`;
+  }
+
+  function statusQuery(status) {
+    const filters = { status, period: selectedWorkloadPeriod };
+    if (useStatusDates && TaskStore.STATUS_DATE_FIELDS[status]) filters.dateBasis = "status";
+    return buildQuery(filters);
   }
 
   function isoDate(value) {
@@ -180,20 +203,21 @@
     setText("finance-summary-note", `Current payment position for assignments in this period.${notSet ? ` ${notSet} ${notSet === 1 ? "assignment has" : "assignments have"} no fee recorded.` : ""}`);
   }
 
-  function renderDistribution(tasks) {
-    const entries = InstitutionMetrics.workflowMix(tasks);
-    const cancelled = tasks.filter((task) => task.status === "Cancelled").length;
+  function renderDistribution(statusTasks, assignedTasks) {
+    const entries = InstitutionMetrics.workflowMix(statusTasks);
+    const cancelled = statusTasks.filter((task) => task.status === "Cancelled").length;
     if (cancelled) entries.push({key: "Cancelled", label: "Cancelled", color: "var(--red)", count: cancelled});
     const total = entries.reduce((sum, entry) => sum + entry.count, 0);
     setText("assignment-status-total", `${total} assignments`);
-    setText("status-period-label", InstitutionMetrics.periodLabel(selectedWorkloadPeriod, selectedWorkloadReference));
+    const periodLabel = InstitutionMetrics.periodLabel(selectedWorkloadPeriod, selectedWorkloadReference);
+    setText("status-period-label", useStatusDates && selectedWorkloadPeriod ? `${periodLabel} · Completed and Closed by status date` : periodLabel);
     const segments = entries.map((entry) => ({
       ...entry, value: entry.count,
-      href: buildQuery({status: entry.key, period: selectedWorkloadPeriod}),
+      href: statusQuery(entry.key),
     }));
     document.getElementById("assignment-status-chart").innerHTML = ring(segments, total, total, total ? "Assignments" : "No assignments") + `<div class="distribution-legend">${legendHeading()}${segments.map((entry) => `<a href="${WorkflowUI.escape(entry.href)}"><i style="--state-color:${entry.color}"></i><span>${entry.label}</span><strong>${entry.count}</strong><small>${percent(entry.count, total)}%</small></a>`).join("")}</div>`;
-    const mix = InstitutionMetrics.reportMix(tasks), maximum = Math.max(1, ...mix.map((entry) => entry.count));
-    setText("report-types-total", `Total: ${tasks.length}`);
+    const mix = InstitutionMetrics.reportMix(assignedTasks), maximum = Math.max(1, ...mix.map((entry) => entry.count));
+    setText("report-types-total", `Total: ${assignedTasks.length}`);
     setText("report-types-period", InstitutionMetrics.periodLabel(selectedWorkloadPeriod, selectedWorkloadReference));
     document.getElementById("dashboard-report-mix").innerHTML = mix.map((entry) => `<a href="${buildQuery({group: entry.key, period: selectedWorkloadPeriod})}" class="report-type-row"><span class="report-type-label">${chartIcon(entry.key)}<span>${entry.label}</span></span><i><b style="width:${entry.count / maximum * 100}%"></b></i><strong>${entry.count}</strong></a>`).join("");
   }
@@ -285,7 +309,10 @@
   function render() {
     const tasks = groupTasks();
     const periodTasks = tasks.filter((task) => TaskStore.matchesPeriod(task, selectedWorkloadPeriod, "assignedDate", selectedWorkloadReference));
-    const count = (status) => periodTasks.filter((task) => task.status === status).length;
+    const statusTasks = useStatusDates ? tasks.filter((task) => TaskStore.matchesPeriod(
+      task, selectedWorkloadPeriod, TaskStore.STATUS_DATE_FIELDS[task.status] || "assignedDate", selectedWorkloadReference,
+    )) : periodTasks;
+    const count = (status) => statusTasks.filter((task) => task.status === status).length;
     const summary = {unassigned: count("Unassigned"), inProgress: count("In Progress"), onHold: count("On Hold"), completed: count("Completed"), closed: count("Closed"), awaitingReview: periodTasks.filter((task) => task.status === "On Hold" && task.holdReason === "Awaiting Review").length};
     const role = WorkflowAccess.currentRole();
     const recentStatus = document.getElementById("recent-status-filter").value;
@@ -294,15 +321,29 @@
     const paymentTasks = tasks.filter((task) => task.status === "Completed")
       .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0, 5);
 
-    setText("dashboard-title", selectedGroup === "all" ? "Property Reports" : `${InstitutionMetrics.REPORT_GROUPS.find(({ key }) => key === selectedGroup).label} Reports`);
+    const subtype = valuationTypes[selectedGroup];
+    const groupLabel = InstitutionMetrics.REPORT_GROUPS.find(({ key }) => key === selectedGroup)?.label;
+    const typeLabel = { general: "General ", agricultural: "Agricultural " }[subtype] || "";
+    setText("dashboard-title", selectedGroup === "all" ? "Property Reports" : `${typeLabel}${groupLabel} Reports`);
     setText("dashboard-description", descriptions[selectedGroup]);
+    for (const button of categoryButtons) {
+      const active = button.dataset.group === selectedGroup;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    }
+    for (const picker of typePickers) {
+      const group = picker.querySelector("[data-group]").dataset.group;
+      for (const option of picker.querySelectorAll("[data-type]")) {
+        option.setAttribute("aria-pressed", String(option.dataset.type === valuationTypes[group]));
+      }
+    }
     setText("metric-unassigned", summary.unassigned);
     setText("metric-progress", summary.inProgress);
     setText("metric-hold", summary.onHold);
     setText("metric-completed", summary.completed);
     setText("metric-closed", summary.closed);
-    setText("completed-card-note", "Payment tracking");
-    setText("closed-card-note", "Payment settled");
+    setText("completed-card-note", useStatusDates && selectedWorkloadPeriod ? "By completion date" : "Payment tracking");
+    setText("closed-card-note", useStatusDates && selectedWorkloadPeriod ? "By closure date" : "Payment settled");
     setText("hold-review-count", role === "father" && summary.awaitingReview ? `${summary.awaitingReview} awaiting my review` : "Needs follow-up");
     document.getElementById("dashboard-period-summary").textContent = InstitutionMetrics.periodLabel(selectedWorkloadPeriod, selectedWorkloadReference);
     const allPeriodTasks = allVisibleTasks().filter((task) => TaskStore.matchesPeriod(task, selectedWorkloadPeriod, "assignedDate", selectedWorkloadReference));
@@ -313,7 +354,7 @@
 
     renderRows("payment-tracking", paymentTasks, "Completed reports awaiting payment action will appear here.");
     renderRows("recent-activity", recent, "No recent activity matches this filter.");
-    renderDistribution(periodTasks);
+    renderDistribution(statusTasks, periodTasks);
     renderBusiness(tasks, role);
     if (role === "father") renderPreparation(periodTasks);
     renderPeriodControls();
@@ -322,13 +363,51 @@
   }
 
   // Dashboard interactions and initial rendering.
-  document.querySelectorAll("#report-navigation button").forEach((button) => button.addEventListener("click", () => {
+  function closeTypePickers() {
+    for (const picker of typePickers) {
+      picker.querySelector(".report-type-options").hidden = true;
+      picker.querySelector(".report-type-chevron").setAttribute("aria-expanded", "false");
+    }
+  }
+
+  categoryButtons.forEach((button) => button.addEventListener("click", () => {
+    closeTypePickers();
     selectedGroup = button.dataset.group;
-    document.querySelectorAll("#report-navigation button").forEach((item) => item.classList.toggle("active", item === button));
     render();
   }));
+  for (const picker of typePickers) {
+    const group = picker.querySelector("[data-group]").dataset.group;
+    const toggle = picker.querySelector(".report-type-chevron");
+    const options = picker.querySelector(".report-type-options");
+    toggle.addEventListener("click", () => {
+      const open = options.hidden;
+      closeTypePickers();
+      options.hidden = !open;
+      toggle.setAttribute("aria-expanded", String(open));
+    });
+    options.addEventListener("click", (event) => {
+      const option = event.target.closest("[data-type]");
+      if (!option) return;
+      selectedGroup = group;
+      valuationTypes[group] = option.dataset.type;
+      closeTypePickers();
+      render();
+      toggle.focus();
+    });
+    picker.addEventListener("focusout", (event) => {
+      if (!picker.contains(event.relatedTarget)) closeTypePickers();
+    });
+    picker.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || options.hidden) return;
+      closeTypePickers();
+      toggle.focus();
+    });
+  }
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".report-type-split")) closeTypePickers();
+  });
   document.querySelectorAll(".metric-card").forEach((card) => card.addEventListener("click", () => {
-    window.location.href = buildQuery({ status: card.dataset.status, period: selectedWorkloadPeriod });
+    window.location.href = statusQuery(card.dataset.status);
   }));
   document.querySelectorAll("[data-dashboard-period]").forEach((button) => button.addEventListener("click", () => {
     selectedWorkloadPeriod = button.dataset.dashboardPeriod;

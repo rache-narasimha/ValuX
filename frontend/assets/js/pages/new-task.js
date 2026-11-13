@@ -5,6 +5,9 @@
   const form = document.getElementById("new-task-form");
   const institutionType = document.getElementById("institution-type");
   const institution = document.getElementById("institution");
+  const branch = document.getElementById("branch");
+  const customerName = document.getElementById("customer-name");
+  const propertyBrief = document.getElementById("property-brief");
   const reportType = document.getElementById("report-type");
   const valuationType = document.getElementById("valuation-type");
   const valuationWrap = document.getElementById("valuation-type-wrap");
@@ -29,6 +32,7 @@
   const linkedStatus = document.getElementById("estimation-picker-status");
   const linkedMore = document.getElementById("estimation-picker-more");
   const currentUser = WorkflowAccess.currentUser();
+  let examplesVisible = true;
   let hasUnsavedChanges = false;
   let linkedOffset = 0;
   let linkedRows = [];
@@ -39,6 +43,61 @@
     includeUnassigned: currentUser.role === "father",
     label: "Assign to employee",
   });
+
+  function assignmentExamples() {
+    const applicant = currentUser.name || "[Applicant Name]";
+    const property = valuationType.value === "agricultural"
+      ? "Agricultural land in [Village], Sy. No. [Survey Number]"
+      : "Residential property in GF, FF & SF, Adoni";
+    return [
+      [branch, "Adoni"],
+      [customerName, `${applicant} S/o [Relative’s Name]`],
+      [propertyBrief, property],
+    ];
+  }
+
+  function refreshAssignmentExamples() {
+    for (const [field, example] of assignmentExamples()) {
+      field.placeholder = examplesVisible && !field.readOnly ? `Example · ${example}` : "";
+    }
+  }
+
+  function installAssignmentExamples() {
+    const sidebarToggle = document.querySelector(".app-sidebar #sidebar-toggle");
+    if (!sidebarToggle) return;
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "app-nav-link assignment-examples-toggle";
+    toggle.title = "Show examples";
+    toggle.setAttribute("aria-label", "Show examples");
+    toggle.innerHTML = `<span class="app-nav-icon">${AppShell.icons.practice}</span><span class="app-nav-label">Show examples</span>`;
+    const instruction = document.createElement("small");
+    instruction.className = "app-nav-label assignment-examples-help";
+    instruction.textContent = "Double-click an empty field to use its example.";
+    sidebarToggle.before(toggle, instruction);
+
+    function refreshToggle() {
+      toggle.setAttribute("aria-pressed", String(examplesVisible));
+      instruction.hidden = !examplesVisible;
+      refreshAssignmentExamples();
+    }
+
+    toggle.addEventListener("click", () => {
+      examplesVisible = !examplesVisible;
+      refreshToggle();
+    });
+    form.addEventListener("dblclick", (event) => {
+      if (!examplesVisible) return;
+      const match = assignmentExamples().find(([field]) => field === event.target);
+      if (!match) return;
+      const [field, example] = match;
+      if (field.readOnly || field.disabled || field.value.trim()) return;
+      field.value = example;
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    refreshToggle();
+  }
 
   // Institution/report options and priority-derived dates.
   function refreshInstitutions() {
@@ -79,9 +138,10 @@
   function setLinkedIdentity(locked) {
     institutionType.disabled = locked;
     institution.disabled = locked || !(window.INSTITUTIONS[institutionType.value] || []).length;
-    document.getElementById("branch").readOnly = locked;
-    document.getElementById("customer-name").readOnly = locked;
-    document.getElementById("property-brief").readOnly = locked;
+    branch.readOnly = locked;
+    customerName.readOnly = locked;
+    propertyBrief.readOnly = locked;
+    refreshAssignmentExamples();
   }
 
   function selectedEstimationLabel(candidate) {
@@ -163,9 +223,9 @@
       institution.add(new Option(linked.institutionName, linked.institutionCode));
     }
     institution.value = linked.institutionCode;
-    document.getElementById("branch").value = linked.branch;
-    document.getElementById("customer-name").value = linked.customerName;
-    document.getElementById("property-brief").value = linked.propertyBrief;
+    branch.value = linked.branch;
+    customerName.value = linked.customerName;
+    propertyBrief.value = linked.propertyBrief;
     setLinkedIdentity(true);
   }
 
@@ -213,9 +273,9 @@
       institutionType: institutionType.value,
       institutionCode: institution.value,
       institutionName: selectedInstitution.name,
-      branch: document.getElementById("branch").value,
-      customerName: document.getElementById("customer-name").value,
-      propertyBrief: document.getElementById("property-brief").value,
+      branch: branch.value,
+      customerName: customerName.value,
+      propertyBrief: propertyBrief.value,
       reportKey,
       linkedEstimationId: isRevaluation() ? "" : linkedEstimation.value,
       linkedValuationId: isRevaluation() ? linkedEstimation.value : "",
@@ -259,7 +319,9 @@
   reportType.addEventListener("change", () => {
     selectLinkedEstimation(null);
     refreshReportType();
+    refreshAssignmentExamples();
   });
+  valuationType.addEventListener("change", refreshAssignmentExamples);
   linkedEstimation.addEventListener("change", () => { applyLinkedEstimation(); hasUnsavedChanges = true; });
   assignedDate.addEventListener("change", () => {
     refreshDates();
@@ -289,6 +351,8 @@
   FormTabOrder.mark(assignedDate);
   refreshDates();
   refreshReportType();
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", installAssignmentExamples);
+  else installAssignmentExamples();
   Object.entries(window.INSTITUTIONS).forEach(([type, institutions]) => {
     const group = document.createElement("optgroup");
     group.label = type === "Bank" ? "Banks" : "NBFCs";

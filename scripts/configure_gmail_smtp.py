@@ -5,12 +5,14 @@ from email.message import EmailMessage
 from getpass import getpass
 from pathlib import Path
 import smtplib
+import ssl
 import subprocess
 import sys
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
+DEFAULT_SENDER = "support.valux@gmail.com"
 
 
 def update_env(values: dict[str, str]) -> None:
@@ -34,7 +36,7 @@ def update_env(values: dict[str, str]) -> None:
 def main() -> int:
     print("ValuX — Gmail sender setup")
     print("The App Password is hidden and saved only in the ignored .env file.")
-    sender = input("Gmail or Google Workspace sender address: ").strip().lower()
+    sender = input(f"Gmail or Google Workspace sender address [{DEFAULT_SENDER}]: ").strip().lower() or DEFAULT_SENDER
     if "@" not in sender or any(character.isspace() for character in sender):
         print("Enter a valid sender email address.", file=sys.stderr)
         return 1
@@ -49,7 +51,7 @@ def main() -> int:
     message.set_content("Gmail SMTP delivery is configured for ValuX development testing.")
     try:
         with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as smtp:
-            smtp.starttls()
+            smtp.starttls(context=ssl.create_default_context())
             smtp.login(sender, app_password)
             smtp.send_message(message)
     except (OSError, smtplib.SMTPException) as error:

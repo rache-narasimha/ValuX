@@ -41,7 +41,19 @@ def main():
     assert str(sheet.page_setup.paperSize) == str(sheet.PAPERSIZE_A4)
     assert sheet.page_setup.fitToWidth == 1
     assert sheet.print_title_rows == "$1:$3"
-    assert len(sheet.tables) == 1
+    table = sheet.tables["ValuXExport"]
+    assert table.autoFilter.ref == table.ref == "A3:E4"
+    assert sheet.auto_filter.ref is None
+    workbook.close()
+
+    empty = generate_table_export({
+        "title": "ValuX assignments",
+        "columns": [{"key": "task", "label": "Task ID"}],
+        "rows": [],
+    })
+    workbook = load_workbook(BytesIO(empty.content))
+    assert not workbook.active.tables
+    assert workbook.active.auto_filter.ref == "A3:A3"
     workbook.close()
 
     try:

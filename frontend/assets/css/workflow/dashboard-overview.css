@@ -209,8 +209,29 @@ html[data-theme="dark"] #dashboard .metric-card.neutral strong { color: #c7b9f8;
 
 #dashboard .dashboard-filters { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem .75rem; padding: .65rem .75rem; margin-bottom: .85rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); }
 #dashboard .dashboard-filters .report-category-tabs { flex: 0 0 auto; max-width: 100%; flex-wrap: wrap; gap: .35rem; padding: 0; margin: 0; border: 0; background: transparent; overflow: visible; }
-#dashboard .dashboard-filters .report-category-tabs button { padding: .45rem .45rem; gap: .35rem; font-family: inherit; font-size: .74rem; font-weight: 600; }
+#dashboard .report-category-tabs [data-group] { padding: .45rem; gap: .35rem; font-family: inherit; font-size: .74rem; font-weight: 600; }
 #dashboard .dashboard-filters .report-category-tabs button.active { background: var(--peach-soft); box-shadow: none; }
+#dashboard .report-type-split { position: relative; display: flex; border-radius: 7px; }
+#dashboard .report-type-split > [data-group] { border-start-end-radius: 0; border-end-end-radius: 0; }
+#dashboard .report-type-split > button.report-type-chevron { border-start-start-radius: 0; border-end-start-radius: 0; padding-inline: .18rem; }
+#dashboard .report-type-chevron svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#dashboard .report-type-split > .active + .report-type-chevron,
+#dashboard .report-type-chevron[aria-expanded="true"] { background: var(--peach-soft); color: var(--peach-dark); }
+#dashboard .report-type-options {
+  position: absolute;
+  z-index: 5;
+  inset-block-start: calc(100% + 4px);
+  inset-inline-end: 0;
+  min-width: 7.5rem;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+#dashboard .report-category-tabs .report-type-options button { width: 100%; justify-content: flex-start; padding: .45rem .55rem; font-size: .74rem; }
+#dashboard .report-type-options button:hover,
+#dashboard .report-type-options button[aria-pressed="true"] { background: var(--peach-soft); color: var(--peach-dark); }
 #dashboard .dashboard-distribution-section { min-width: 0; display: flex; flex-direction: column; justify-content: center; }
 
 #dashboard .institution-type-section {
@@ -365,7 +386,7 @@ html[data-theme="dark"] #dashboard .dashboard-ring-finish { opacity: .8; }
   html[data-theme="dark"] #dashboard .institution-chart::after { opacity: .29; }
 }
 @container (min-width: 1350px) {
-  #dashboard .dashboard-filters .report-category-tabs button { font-size: .8rem; padding-inline: .45rem; }
+  #dashboard .report-category-tabs [data-group] { font-size: .8rem; }
   #dashboard .period-switch button { font-size: .78rem; padding-inline: .6rem; }
   #dashboard .dashboard-period-controls > strong { font-size: .78rem; }
 }
@@ -373,20 +394,34 @@ html[data-theme="dark"] #dashboard .dashboard-ring-finish { opacity: .8; }
 @container (max-width: 1350px) {
   #dashboard .dashboard-filters { padding-inline: .55rem; column-gap: .4rem; }
   #dashboard .dashboard-filters .report-category-tabs { gap: .25rem; }
-  #dashboard .dashboard-filters .report-category-tabs button { padding-inline: .35rem; gap: .3rem; }
+  #dashboard .report-category-tabs [data-group] { padding-inline: .35rem; gap: .3rem; }
   #dashboard .dashboard-period-controls { column-gap: .35rem; }
   #dashboard .period-switch button { padding-inline: .28rem; }
 }
 @container (max-width: 1200px) {
-  #dashboard .dashboard-filters .report-category-tabs button { padding-inline: .22rem; gap: .25rem; }
+  #dashboard .report-category-tabs [data-group] { padding-inline: .22rem; gap: .25rem; }
   #dashboard .dashboard-filters .report-category-tabs strong { padding-inline: .25rem; }
 }
-@container (min-width: 1050px) and (max-width: 1120px) {
+@container (min-width: 980px) and (max-width: 1200px) {
   #dashboard .period-picker label > span { display: none; }
-  #dashboard .period-picker .dashboard-week-select { width: 9.5rem; }
-  #dashboard .period-switch button { padding-inline: .2rem; }
+  #dashboard .period-picker .dashboard-week-select { width: 9rem; }
+  #dashboard .period-picker input { width: 9.5rem; font-size: .72rem; }
+  #dashboard .period-picker select:not(.dashboard-week-select) { width: 5rem; }
+  #dashboard .period-switch button { padding-inline: .22rem; font-size: .7rem; }
   #dashboard .dashboard-period-controls { column-gap: .2rem; }
   #dashboard .dashboard-filters .report-category-tabs { gap: .15rem; }
+  #dashboard .report-category-tabs [data-group] { font-size: .7rem; padding-inline: .16rem; }
+  #dashboard .report-type-split > button.report-type-chevron { padding-inline: .1rem; }
+}
+@container (min-width: 980px) and (max-width: 1050px) {
+  #dashboard .dashboard-period-controls > strong { font-size: .65rem; }
+  #dashboard .period-switch { gap: 1px; padding-inline: 2px; }
+  #dashboard .period-switch button { padding-inline: .16rem; }
+  #dashboard .period-picker .dashboard-week-select { width: 8.25rem; }
+  #dashboard .period-picker input { width: 8.5rem; }
+  #dashboard .report-category-tabs [data-group] { gap: .17rem; padding-inline: .12rem; }
+  #dashboard .dashboard-filters .report-category-tabs strong { padding-inline: .13rem; }
+  #dashboard .dashboard-filters .report-category-tabs { gap: .1rem; }
 }
 @media (max-width: 1250px) {
   #dashboard .dashboard-period-controls { flex-basis: 100%; justify-content: flex-start; }
