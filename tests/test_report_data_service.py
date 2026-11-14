@@ -424,8 +424,12 @@ try:
     assert progress["estimationSummary"]["components"][0]["label"] == "Ground Floor"
     progress_state = {
         "linkedEstimationId": estimation["id"],
+        "requestedReportType": "progress",
         "details": {"reportDate": today.isoformat(), "visitDate": today.isoformat(), "place": "Adoni", "noDeviation": "yes"},
-        "components": [{"id": "ground", "label": "Ground Floor", "estimatedCost": 125000, "completionPercent": 50, "completedCost": 62500, "manualCompleted": False}],
+        "components": [
+            {"id": "ground", "label": "Ground Floor", "estimatedCost": 125000, "completionPercent": 50, "completedCost": 62500, "manualCompleted": False},
+            {"id": "external", "label": "External works", "estimatedCost": 5000, "completionPercent": 30, "completedCost": 1500, "manualCompleted": False},
+        ],
         "bank": {"releases": []},
         "photos": [{"name": "progress.png", "data": f"data:image/png;base64,{png}"}],
     }
@@ -433,6 +437,29 @@ try:
         progress["id"],
         {"reportKey": "progress", "schemaVersion": "1", "revision": 0, "payload": progress_state},
         father,
+    )
+    reports.validate_linked_assessment(progress["id"], progress_state, father)
+    ground, external = progress_state["components"]
+    for invalid_components in (
+        [ground],
+        [ground, ground],
+        [{**ground, "estimatedCost": 125000.01}, external],
+        [{**ground, "estimatedCost": 125000.001}, external],
+        [{**ground, "estimatedCost": "sNaN"}, external],
+        [ground, None],
+        None,
+    ):
+        invalid_payload = {**progress_state, "components": invalid_components}
+        expect_report_error(
+            lambda: reports.register_artifact(
+                progress["id"], father, content=b"invalid progress report", filename="progress.docx",
+                artifact_type="progress_docx", source="generated", payload=invalid_payload,
+            ),
+            "estimation_components_changed",
+        )
+    expect_report_error(
+        lambda: reports.validate_linked_assessment(progress["id"], {**progress_state, "requestedReportType": "completion"}, father),
+        "report_mismatch",
     )
     progress_preview = reports.register_artifact(
         progress["id"], father, content=b"progress preview", filename="progress-preview.pdf",
@@ -451,7 +478,7 @@ try:
     assert progress["reportFresh"] is True
     changed_progress_state = {
         **progress_state,
-        "components": [{**progress_state["components"][0], "completionPercent": 60, "completedCost": 75000}],
+        "components": [{**ground, "completionPercent": 60, "completedCost": 75000}, external],
     }
     reports.save_draft(
         progress["id"],

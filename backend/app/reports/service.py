@@ -644,6 +644,16 @@ def hydrate_media(task_code: str, payload: dict[str, Any], session: dict[str, An
         return hydrate(deepcopy(payload))
 
 
+def validate_linked_assessment(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> None:
+    """Reject an out-of-date online assessment before rendering."""
+    with connection() as database:
+        task = _task(database, task_code)
+        _require_editable(_actor(session), task)
+        if task["report_group"] not in {"progress", "completion"} or task["report_group"] != payload.get("requestedReportType"):
+            raise ReportDataError("This report page does not match the selected task.", 409, "report_mismatch")
+        workflow_service.require_estimation_ready(database, task, payload, verify_components=True)
+
+
 def _compact_payload(value: Any) -> Any:
     if isinstance(value, list):
         return [_compact_payload(item) for item in value]
@@ -915,7 +925,7 @@ def register_artifact(
             elif task["report_group"] in {"progress", "completion"} and ((draft_meta or {}).get("payload") or {}).get("preparationMethod") == "offline":
                 raise ReportDataError("Select Fill online before generating this report.")
             try:
-                workflow_service.require_estimation_ready(database, task, payload, verify_components=retrospective)
+                workflow_service.require_estimation_ready(database, task, payload, verify_components=True)
             except workflow_service.WorkflowError as error:
                 raise ReportDataError(str(error), error.status, error.code) from error
             if retrospective and (

@@ -67,6 +67,19 @@ therefore available without rebuilding the image; backend Python changes need
 only a container restart. Rebuilding is required when the Dockerfile or Python
 dependencies change.
 
+The default Compose project is `valux`. Before changing the project name on an
+existing installation, record the current project name, database volume and
+generated-report directory. Stop the original application before taking the
+final PostgreSQL dump and report-file backup. Restore into the replacement
+database with `pg_restore --no-owner --no-privileges --exit-on-error`, and run
+`db-migrate` with the replacement owner and application role settings to
+recreate the grants. Keep the authentication encryption key and recovery pepper
+with the database backup in restricted storage.
+
+Compare the restored database rows and stored-file checksums with the original.
+Preserve task-file paths relative to `outputs/generated_reports/task_files/`,
+and keep a rollback backup until the new stack serves existing report downloads.
+
 ## Authentication development setup
 
 ```sh

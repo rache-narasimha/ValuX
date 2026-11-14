@@ -529,17 +529,33 @@ def require_estimation_ready(database, task, payload=None, *, verify_components=
         if reviewed != str(task.get("linked_estimation_snapshot_id") or ""):
             raise WorkflowError("Review the revised estimation components and confirm the correction before generating this report.", 409, "estimation_review_required")
     if verify_components or task.get("estimation_review_required"):
-        expected = database.execute("SELECT details,item_key,label,estimated_cost FROM app.estimation_snapshot_items WHERE snapshot_id=%s ORDER BY display_order", (task["linked_estimation_snapshot_id"],)).fetchall()
-        supplied = {str(item.get("id")): item for item in (payload or {}).get("components", [])}
-        matches = len(supplied) == len(expected)
-        for item in expected:
-            key = str((item["details"] or {}).get("sourceId") or item["item_key"])
-            try:
-                amount = Decimal(str(supplied.get(key, {}).get("estimatedCost", -1)))
-                matches = matches and amount.is_finite() and amount.quantize(Decimal("0.01")) == item["estimated_cost"]
-            except (InvalidOperation, ValueError, TypeError):
-                matches = False
-        if not matches:
+        expected = database.execute(
+            """
+            SELECT details, item_key, estimated_cost FROM app.estimation_snapshot_items
+            WHERE snapshot_id = %s
+            """,
+            (task["linked_estimation_snapshot_id"],),
+        ).fetchall()
+        try:
+            components = (payload or {}).get("components")
+            supplied = {
+                str(item["id"]): Decimal(str(item["estimatedCost"]))
+                for item in components
+            }
+        except (InvalidOperation, KeyError, ValueError, TypeError):
+            supplied = {}
+            components = []
+        pinned_costs = {
+            str((item["details"] or {}).get("sourceId") or item["item_key"]): item["estimated_cost"]
+            for item in expected
+        }
+        if (
+            not expected
+            or len(components) != len(expected)
+            or len(supplied) != len(expected)
+            or any(not amount.is_finite() for amount in supplied.values())
+            or supplied != pinned_costs
+        ):
             raise WorkflowError("Reload this report to use the revised estimation component totals.", 409, "estimation_components_changed")
 
 

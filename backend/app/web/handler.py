@@ -788,6 +788,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if task_code:
                 auth_routes.verify_csrf(self)
+                report_service.validate_linked_assessment(task_code, payload, session)
                 payload = report_service.hydrate_media(task_code, payload, session)
             OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
             is_preview = request_path.endswith("/preview")

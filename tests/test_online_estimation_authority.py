@@ -3,6 +3,7 @@
 from dataclasses import replace
 from io import BytesIO
 from datetime import date
+import base64
 import json
 import sys
 from urllib.error import HTTPError
@@ -10,6 +11,7 @@ from urllib.request import Request, urlopen
 import uuid
 
 from openpyxl import load_workbook
+from PIL import Image
 
 from backend.app.estimation.generator import _load_manifest, generate_estimation_workbook, online_estimation_summary
 from backend.app.estimation.summary import WorkbookTotalsMismatch, verify_generated_estimation
@@ -147,6 +149,46 @@ def http_flow():
     assert task["estimationSummary"]["totalEstimatedCost"] == 40.01
     assert task["reportFresh"]
     print("PASS: saved inputs, current preview, Excel download and PostgreSQL snapshot agree")
+
+    completed = request(f"/api/tasks/{code}/complete", {"version": task["version"], "note": "Fixture estimate complete."})["task"]
+    components = completed["estimationSummary"]["components"]
+    png = BytesIO()
+    Image.new("RGB", (32, 32), "white").save(png, format="PNG")
+    photo = {"name": "site.png", "data": "data:image/png;base64," + base64.b64encode(png.getvalue()).decode()}
+    for report_type, percent in (("progress", 50), ("completion", 100)):
+        linked_task = request("/api/tasks", {
+            "institutionCode": "CANARA", "branch": "Adoni", "customerName": name,
+            "propertyBrief": "Synthetic assessment", "reportKey": report_type, "assignee": name,
+            "linkedEstimationId": code, "priority": "Normal", "assignedDate": today, "dueDate": today,
+            "initialNote": "Synthetic assessment task.",
+        }, status=201)["task"]
+        linked_code = linked_task["id"]
+        assessment = {
+            "taskCode": linked_code, "requestedReportType": report_type, "linkedEstimationId": code,
+            "linkedEstimation": {"taskId": code, "applicantName": name, "workDescription": "Test work"},
+            "institution": {"code": "CANARA", "name": "Canara Bank", "branch": "Adoni"},
+            "details": {"reportDate": today, "visitDate": today, "noDeviation": "yes", "place": "Adoni"},
+            "preparationMethod": "online",
+            "components": [
+                {**item, "completionPercent": percent, "completedCost": round(item["estimatedCost"] * percent / 100, 2)}
+                for item in components
+            ], "photos": [photo],
+        }
+        saved_assessment = request(f"/api/tasks/{linked_code}/draft", {
+            "reportKey": report_type, "schemaVersion": "1", "revision": 0, "payload": assessment,
+        })["draft"]["payload"]
+        assessment["photos"] = saved_assessment["photos"]
+        invalid = {**assessment, "components": [{**assessment["components"][0], "estimatedCost": 5000}]}
+        assert request("/api/progress/preview", invalid, status=409)["code"] == "estimation_components_changed"
+        approved = request("/api/progress/preview", assessment)
+        assert approved["reportType"] == report_type
+        assessment["preview_id"] = approved["preview_id"]
+        invalid["preview_id"] = approved["preview_id"]
+        assert request("/api/progress/generate", invalid, status=409)["code"] == "estimation_components_changed"
+        generated = request("/api/progress/generate", assessment)
+        assert generated["summary"]["components"][0]["estimatedCost"] == 40.01
+        assert request(generated["download"], binary=True).startswith(b"PK")
+    print("PASS: online Progress and Completion reject altered costs and generate from pinned component totals")
 
 
 if __name__ == "__main__":

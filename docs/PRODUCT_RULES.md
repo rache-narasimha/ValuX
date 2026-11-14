@@ -662,6 +662,8 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   task. Final online or offline estimates create immutable component-cost snapshots.
   New linked reports use the latest snapshot and assess each component's full final
   amount, including lump sums and adjustments, without measurement-line duplication.
+  The backend verifies every submitted component ID and estimated cost against
+  the pinned snapshot for preview, document generation, and offline submission.
 - When the CEO reopens an eligible estimation under the normal reopening rules,
   the confirmation lists affected non-Cancelled linked reports. Completed or Closed
   dependants reopen as In Progress regardless of their own reopening deadline.

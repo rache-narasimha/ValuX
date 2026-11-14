@@ -1,3 +1,5 @@
+name: valux
+
 services:
   postgres:
     image: postgres:16
@@ -79,9 +81,6 @@ services:
       - ./tests:/app/tests:ro
       - ./scripts:/app/scripts:ro
       - ./outputs/generated_reports:/app/outputs/generated_reports
-      # Compatibility mount for containers created before the source reorganization.
-      # It can be removed after every installation has rebuilt the current image.
-      - ./outputs/generated_reports:/workspace/valuation_app/generated_reports
     depends_on:
       db-migrate:
         condition: service_completed_successfully
