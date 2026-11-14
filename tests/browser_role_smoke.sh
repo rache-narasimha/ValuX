@@ -16,14 +16,14 @@ database_name="$(docker compose exec -T postgres printenv POSTGRES_DB | tr -d '\
 
 create_session() {
   local login_id="$1"
-  docker compose exec -T -e VALUX_QA_LOGIN_ID="$login_id" valuation-report python -c \
+  docker compose exec -T -e VALUX_QA_LOGIN_ID="$login_id" app python -c \
     'import os; from backend.app.auth import service; from backend.app.auth.database import connection; login=os.environ["VALUX_QA_LOGIN_ID"]; manager=connection(); database=manager.__enter__(); user=database.execute("SELECT id FROM auth.users WHERE user_id = %s", (login,)).fetchone(); manager.__exit__(None, None, None); assert user, f"Missing QA login: {login}"; print(service.create_session(user["id"], "full", None, "127.0.0.1", "ValuX browser smoke test"))'
 }
 
 revoke_session() {
   local token="$1"
   [[ -z "$token" ]] && return
-  docker compose exec -T -e VALUX_QA_REVOKE_TOKEN="$token" valuation-report python -c \
+  docker compose exec -T -e VALUX_QA_REVOKE_TOKEN="$token" app python -c \
     'import os; from backend.app.auth import service; service.revoke_session(os.environ["VALUX_QA_REVOKE_TOKEN"], "127.0.0.1")' >/dev/null
 }
 
@@ -44,7 +44,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-qa_task_code="$(docker compose exec -T -e VALUX_QA_TASK_MARKER="$qa_task_marker" valuation-report \
+qa_task_code="$(docker compose exec -T -e VALUX_QA_TASK_MARKER="$qa_task_marker" app \
   python -m tests.browser_workflow_seed seed | tr -d '\r')"
 [[ -n "$qa_task_code" ]]
 qa_report_path="/valuation/general?task=$qa_task_code"

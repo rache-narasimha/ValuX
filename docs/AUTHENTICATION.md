@@ -42,7 +42,7 @@ Run commands from `valuation_app/`.
 Provision an account and enter a one-time password without echoing it:
 
 ```sh
-docker compose exec valuation-report python -m backend.app.auth.cli provision \
+docker compose exec app python -m backend.app.auth.cli provision \
   --user-id lavk0401 --name "Lavakumar" --role employee
 ```
 
@@ -53,15 +53,15 @@ Assisted recovery revokes sessions, MFA, recovery codes, tokens and the old
 recovery email, then starts the complete activation flow again:
 
 ```sh
-docker compose exec valuation-report python -m backend.app.auth.cli recover \
+docker compose exec app python -m backend.app.auth.cli recover \
   --user-id lavk0401 --generate-password
 ```
 
 Disable or re-enable an account:
 
 ```sh
-docker compose exec valuation-report python -m backend.app.auth.cli disable --user-id lavk0401
-docker compose exec valuation-report python -m backend.app.auth.cli enable --user-id lavk0401
+docker compose exec app python -m backend.app.auth.cli disable --user-id lavk0401
+docker compose exec app python -m backend.app.auth.cli enable --user-id lavk0401
 ```
 
 The operator never receives an existing password, TOTP secret or recovery

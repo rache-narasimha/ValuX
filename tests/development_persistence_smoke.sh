@@ -5,13 +5,13 @@ project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$project_dir"
 
 cleanup() {
-  identifiers=$(docker compose exec -T valuation-report python -m tests.test_development_persistence identify 2>/dev/null || true)
+  identifiers=$(docker compose exec -T app python -m tests.test_development_persistence identify 2>/dev/null || true)
   test -n "$identifiers" || return 0
   set -- $identifiers
   task_code=$1
   user_id=$2
   storage_key=$3
-  docker compose exec -T valuation-report python -m tests.test_development_persistence cleanup-files >/dev/null 2>&1 || true
+  docker compose exec -T app python -m tests.test_development_persistence cleanup-files >/dev/null 2>&1 || true
   docker compose exec -T postgres sh -c 'exec psql -X -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"' psql \
     -v ON_ERROR_STOP=1 -v task_code="$task_code" -v user_id="$user_id" -v storage_key="$storage_key" >/dev/null <<'SQL'
 BEGIN;
@@ -27,14 +27,14 @@ DELETE FROM app.stored_files WHERE storage_key = :'storage_key';
 DELETE FROM auth.users WHERE id = :'user_id'::uuid;
 COMMIT;
 SQL
-  docker compose exec -T valuation-report python -m tests.test_development_persistence finish-cleanup >/dev/null 2>&1 || true
+  docker compose exec -T app python -m tests.test_development_persistence finish-cleanup >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
 
 cleanup
-docker compose exec -T valuation-report python -m tests.test_development_persistence create
-docker compose restart postgres valuation-report >/dev/null
+docker compose exec -T app python -m tests.test_development_persistence create
+docker compose restart postgres app >/dev/null
 docker compose exec -T postgres sh -c 'until pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; do sleep 1; done'
-docker compose exec -T valuation-report python -m tests.test_development_persistence verify
+docker compose exec -T app python -m tests.test_development_persistence verify
 cleanup
 trap - EXIT INT TERM

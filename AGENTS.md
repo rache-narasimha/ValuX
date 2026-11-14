@@ -62,13 +62,13 @@ application.
 - Permission changes: run `node tests/test_workflow_access.js` and the role UI
   smoke test when browser execution is available.
 - Task lifecycle or payment changes: run
-  `docker compose exec -T valuation-report python -m tests.test_workflow_service`,
+  `docker compose exec -T app python -m tests.test_workflow_service`,
   `node tests/test_task_store.js`, `node tests/test_task_store_remote.js`, and
   `node tests/test_workflow_access.js`.
 - Institution persistence changes: run
-  `docker compose exec -T valuation-report python -m tests.test_reference_service`.
+  `docker compose exec -T app python -m tests.test_reference_service`.
 - Task-linked report draft, file, artifact or estimation-snapshot changes: run
-  `docker compose exec -T valuation-report python -m tests.test_report_data_service`
+  `docker compose exec -T app python -m tests.test_report_data_service`
   plus the affected report generator test.
 - Browser business-data cutover or persistence-boundary changes: run
   `sh tests/development_persistence_smoke.sh` and

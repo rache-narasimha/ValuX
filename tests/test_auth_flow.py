@@ -1,7 +1,7 @@
 """End-to-end activation, MFA, recovery, role, and Mailpit regression check.
 
 Run inside the application container after it is healthy:
-    docker compose exec -T valuation-report python -m tests.test_auth_flow
+    docker compose exec -T app python -m tests.test_auth_flow
 """
 
 import http.cookiejar

@@ -70,7 +70,7 @@ def main() -> int:
         }
     )
     subprocess.run(
-        ["docker", "compose", "up", "-d", "--force-recreate", "valuation-report"],
+        ["docker", "compose", "up", "-d", "--force-recreate", "app"],
         cwd=PROJECT_ROOT,
         check=True,
     )

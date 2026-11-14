@@ -1,7 +1,7 @@
 """Host-side account provisioning and recovery commands.
 
 Run inside Docker, for example:
-    docker compose exec valuation-report python -m backend.app.auth.cli provision
+    docker compose exec app python -m backend.app.auth.cli provision
 """
 
 import argparse

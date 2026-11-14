@@ -6,23 +6,23 @@ The Python report checks and the task-store check are executable regression
 scripts. Run them directly as shown; they are not collected by a test runner.
 
 ```sh
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_auth_security
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_database_boundaries
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_business_database_foundation
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_business_database_constraints
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_workflow_service
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_reference_service
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_report_data_service
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_password_history
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_auth_flow
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_account
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_notifications
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_general_generation
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_agricultural_generation
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_estimation_generation
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_progress_generation
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_export_generation
-docker compose -f valuation_app/compose.yaml exec -T valuation-report python -m tests.test_kvb_template
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_auth_security
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_database_boundaries
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_business_database_foundation
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_business_database_constraints
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_workflow_service
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_reference_service
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_report_data_service
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_password_history
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_auth_flow
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_account
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_notifications
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_general_generation
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_agricultural_generation
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_estimation_generation
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_progress_generation
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_export_generation
+docker compose -f valuation_app/compose.yaml exec -T app python -m tests.test_kvb_template
 node valuation_app/tests/test_task_store.js
 node valuation_app/tests/test_task_store_remote.js
 node valuation_app/tests/test_workflow_access.js
@@ -85,7 +85,7 @@ and keep a rollback backup until the new stack serves existing report downloads.
 ```sh
 python3 valuation_app/scripts/bootstrap_dev_env.py
 docker compose -f valuation_app/compose.yaml up --build -d
-docker compose -f valuation_app/compose.yaml exec -T valuation-report \
+docker compose -f valuation_app/compose.yaml exec -T app \
   python -m backend.app.auth.cli seed-dev
 ```
 

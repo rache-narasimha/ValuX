@@ -32,7 +32,7 @@ only on the host at <http://127.0.0.1:8026>.
 Provision the two configured development accounts:
 
 ```sh
-docker compose -f valuation_app/compose.yaml exec -T valuation-report \
+docker compose -f valuation_app/compose.yaml exec -T app \
   python -m backend.app.auth.cli seed-dev
 ```
 
