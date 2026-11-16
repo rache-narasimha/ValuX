@@ -221,7 +221,7 @@
     runs("concrete-roof", roofBeamWidth, v.roofBeamDepth, lintelRun,
       shed ? v.roofLongCount : v.longCount, shed ? v.roofShortCount : v.shortCount);
 
-    measure("concrete-roof-slab", 1, slabLength, slabWidth,
+    measure("concrete-roof-slab", 1, slabLength, slabWidth, undefined,
       v.slabLength == null || v.slabWidth == null ? "Shared slab · Blank axes use outside dimensions" : "Shared roof slab dimensions");
     for (const { fields } of definition.groups) for (const { id } of fields) {
       if (id === "steel-roof-slab") {

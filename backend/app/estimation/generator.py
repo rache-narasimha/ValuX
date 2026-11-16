@@ -1170,13 +1170,15 @@ def _validate_measurements(spec):
     if not all(isinstance(source, dict) for source in sources):
         raise ValueError(f"{spec.component_name} has invalid worksheet inputs.")
     numeric = [data.get("sheetTotalOverride"), *sources[1].values()]
-    for inputs in sources[0].values():
+    for row_id, inputs in sources[0].items():
         if not isinstance(inputs, dict):
             raise ValueError(f"{spec.component_name} has invalid worksheet inputs.")
+        # Older drafts put the dimension-source help text in the slab area
+        # row's unused depth field.
         numeric.extend(inputs.get(key) for key in (
             "no", "length", "breadth", "depth", "rate", "amount", "quantity",
             "directQuantity", "setupQuantity", "factor",
-        ))
+        ) if not (row_id == "concrete-roof-slab" and key == "depth"))
     if any(value not in ("", None) and _numeric(value) is None for value in numeric):
         raise ValueError(f"{spec.component_name} has an invalid numeric entry.")
 

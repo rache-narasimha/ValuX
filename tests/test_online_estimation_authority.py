@@ -61,7 +61,13 @@ def fixtures():
         "details": {"workAddress": "Adoni", "workMode": "online", "commonExternalWorks": {"Electrical Works": 999}},
         "components": [{"id": "house", "name": "House", "kind": "residential_building", "sheets": [
             {"id": "gf", "key": "ground", "label": "Ground Floor", "level": 1,
-             "formData": {"sheetTotalOverride": "35.005", "rows": {"pcc-total": {"directQuantity": 1, "rate": 3}}}},
+             "formData": {"sheetTotalOverride": "35.005", "rows": {
+                 "pcc-total": {"directQuantity": 1, "rate": 3},
+                 "concrete-roof-slab": {
+                     "no": 1, "length": 12, "breadth": 9, "rate": 10,
+                     "depth": "Shared slab · Blank axes use outside dimensions",
+                 },
+             }}},
         ]}],
     }
     storage = {
@@ -123,12 +129,25 @@ def http_flow():
     draft = fixtures()[-1]
     draft["details"].update(applicantName=name, estimateDate=today, place="Adoni", workDescription="Test work")
     saved = request(f"/api/tasks/{code}/draft", {"reportKey": "estimation", "schemaVersion": "3", "revision": 0, "payload": draft})["draft"]
+    from backend.app.reports.service import report_input_fingerprint
+
+    previous_fingerprint = report_input_fingerprint(saved["payload"], "estimation", "3", "older-workbook-version")
+    with connection() as db:
+        db.execute(
+            """
+            UPDATE app.report_drafts SET input_fingerprint = %s
+            WHERE task_id = (SELECT id FROM app.tasks WHERE task_code = %s)
+            """,
+            (previous_fingerprint, code),
+        )
     body = {"taskCode": code, "state": {}, "mode": "completed", "summary": {"totalEstimatedCost": 999999}}
     assert request("/api/estimation/workbook", body, status=409)["code"] == "preview_required"
     preview = request("/api/estimation/preview", body)
     body["preview_id"] = preview["preview_id"]
     assert preview["summary"]["totalEstimatedCost"] == 35.01
     assert request("/api/estimation/totals", body)["summary"] == preview["summary"]
+    refreshed = request(f"/api/tasks/{code}/draft")["draft"]
+    assert refreshed["revision"] == saved["revision"] and refreshed["payload"] == saved["payload"]
     draft["components"][0]["sheets"][0]["formData"]["sheetTotalOverride"] = "40.005"
     request(f"/api/tasks/{code}/draft", {
         "reportKey": "estimation", "schemaVersion": "3", "revision": saved["revision"], "payload": draft,

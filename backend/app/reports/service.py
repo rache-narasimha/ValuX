@@ -342,6 +342,10 @@ def online_estimation_draft(task_code: str, session: dict[str, Any], preview_tok
         ).fetchone()
     if not draft or draft["payload"].get("details", {}).get("workMode") != "online":
         raise ReportDataError("Save the online estimation before preparing its workbook.", 409, "draft_required")
+    if preview_token is None and draft["input_fingerprint"]:
+        # A fresh preview can validate an existing draft under a new workbook
+        # version. Keep the saved fingerprint to detect edits during rendering.
+        return draft["payload"], draft["input_fingerprint"]
     fingerprint = report_input_fingerprint(draft["payload"], "estimation", draft["schema_version"], _current_template_version("estimation"))
     if draft["input_fingerprint"] != fingerprint or (preview_token is not None and (
         not preview_token or preview_token != draft["preview_token"] or draft["preview_fingerprint"] != fingerprint
@@ -982,16 +986,18 @@ def register_artifact(
                 (artifact_id, task["id"], file_id, revision_id, artifact_type, source, actor["id"], input_fingerprint),
             )
             if artifact_type == "preview_pdf" and preview_token:
+                previous_input = preview_input if task["report_key"] == "estimation" and preview_input is not None else input_fingerprint
                 database.execute(
                     """
                     UPDATE app.report_drafts
-                    SET preview_fingerprint = %s,
+                    SET input_fingerprint = %s,
+                        preview_fingerprint = %s,
                         preview_token = %s,
                         preview_artifact_id = %s,
                         updated_at = NOW()
                     WHERE task_id = %s AND input_fingerprint = %s
                     """,
-                    (input_fingerprint, preview_token, artifact_id, task["id"], input_fingerprint),
+                    (input_fingerprint, input_fingerprint, preview_token, artifact_id, task["id"], previous_input),
                 )
             if current:
                 previous = database.execute(
