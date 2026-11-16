@@ -145,10 +145,10 @@
     return cacheRemote(payload.task);
   }
 
-  async function loadAll() {
-    const collected = [];
-    let offset = 0;
-    let hasMore = true;
+  async function loadAll(initialPage = null) {
+    const collected = initialPage ? [...initialPage.items] : [];
+    let offset = collected.length;
+    let hasMore = initialPage ? initialPage.hasMore && offset > 0 : true;
     while (hasMore) {
       const payload = await BusinessApi.get("/api/tasks", { offset, limit: 100 });
       collected.push(...payload.items);
@@ -157,7 +157,9 @@
     }
     remoteTasks.clear();
     collected.forEach((task) => cacheRemote(task, null, true));
-    window.dispatchEvent(new CustomEvent("sln:tasks-changed"));
+    window.dispatchEvent(new CustomEvent("sln:tasks-changed", {
+      detail: { initialDashboardSummary: Boolean(initialPage && !initialPage.hasMore) },
+    }));
     return all();
   }
 

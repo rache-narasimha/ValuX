@@ -47,7 +47,7 @@ def public_user(user: dict[str, Any]) -> dict[str, Any]:
 
 def user_for_id(user_id):
     """Load one authentication user by database identifier."""
-    with connection() as database:
+    with connection(autocommit=True) as database:
         return database.execute(
             "SELECT * FROM auth.users WHERE id = %s", (user_id,)
         ).fetchone()

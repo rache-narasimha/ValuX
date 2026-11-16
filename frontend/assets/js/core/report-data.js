@@ -9,6 +9,7 @@
   let previewState = null;
   let saveChain = Promise.resolve();
   let retainedReadOnly = false;
+  let initialDraft = window.__VALUX_BUSINESS_CONTEXT__?.reportDraft;
   const readOnly = () => retainedReadOnly || Boolean(taskCode && ["Completed", "Closed"].includes(window.TaskStore?.get(taskCode)?.status));
 
   function localLoad(key) {
@@ -21,7 +22,10 @@
       previewState = null;
       return localLoad(localKey);
     }
-    const response = await BusinessApi.get(`/api/tasks/${encodeURIComponent(taskCode)}/draft`);
+    const pageDraft = initialDraft;
+    initialDraft = null;
+    const response = pageDraft?.taskCode === taskCode
+      ? pageDraft : await BusinessApi.get(`/api/tasks/${encodeURIComponent(taskCode)}/draft`);
     retainedReadOnly = response.draft?.readOnly === true;
     revision = Number(response.draft?.revision || 0);
     previewState = response.draft?.preview || null;

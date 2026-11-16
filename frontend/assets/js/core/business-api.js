@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  let csrfToken = "";
+  let csrfToken = window.__VALUX_AUTH_CONTEXT__?.csrf || "";
 
   async function csrf() {
     if (csrfToken) return csrfToken;

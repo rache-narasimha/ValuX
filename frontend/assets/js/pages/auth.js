@@ -19,7 +19,16 @@
 
   function safeDestination() {
     const value = new URLSearchParams(location.search).get("next") || "/";
-    return value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/auth") ? value : "/";
+    if (!value.startsWith("/") || value.startsWith("//")) return "/";
+    try {
+      const destination = new URL(value, location.origin);
+      if (destination.origin === location.origin && !destination.pathname.startsWith("/auth")) {
+        return destination.href;
+      }
+    } catch (_error) {
+      // Invalid destinations fall back to the dashboard.
+    }
+    return "/";
   }
 
   function head(title, description, mark = "VX") {

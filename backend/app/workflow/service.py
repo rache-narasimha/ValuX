@@ -615,29 +615,93 @@ def _refresh_linked_reports(database, estimation, actor):
         _activity(database, child["id"], actor, "note", "Revised estimation synchronized. Review component changes and generate a fresh report.", {"estimationTask": estimation["task_code"], "snapshotId": str(snapshot["id"])})
 
 
-def employees() -> list[dict[str, Any]]:
-    with connection() as database:
-        rows = database.execute(
-            "SELECT id, user_id, display_name, role FROM auth.users WHERE status = 'active' ORDER BY CASE role WHEN 'father' THEN 0 ELSE 1 END, display_name"
-        ).fetchall()
+def query_employees(database):
+    return database.execute(
+        "SELECT id, user_id, display_name, role FROM auth.users WHERE status = 'active' ORDER BY CASE role WHEN 'father' THEN 0 ELSE 1 END, display_name"
+    )
+
+
+def employee_payloads(rows) -> list[dict[str, Any]]:
     return [{"id": row["user_id"], "databaseId": str(row["id"]), "name": row["display_name"], "role": row["role"]} for row in rows]
 
 
+def employees() -> list[dict[str, Any]]:
+    with connection(autocommit=True) as database:
+        return employee_payloads(query_employees(database).fetchall())
+
+
+def query_task_detail(database, task_code: str):
+    """Queue independent reads by task code so callers can send them together."""
+    task = database.execute(f"{TASK_SELECT} WHERE t.task_code = %s", (task_code,))
+    activity = database.execute(
+        """
+        SELECT a.* FROM app.task_activities a
+        JOIN app.tasks t ON t.id = a.task_id
+        WHERE t.task_code = %s ORDER BY a.created_at, a.id
+        """,
+        (task_code,),
+    )
+    linked = database.execute(
+        """
+        SELECT child.task_code, child.status, child.report_key, child.assigned_date
+        FROM app.tasks parent
+        JOIN app.tasks child ON
+            (parent.report_group = 'estimation' AND child.linked_estimation_task_id = parent.id
+                AND child.status <> 'Cancelled')
+            OR (parent.report_group = 'valuation' AND child.linked_valuation_task_id = parent.id)
+        WHERE parent.task_code = %s
+        ORDER BY CASE WHEN parent.report_group = 'estimation' THEN child.created_at END,
+                 CASE WHEN parent.report_group = 'valuation' THEN child.created_at END DESC,
+                 child.id
+        """,
+        (task_code,),
+    )
+    return task, activity, linked
+
+
+def task_detail_payload(queries) -> dict[str, Any]:
+    task, activity, linked = queries
+    row = task.fetchone()
+    if not row:
+        raise WorkflowError("Task not found.", 404, "not_found")
+    result = _task_payload(row, [_activity_payload(event) for event in activity.fetchall()])
+    children = linked.fetchall()
+    if row["report_group"] == "estimation":
+        result["linkedReports"] = [
+            {"id": child["task_code"], "status": child["status"], "label": child["report_key"]}
+            for child in children
+        ]
+    if row["report_group"] == "valuation":
+        result["revaluations"] = [
+            {"id": child["task_code"], "status": child["status"], "assignedDate": _iso(child["assigned_date"])}
+            for child in children
+        ]
+    return result
+
+
 def get_task(task_code: str) -> dict[str, Any]:
-    with connection() as database:
-        row = _task_row(database, task_code)
-        result = _task_payload(row, _activities(database, row["id"]))
-        if row["report_group"] == "estimation":
-            result["linkedReports"] = [{"id": child["task_code"], "status": child["status"], "label": child["report_key"]} for child in database.execute("SELECT task_code,status,report_key FROM app.tasks WHERE linked_estimation_task_id=%s AND status<>'Cancelled' ORDER BY created_at", (row["id"],)).fetchall()]
-        if row["report_group"] == "valuation":
-            result["revaluations"] = [
-                {"id": child["task_code"], "status": child["status"], "assignedDate": _iso(child["assigned_date"])}
-                for child in database.execute(
-                    "SELECT task_code,status,assigned_date FROM app.tasks WHERE linked_valuation_task_id=%s ORDER BY created_at DESC,id",
-                    (row["id"],),
-                ).fetchall()
-            ]
-        return result
+    with connection(autocommit=True) as database:
+        with database.pipeline():
+            queries = query_task_detail(database, task_code)
+        return task_detail_payload(queries)
+
+
+DASHBOARD_PAGE_SIZE = 100
+
+
+def query_task_page(database, limit, offset, *, where="", order="", params=()):
+    return database.execute(
+        f"{TASK_SELECT}{where} ORDER BY {order}t.updated_at DESC, t.task_code DESC LIMIT %s OFFSET %s",
+        (*params, limit, offset),
+    )
+
+
+def task_page_payload(rows, total, limit, offset=0):
+    return {
+        "total": total,
+        "items": [_task_payload(row) for row in rows],
+        "hasMore": offset + limit < total,
+    }
 
 
 def list_tasks(options: dict[str, Any], session: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -729,35 +793,47 @@ def list_tasks(options: dict[str, Any], session: dict[str, Any] | None = None) -
         params.append(payment_filter)
     where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
     order = "CASE WHEN t.status = 'On Hold' AND t.hold_reason = 'Awaiting Review' THEN 0 ELSE 1 END, " if options.get("status") == "On Hold" else ""
-    with connection() as database:
-        total = database.execute(f"SELECT COUNT(*) AS count FROM app.tasks t LEFT JOIN app.tasks linked ON linked.id = t.linked_estimation_task_id LEFT JOIN app.task_payments p ON p.task_id = t.id{where}", tuple(params)).fetchone()["count"]
-        rows = database.execute(
-            f"{TASK_SELECT}{where} ORDER BY {order}t.updated_at DESC, t.task_code DESC LIMIT %s OFFSET %s",
-            (*params, limit, offset),
-        ).fetchall()
-    return {"total": total, "items": [_task_payload(row) for row in rows], "hasMore": offset + limit < total}
+    with connection(autocommit=True) as database:
+        with database.pipeline():
+            count_result = database.execute(f"SELECT COUNT(*) AS count FROM app.tasks t LEFT JOIN app.tasks linked ON linked.id = t.linked_estimation_task_id LEFT JOIN app.task_payments p ON p.task_id = t.id{where}", tuple(params))
+            items_result = query_task_page(database, limit, offset, where=where, order=order, params=params)
+        total, rows = count_result.fetchone()["count"], items_result.fetchall()
+    return task_page_payload(rows, total, limit, offset)
 
 
-def summary(group: str = "all") -> dict[str, int]:
+def query_summary(database, group: str = "all"):
     params: tuple[Any, ...] = ()
     where = ""
     if group and group != "all":
         where = " WHERE report_group = %s"
         params = (group,)
-    with connection() as database:
-        rows = database.execute(f"SELECT status, COUNT(*) AS count FROM app.tasks{where} GROUP BY status", params).fetchall()
-        review = database.execute(f"SELECT COUNT(*) AS count FROM app.tasks{where}{' AND' if where else ' WHERE'} status = 'On Hold' AND hold_reason = 'Awaiting Review'", params).fetchone()["count"]
+    return database.execute(
+        f"""
+        SELECT status, COUNT(*) AS count,
+               COUNT(*) FILTER (WHERE hold_reason = 'Awaiting Review') AS awaiting_review
+        FROM app.tasks{where} GROUP BY status
+        """,
+        params,
+    )
+
+
+def summary_payload(rows) -> dict[str, int]:
     counts = {row["status"]: row["count"] for row in rows}
     return {
         "total": sum(counts.values()),
         "unassigned": counts.get("Unassigned", 0),
         "inProgress": counts.get("In Progress", 0),
         "onHold": counts.get("On Hold", 0),
-        "awaitingReview": review,
+        "awaitingReview": next((row["awaiting_review"] for row in rows if row["status"] == "On Hold"), 0),
         "completed": counts.get("Completed", 0),
         "closed": counts.get("Closed", 0),
         "cancelled": counts.get("Cancelled", 0),
     }
+
+
+def summary(group: str = "all") -> dict[str, int]:
+    with connection(autocommit=True) as database:
+        return summary_payload(query_summary(database, group).fetchall())
 
 
 def create_task(payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
@@ -1016,7 +1092,7 @@ def mark_report_removed(task_code: str, payload: dict[str, Any], session: dict[s
 
 
 def complete(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
-    media_storage_keys: list[str] = []
+    media_storage_keys: list[tuple[str, str]] = []
 
     def action(database, row, actor, values):
         retrospective = _retrospective_attachment(row)
@@ -1069,7 +1145,7 @@ def complete(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -
         if row["report_key"] in {"valuation-general", "valuation-agricultural", "progress", "completion"}:
             media_rows = database.execute(
                 """
-                SELECT sf.id, sf.storage_key
+                SELECT sf.id, sf.storage_backend, sf.storage_key
                 FROM app.report_draft_files rdf
                 JOIN app.stored_files sf ON sf.id = rdf.stored_file_id
                 WHERE rdf.task_id = %s AND sf.removed_at IS NULL
@@ -1077,7 +1153,7 @@ def complete(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -
                 (row["id"],),
             ).fetchall()
             if media_rows:
-                media_storage_keys.extend(item["storage_key"] for item in media_rows)
+                media_storage_keys.extend((item["storage_backend"], item["storage_key"]) for item in media_rows)
                 file_ids = [item["id"] for item in media_rows]
                 database.execute("DELETE FROM app.report_draft_files WHERE task_id = %s", (row["id"],))
                 database.execute("UPDATE app.stored_files SET removed_at = NOW() WHERE id = ANY(%s)", (file_ids,))

@@ -3,6 +3,7 @@
   "use strict";
 
   const COLLAPSE_KEY = "sln.application.sidebar-collapsed.v1";
+  const images = new URL("../../images/", document.currentScript.src);
   let durableSummary = window.__VALUX_BUSINESS_CONTEXT__?.summary || null;
   const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character]));
   const brandWordmark = '<span class="sln-wordmark">Consultancy &amp; <span class="sln-wordmark-accent">Engineering Services</span></span>';
@@ -12,11 +13,11 @@
     return `<span class="brand-mark sln-brand-mark" aria-hidden="true">
       <svg viewBox="660 290 730 880" width="38" height="46">
         <defs><clipPath id="${clip}"><path d="M679 1149V564L847 473V400L1024 307L1201 400V575L1267 506L1228 480L1369 422L1346 572L1312 541L1263 614L1369 671V1149Z"/></clipPath></defs>
-        <image href="/assets/images/sln-logo-source.png" width="2048" height="2048" clip-path="url(#${clip})" />
+        <image href="${images}sln-logo-web.png" width="2048" height="2048" clip-path="url(#${clip})" />
       </svg>
     </span>`;
   }
-  const poweredBy = '<div class="powered-by"><span>Powered by</span><button type="button" class="valux-brand" title="Website coming soon" aria-label="ValuX — website coming soon"><span class="valux-wordmark">Valu<span>X</span></span><img class="valux-footer-logo" src="/assets/images/valux-monogram.png" alt="" /></button></div>';
+  const poweredBy = `<div class="powered-by"><span>Powered by</span><button type="button" class="valux-brand" title="Website coming soon" aria-label="ValuX — website coming soon"><span class="valux-wordmark">Valu<span>X</span></span><img class="valux-footer-logo" src="${images}valux-monogram.png" alt="" /></button></div>`;
 
   const icons = {
     dashboard: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10M9 20v-6h6v6"/></svg>',
@@ -263,7 +264,9 @@
   }
 
   window.AppShell = { install, icons, updateUser };
-  window.addEventListener("sln:tasks-changed", refreshSummary);
+  window.addEventListener("sln:tasks-changed", (event) => {
+    if (!event.detail?.initialDashboardSummary || !durableSummary) refreshSummary();
+  });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", install);
   else install();
 })();

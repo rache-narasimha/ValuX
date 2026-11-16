@@ -1,4 +1,4 @@
-"""Authenticated HTTP adapter for durable report drafts and local files."""
+"""Authenticated HTTP adapter for durable report drafts and files."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def handle_get(handler, path: str) -> bool:
             return True
         if file_match:
             record = service.draft_file(unquote(file_match.group(1)), file_match.group(2), session)
-            handler.send_file(record["path"], cache="private, no-store")
+            handler.send_file(record["path"], cache="private, no-store", data=record.get("data"))
             return True
         record = service.artifact_file(unquote(artifact_match.group(1)), artifact_match.group(2), session)
         force_download = (parse_qs(urlparse(handler.path).query).get("download") or [""])[-1] == "1"
@@ -40,6 +40,7 @@ def handle_get(handler, path: str) -> bool:
         handler.send_file(
             record["path"],
             cache="private, no-store",
+            data=record.get("data"),
             headers=[
                 ("Content-Disposition", f'{disposition}; filename="{record["filename"]}"'),
             ],

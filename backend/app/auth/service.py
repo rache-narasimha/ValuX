@@ -170,29 +170,35 @@ def create_session(user_id, scope: str, step: str | None, ip: str, user_agent: s
 def session_for_token(raw_token: str | None, refresh: bool = True):
     if not raw_token:
         return None
-    with connection() as database:
-        session = database.execute(
-            """
-            SELECT s.*, u.user_id AS login_id, u.display_name, u.role, u.status,
-                   u.email, u.email_verified_at
-            FROM auth.sessions s
-            JOIN auth.users u ON u.id = s.user_id
-            WHERE s.token_hash = %s AND s.revoked_at IS NULL
-              AND s.expires_at > NOW()
-              AND s.last_activity_at > NOW() - make_interval(mins => %s)
-            """,
-            (security.token_hash(raw_token), SESSION_IDLE_MINUTES),
-        ).fetchone()
+    token = security.token_hash(raw_token)
+    columns = """
+        s.*, u.user_id AS login_id, u.display_name, u.role, u.status,
+        u.email, u.email_verified_at, u.profile_photo_updated_at,
+        u.profile_photo IS NOT NULL AS has_profile_photo
+    """
+    active = """
+        u.id = s.user_id AND s.token_hash = %s AND s.revoked_at IS NULL
+        AND s.expires_at > NOW()
+        AND s.last_activity_at > NOW() - make_interval(mins => %s)
+    """
+    with connection(autocommit=True) as database:
+        if refresh:
+            session = database.execute(
+                f"""UPDATE auth.sessions s SET last_activity_at = GREATEST(s.last_activity_at, NOW())
+                    FROM auth.users u WHERE {active} RETURNING {columns}""",
+                (token, SESSION_IDLE_MINUTES),
+            ).fetchone()
+        else:
+            session = database.execute(
+                f"SELECT {columns} FROM auth.sessions s JOIN auth.users u ON {active}",
+                (token, SESSION_IDLE_MINUTES),
+            ).fetchone()
         if not session:
             database.execute(
-                "DELETE FROM auth.sessions WHERE token_hash = %s",
-                (security.token_hash(raw_token),),
-            )
-            return None
-        if refresh:
-            database.execute(
-                "UPDATE auth.sessions SET last_activity_at = NOW() WHERE id = %s",
-                (session["id"],),
+                """DELETE FROM auth.sessions WHERE token_hash = %s
+                   AND (revoked_at IS NOT NULL OR expires_at <= NOW()
+                        OR last_activity_at <= NOW() - make_interval(mins => %s))""",
+                (token, SESSION_IDLE_MINUTES),
             )
         return session
 

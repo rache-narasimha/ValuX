@@ -126,7 +126,7 @@ def _auth_state(session):
 def handle_get(handler, path: str) -> bool:
     if path == "/api/auth/profile/photo":
         content = account.photo(require_full_session(handler, refresh=False))
-        handler.send_file(Path("profile.jpg"), data=content, headers=[("X-Content-Type-Options", "nosniff")])
+        handler.send_file(Path("profile.jpg"), data=content)
         return True
     if path in {"/auth", "/auth/"}:
         handler.send_file(AUTH_PAGE, cache="no-store")
@@ -304,7 +304,12 @@ def handle_post(handler, path: str) -> bool:
         return True
 
 
-def authentication_context_script(session) -> bytes:
-    user = service.public_user(service.user_for_id(session["user_id"]))
-    safe_json = json.dumps({"user": user}, separators=(",", ":")).replace("<", "\\u003c")
+def authentication_context_script(session, csrf: str) -> bytes:
+    user = service.public_user({
+        **session,
+        "id": session["user_id"],
+        "user_id": session["login_id"],
+        "profile_photo": session["has_profile_photo"],
+    })
+    safe_json = json.dumps({"user": user, "csrf": csrf}, separators=(",", ":")).replace("<", "\\u003c")
     return f"<script>window.__VALUX_AUTH_CONTEXT__={safe_json};</script>".encode("utf-8")

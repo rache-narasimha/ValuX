@@ -571,12 +571,15 @@ function wireInputs() {
 
 // Page assembly and report-generation event wiring.
 async function init() {
-  state.schema = await fetch("/api/agricultural/schema").then((response) => {
-    if (!response.ok)
-      throw new Error("Unable to load agricultural form schema");
-    return response.json();
-  });
-  const draft = await restoreDraft();
+  const [schema, draft] = await Promise.all([
+    window.__VALUX_VALUATION_SCHEMA__ || fetch("/api/agricultural/schema").then((response) => {
+      if (!response.ok)
+        throw new Error("Unable to load agricultural form schema");
+      return response.json();
+    }),
+    restoreDraft(),
+  ]);
+  state.schema = schema;
   const initialValues = { ...(draft?.values || {}), ...(ReportData.readOnly ? {} : linkedTaskValues()) };
   const revaluation = currentTask()?.reportGroup === "revaluation";
   if (revaluation) {

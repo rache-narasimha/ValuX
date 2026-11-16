@@ -44,11 +44,18 @@ def _payload(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def list_institutions(include_inactive: bool = False) -> list[dict[str, Any]]:
+def query_institutions(database, include_inactive: bool = False):
     where = "" if include_inactive else " WHERE active = TRUE"
-    with connection() as database:
-        rows = database.execute(f"SELECT * FROM app.institutions{where} ORDER BY institution_type, name").fetchall()
+    return database.execute(f"SELECT * FROM app.institutions{where} ORDER BY institution_type, name")
+
+
+def institution_payloads(rows) -> list[dict[str, Any]]:
     return [_payload(row) for row in rows]
+
+
+def list_institutions(include_inactive: bool = False) -> list[dict[str, Any]]:
+    with connection(autocommit=True) as database:
+        return institution_payloads(query_institutions(database, include_inactive).fetchall())
 
 
 def _require_father(session: dict[str, Any]) -> None:

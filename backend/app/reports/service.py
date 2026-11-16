@@ -1,10 +1,11 @@
-"""Durable report data and authenticated local-file storage."""
+"""Durable report data and authenticated file storage."""
 
 from __future__ import annotations
 
 import base64
 import hashlib
 import json
+import logging
 import re
 import uuid
 from copy import deepcopy
@@ -19,9 +20,12 @@ from ..estimation.presentation import industrial_centre_line
 from ..valuation.config import OUTPUT_DIR
 from ..valuation.config import AGRICULTURAL_TEMPLATE, APP_ROOT, TEMPLATE
 from ..workflow import service as workflow_service
+from . import object_storage
 
 
 STORAGE_ROOT = OUTPUT_DIR / "task_files"
+StorageReference = tuple[str, str]
+LOGGER = logging.getLogger(__name__)
 IMAGE_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 ARTIFACT_TYPES = {
     "valuation_docx": ({".docx"}, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
@@ -114,39 +118,69 @@ def _storage_path(storage_key: str) -> Path:
     return candidate
 
 
-def _write_file(task_id: Any, filename: str, content_type: str, content: bytes, actor_id: Any, database) -> tuple[uuid.UUID, str]:
+def _write_file(task_id: Any, filename: str, content_type: str, content: bytes, actor_id: Any, database, created_keys: list[StorageReference]) -> uuid.UUID:
     file_id = uuid.uuid4()
     storage_key = _storage_key(task_id, file_id, filename)
-    path = _storage_path(storage_key)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    temporary.write_bytes(content)
-    temporary.replace(path)
+    backend = object_storage.configured_backend()
+    created_keys.append((backend, storage_key))
+    if backend == "object":
+        try:
+            object_storage.write(storage_key, content, content_type)
+        except object_storage.StorageUnavailable as error:
+            raise ReportDataError(str(error), 503, "storage_unavailable") from None
+    else:
+        path = _storage_path(storage_key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            temporary.write_bytes(content)
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
     database.execute(
         """
         INSERT INTO app.stored_files (
             id, storage_backend, storage_key, original_filename, content_type,
             size_bytes, sha256, created_by_user_id
-        ) VALUES (%s, 'local', %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """,
-        (file_id, storage_key, filename, content_type, len(content), hashlib.sha256(content).hexdigest(), actor_id),
+        (file_id, backend, storage_key, filename, content_type, len(content), hashlib.sha256(content).hexdigest(), actor_id),
     )
-    return file_id, storage_key
+    return file_id
 
 
-def _delete_physical(storage_keys: list[str]) -> None:
-    for key in storage_keys:
+def _delete_physical(storage_keys: list[StorageReference] | list[str]) -> None:
+    for reference in storage_keys:
+        backend, key = ("local", reference) if isinstance(reference, str) else reference
         try:
+            if backend == "object":
+                object_storage.delete(key)
+                continue
             path = _storage_path(key)
             path.unlink(missing_ok=True)
             parent = path.parent
             while parent != STORAGE_ROOT and parent.exists() and not any(parent.iterdir()):
                 parent.rmdir()
                 parent = parent.parent
-        except (OSError, ReportDataError):
-            # Metadata remains authoritative even if a development file cannot
+        except (OSError, ReportDataError, RuntimeError):
+            # Metadata remains authoritative even if a file cannot
             # be removed immediately; a later maintenance pass can reconcile it.
-            continue
+            LOGGER.warning("Could not remove a retired %s report file.", backend)
+
+
+def _file_location(row, missing_message: str) -> dict[str, Any]:
+    if row["storage_backend"] == "object":
+        try:
+            content = object_storage.read(row["storage_key"], row["size_bytes"])
+        except FileNotFoundError:
+            raise ReportDataError(missing_message, 404, "file_missing") from None
+        except object_storage.StorageUnavailable as error:
+            raise ReportDataError(str(error), 503, "storage_unavailable") from None
+        return {"path": Path(row["original_filename"]), "data": content}
+    path = _storage_path(row["storage_key"])
+    if not path.is_file():
+        raise ReportDataError(missing_message, 404, "file_missing")
+    return {"path": path}
 
 
 def _decode_image(data: str) -> tuple[str, bytes]:
@@ -177,7 +211,7 @@ def _collect_file_ids(value: Any, result: set[uuid.UUID]) -> None:
             _collect_file_ids(item, result)
 
 
-def _persist_inline_images(value: Any, task: dict[str, Any], actor: dict[str, Any], database, created_keys: list[str]) -> Any:
+def _persist_inline_images(value: Any, task: dict[str, Any], actor: dict[str, Any], database, created_keys: list[StorageReference]) -> Any:
     if isinstance(value, list):
         return [_persist_inline_images(item, task, actor, database, created_keys) for item in value]
     if not isinstance(value, dict):
@@ -191,8 +225,7 @@ def _persist_inline_images(value: Any, task: dict[str, Any], actor: dict[str, An
     filename = _safe_name(result.get("name"), f"draft-image{extension}")
     if Path(filename).suffix.lower() not in {".jpg", ".jpeg", ".png", ".webp"}:
         filename = f"{filename}{extension}"
-    file_id, storage_key = _write_file(task["id"], filename, content_type, content, actor["id"], database)
-    created_keys.append(storage_key)
+    file_id = _write_file(task["id"], filename, content_type, content, actor["id"], database, created_keys)
     database.execute(
         "INSERT INTO app.report_draft_files (task_id, stored_file_id) VALUES (%s, %s)",
         (task["id"], file_id),
@@ -271,27 +304,36 @@ def revaluation_inputs(database, original):
             "manual": artifact_source != "generated" or not bool(values)}
 
 
-def get_draft(task_code: str, session: dict[str, Any]) -> dict[str, Any] | None:
+def query_draft(database, task_code: str, session: dict[str, Any]):
     actor = _actor(session)
-    with connection() as database:
-        task = _task(database, task_code)
-        if task["status"] in {"Completed", "Closed"}:
-            return _retained_report_inputs(database, task)
-        _require_editable(actor, task)
-        row = database.execute(
-            """
-            SELECT d.*, a.id AS preview_file_artifact_id, sf.removed_at AS preview_removed_at
-            FROM app.report_drafts d
-            LEFT JOIN app.task_artifacts a
-              ON a.id = d.preview_artifact_id
-             AND a.task_id = d.task_id
-             AND a.artifact_type = 'preview_pdf'
-            LEFT JOIN app.stored_files sf ON sf.id = a.stored_file_id
-            WHERE d.task_id = %s
-            """,
-            (task["id"],),
-        ).fetchone()
+    return database.execute(
+        """
+        SELECT t.*, d.task_id AS draft_task_id, d.report_key AS draft_report_key,
+               d.schema_version, d.payload, d.revision,
+               d.updated_at AS draft_updated_at, d.input_fingerprint, d.preview_fingerprint,
+               d.preview_token, a.id AS preview_file_artifact_id, sf.removed_at AS preview_removed_at
+        FROM app.tasks t
+        LEFT JOIN app.report_drafts d ON d.task_id = t.id
+          AND t.status IN ('In Progress', 'On Hold')
+          AND (%s OR t.assignee_user_id = %s)
+        LEFT JOIN app.task_artifacts a
+          ON a.id = d.preview_artifact_id
+         AND a.task_id = d.task_id
+         AND a.artifact_type = 'preview_pdf'
+        LEFT JOIN app.stored_files sf ON sf.id = a.stored_file_id
+        WHERE t.task_code = %s
+        """,
+        (actor["role"] == "father", actor["id"], task_code),
+    )
+
+
+def draft_payload(database, row, task_code: str, session: dict[str, Any]) -> dict[str, Any] | None:
     if not row:
+        raise ReportDataError("Task not found.", 404, "not_found")
+    if row["status"] in {"Completed", "Closed"}:
+        return _retained_report_inputs(database, row)
+    _require_editable(_actor(session), row)
+    if not row["draft_task_id"]:
         return None
     preview = None
     if (
@@ -307,13 +349,19 @@ def get_draft(task_code: str, session: dict[str, Any]) -> dict[str, Any] | None:
             "fingerprint": row["preview_fingerprint"],
         }
     return {
-        "reportKey": row["report_key"],
+        "reportKey": row["draft_report_key"],
         "schemaVersion": row["schema_version"],
         "payload": row["payload"],
         "revision": row["revision"],
-        "updatedAt": row["updated_at"].isoformat(),
+        "updatedAt": row["draft_updated_at"].isoformat(),
         "preview": preview,
     }
+
+
+def get_draft(task_code: str, session: dict[str, Any]) -> dict[str, Any] | None:
+    with connection(autocommit=True) as database:
+        row = query_draft(database, task_code, session).fetchone()
+        return draft_payload(database, row, task_code, session)
 
 
 def preview_input_fingerprint(task_code: str, session: dict[str, Any]) -> str:
@@ -414,8 +462,8 @@ def save_draft(task_code: str, values: dict[str, Any], session: dict[str, Any]) 
         expected_revision = int(expected_revision or 0)
     except (TypeError, ValueError) as error:
         raise ReportDataError("The report draft revision is invalid.") from error
-    created_keys: list[str] = []
-    remove_keys: list[str] = []
+    created_keys: list[StorageReference] = []
+    remove_keys: list[StorageReference] = []
     try:
         with connection() as database:
             task = _task(database, task_code, lock=True)
@@ -481,7 +529,7 @@ def save_draft(task_code: str, values: dict[str, Any], session: dict[str, Any]) 
             _collect_file_ids(normalized, referenced)
             existing_rows = database.execute(
                 """
-                SELECT rdf.stored_file_id, sf.storage_key
+                SELECT rdf.stored_file_id, sf.storage_backend, sf.storage_key
                 FROM app.report_draft_files rdf
                 JOIN app.stored_files sf ON sf.id = rdf.stored_file_id
                 WHERE rdf.task_id = %s AND sf.removed_at IS NULL
@@ -494,7 +542,7 @@ def save_draft(task_code: str, values: dict[str, Any], session: dict[str, Any]) 
             removed = existing_ids - referenced
             if removed:
                 rows = [row for row in existing_rows if row["stored_file_id"] in removed]
-                remove_keys.extend(row["storage_key"] for row in rows)
+                remove_keys.extend((row["storage_backend"], row["storage_key"]) for row in rows)
                 database.execute("DELETE FROM app.report_draft_files WHERE task_id = %s AND stored_file_id = ANY(%s)", (task["id"], list(removed)))
                 database.execute("UPDATE app.stored_files SET removed_at = NOW() WHERE id = ANY(%s)", (list(removed),))
             new_revision = current_revision + 1
@@ -565,20 +613,20 @@ def save_draft(task_code: str, values: dict[str, Any], session: dict[str, Any]) 
 
 def delete_draft(task_code: str, session: dict[str, Any]) -> None:
     actor = _actor(session)
-    remove_keys: list[str] = []
+    remove_keys: list[StorageReference] = []
     with connection() as database:
         task = _task(database, task_code, lock=True)
         _require_editable(actor, task)
         rows = database.execute(
             """
-            SELECT sf.id, sf.storage_key
+            SELECT sf.id, sf.storage_backend, sf.storage_key
             FROM app.report_draft_files rdf
             JOIN app.stored_files sf ON sf.id = rdf.stored_file_id
             WHERE rdf.task_id = %s AND sf.removed_at IS NULL
             """,
             (task["id"],),
         ).fetchall()
-        remove_keys = [row["storage_key"] for row in rows]
+        remove_keys = [(row["storage_backend"], row["storage_key"]) for row in rows]
         database.execute("DELETE FROM app.report_draft_files WHERE task_id = %s", (task["id"],))
         if rows:
             database.execute("UPDATE app.stored_files SET removed_at = NOW() WHERE id = ANY(%s)", ([row["id"] for row in rows],))
@@ -610,10 +658,8 @@ def draft_file(task_code: str, file_id: str, session: dict[str, Any]) -> dict[st
         ).fetchone()
     if not row:
         raise ReportDataError("Draft file not found.", 404, "not_found")
-    path = _storage_path(row["storage_key"])
-    if not path.is_file():
-        raise ReportDataError("The stored draft file is unavailable.", 404, "file_missing")
-    return {"path": path, "contentType": row["content_type"], "filename": row["original_filename"]}
+    location = _file_location(row, "The stored draft file is unavailable.")
+    return {**location, "contentType": row["content_type"], "filename": row["original_filename"]}
 
 
 def hydrate_media(task_code: str, payload: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
@@ -642,7 +688,8 @@ def hydrate_media(task_code: str, payload: dict[str, Any], session: dict[str, An
             ).fetchone()
             if not row:
                 raise ReportDataError("A report photograph is no longer available.", 404, "file_missing")
-            content = _storage_path(row["storage_key"]).read_bytes()
+            location = _file_location(row, "A report photograph is no longer available.")
+            content = location["data"] if "data" in location else location["path"].read_bytes()
             result["data"] = f"data:{row['content_type']};base64,{base64.b64encode(content).decode('ascii')}"
             return result
 
@@ -869,8 +916,8 @@ def register_artifact(
         raise ReportDataError("The report filename does not match its required format.")
     if not content:
         raise ReportDataError("The report file is empty.")
-    created_keys: list[str] = []
-    remove_keys: list[str] = []
+    created_keys: list[StorageReference] = []
+    remove_keys: list[StorageReference] = []
     try:
         with connection() as database:
             task = _task(database, task_code, lock=True)
@@ -976,8 +1023,7 @@ def register_artifact(
                 if not summary:
                     raise ReportDataError("The estimation component summary is missing.")
                 snapshot_id = _create_snapshot(database, task, revision_id, summary, actor["id"])
-            file_id, storage_key = _write_file(task["id"], safe_name, default_content_type, content, actor["id"], database)
-            created_keys.append(storage_key)
+            file_id = _write_file(task["id"], safe_name, default_content_type, content, actor["id"], database, created_keys)
             artifact_id = uuid.uuid4()
             database.execute(
                 """
@@ -1005,7 +1051,7 @@ def register_artifact(
             if current:
                 previous = database.execute(
                     """
-                    SELECT a.id, sf.id AS file_id, sf.storage_key
+                    SELECT a.id, sf.id AS file_id, sf.storage_backend, sf.storage_key
                     FROM app.tasks t
                     JOIN app.task_artifacts a ON a.id = t.latest_artifact_id
                     JOIN app.stored_files sf ON sf.id = a.stored_file_id
@@ -1017,7 +1063,7 @@ def register_artifact(
                     database.execute("UPDATE app.task_artifacts SET superseded_at = NOW() WHERE id = %s", (previous["id"],))
                     if task.get("final_artifact_id") != previous["id"] and not _revaluation_pins_artifact(database, previous["id"]):
                         database.execute("UPDATE app.stored_files SET removed_at = NOW() WHERE id = %s", (previous["file_id"],))
-                        remove_keys.append(previous["storage_key"])
+                        remove_keys.append((previous["storage_backend"], previous["storage_key"]))
                 database.execute(
                     "UPDATE app.tasks SET latest_artifact_id = %s, report_generated_at = NOW(), version = version + 1, updated_at = NOW() WHERE id = %s",
                     (artifact_id, task["id"]),
@@ -1074,10 +1120,8 @@ def artifact_file(task_code: str, artifact_id: str, session: dict[str, Any]) -> 
         ).fetchone()
     if not row:
         raise ReportDataError("Report file not found.", 404, "not_found")
-    path = _storage_path(row["storage_key"])
-    if not path.is_file():
-        raise ReportDataError("The stored report file is unavailable.", 404, "file_missing")
-    return {"path": path, "contentType": row["content_type"], "filename": row["original_filename"], "artifactType": row["artifact_type"]}
+    location = _file_location(row, "The stored report file is unavailable.")
+    return {**location, "contentType": row["content_type"], "filename": row["original_filename"], "artifactType": row["artifact_type"]}
 
 
 def _revaluation_pins_artifact(database, artifact_id):
@@ -1087,7 +1131,7 @@ def _revaluation_pins_artifact(database, artifact_id):
 
 def remove_latest_artifact(task_code: str, session: dict[str, Any]) -> dict[str, Any]:
     actor = _actor(session)
-    remove_keys: list[str] = []
+    remove_keys: list[StorageReference] = []
     with connection() as database:
         task = _task(database, task_code, lock=True)
         _require_editable(actor, task)
@@ -1097,7 +1141,7 @@ def remove_latest_artifact(task_code: str, session: dict[str, Any]) -> dict[str,
             raise ReportDataError("The retained final report cannot be removed. Reopen and generate or attach its replacement.", 409, "final_artifact")
         row = database.execute(
             """
-            SELECT a.id, sf.id AS file_id, sf.storage_key
+            SELECT a.id, sf.id AS file_id, sf.storage_backend, sf.storage_key
             FROM app.task_artifacts a
             JOIN app.stored_files sf ON sf.id = a.stored_file_id
             WHERE a.id = %s AND a.task_id = %s
@@ -1109,7 +1153,7 @@ def remove_latest_artifact(task_code: str, session: dict[str, Any]) -> dict[str,
         database.execute("UPDATE app.task_artifacts SET superseded_at = COALESCE(superseded_at, NOW()) WHERE id = %s", (row["id"],))
         if not _revaluation_pins_artifact(database, row["id"]):
             database.execute("UPDATE app.stored_files SET removed_at = NOW() WHERE id = %s", (row["file_id"],))
-            remove_keys.append(row["storage_key"])
+            remove_keys.append((row["storage_backend"], row["storage_key"]))
         database.execute("UPDATE app.tasks SET latest_artifact_id = NULL, report_generated_at = NULL, version = version + 1, updated_at = NOW() WHERE id = %s", (task["id"],))
         database.execute(
             """

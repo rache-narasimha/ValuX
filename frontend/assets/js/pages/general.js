@@ -842,12 +842,15 @@ function wireInputs() {
 
 // Page assembly and report-generation event wiring.
 async function init() {
-  state.schema = await fetch("/api/schema").then((r) => r.json());
+  const [schema, draft] = await Promise.all([
+    window.__VALUX_VALUATION_SCHEMA__ || fetch("/api/schema").then((r) => r.json()),
+    restoreDraft(),
+  ]);
+  state.schema = schema;
   const labels = Object.fromEntries(
       state.schema.groups.map((g) => [g.id, g.label]),
     ),
     host = byId("groups"),
-    draft = await restoreDraft(),
     initialValues = { ...(draft?.values || {}), ...(ReportData.readOnly ? {} : linkedTaskValues()) };
   const revaluation = currentTask()?.reportGroup === "revaluation";
   if (revaluation) {

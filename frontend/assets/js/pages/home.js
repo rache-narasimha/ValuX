@@ -420,8 +420,7 @@
   document.getElementById("recent-status-filter").addEventListener("change", render);
   window.addEventListener("sln:tasks-changed", render);
   window.addEventListener("sln:payment-updated", render);
-  TaskStore.loadAll().then(() => {
-    render();
+  TaskStore.loadAll(window.__VALUX_BUSINESS_CONTEXT__?.dashboardPage).then(() => {
     const target = location.hash.slice(1);
     if (["dashboard-finance", "payment-dashboard-card", "recent-activity-card"].includes(target)) {
       document.getElementById(target).scrollIntoView();

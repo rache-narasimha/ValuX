@@ -112,6 +112,14 @@ See `docs/AUTHENTICATION.md` for activation, Gmail and operator recovery.
 
 ## Generated files
 
+Local development defaults to filesystem storage for task-linked reports and
+draft media. To use the staging R2 bucket, configure `VALUX_REPORT_STORAGE=object`,
+`R2_ENDPOINT_URL` (the HTTPS R2 account endpoint), and `R2_BUCKET`. Supply
+`R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` through Secret Manager. Cloud Run's
+filesystem is temporary and is still used by document generation. The database
+records which backend owns each retained file. Existing local files are not
+copied by changing the storage setting.
+
 - Application reports: `outputs/generated_reports/`
 - Task-linked draft media and report artifacts: `outputs/generated_reports/task_files/`
 - Automated-test documents: `outputs/test_artifacts/`
@@ -119,6 +127,25 @@ See `docs/AUTHENTICATION.md` for activation, Gmail and operator recovery.
 Test artifacts can be cleared freely. Task-linked files must not be removed
 independently of their PostgreSQL metadata; use the report workflow or a future
 reconciliation/maintenance command.
+
+## Cloud staging names
+
+| Component | Name |
+| --- | --- |
+| Google Cloud project | `valux-staging` |
+| Cloud Run service | `valux-staging` |
+| Cloud Run service account | `valux-staging-run` |
+| Artifact Registry repository and image | `valux/app` in Mumbai (`asia-south1`) |
+| Neon project and database | `ValuX-Staging` / `valux` |
+| Neon database roles | `valux_owner` for migrations, `valux_app` for requests |
+| Cloudflare R2 bucket | `valux-staging` |
+| Cloudflare R2 token | `valux-staging-app` |
+
+Neon's branch labeled `production` is the default branch **inside the staging
+project**. Staging secrets live under `valux-staging` in Google Secret Manager.
+The `valux-neon-migration-url` secret belongs to schema setup.
+`valux-neon-runtime-url`, `valux-r2-*`, and `valux-auth-*` supply the runtime
+connections and keys. Use the image digest to identify what a revision runs.
 
 ## Editing guidance
 

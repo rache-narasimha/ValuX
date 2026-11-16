@@ -3,11 +3,13 @@
 import json
 import base64
 import mimetypes
+import os
 import re
 import shutil
 import subprocess
 import time
 from datetime import date
+from functools import lru_cache
 from tempfile import TemporaryDirectory
 from zipfile import BadZipFile, ZipFile
 from io import BytesIO
@@ -38,6 +40,25 @@ from ..workflow import service as workflow_service
 
 
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+ASSET_RELEASE = os.environ.get("K_REVISION", "")
+ASSET_RELEASE_PREFIX = "/assets/_release/"
+
+
+def valuation_schema_script(kind: str) -> bytes:
+    schema = schema_payload() if kind == "general" else agricultural_schema_payload()
+    safe_json = json.dumps(schema, separators=(",", ":")).replace("<", "\\u003c")
+    return f"<script>window.__VALUX_VALUATION_SCHEMA__={safe_json};</script>".encode("utf-8")
+
+
+if ASSET_RELEASE:
+    valuation_schema_script = lru_cache(maxsize=2)(valuation_schema_script)
+
+
+def versioned_page_assets(content: bytes) -> bytes:
+    if not re.fullmatch(r"[a-zA-Z0-9.-]+", ASSET_RELEASE):
+        return content
+    base = f"{ASSET_RELEASE_PREFIX}{ASSET_RELEASE}/".encode("ascii")
+    return re.sub(rb'''(\b(?:src|href)=["'])/assets/''', lambda match: match[1] + base, content)
 
 
 def report_content_type(file_path):
@@ -116,6 +137,15 @@ def validate_online_estimation(state):
 
 
 class Handler(BaseHTTPRequestHandler):
+    server_version = "ValuX"
+    sys_version = ""
+
+    def end_headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
+        self.send_header("Referrer-Policy", "same-origin")
+        super().end_headers()
+
     def send_json(self, payload, status=200, headers=None):
         data = json.dumps(payload).encode("utf-8")
         self.send_response(status)
@@ -173,14 +203,29 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         try:
+            if re.fullmatch(r"/google[0-9a-f]{16}\.html", path):
+                proof = PAGES_DIR / path[1:]
+                if proof.is_file():
+                    self.send_file(proof)
+                    return
             if auth_routes.handle_get(self, path):
                 return
             if path.startswith("/assets/"):
-                file_path = ASSETS_DIR / path.removeprefix("/assets/")
-                if not file_path.exists() or not file_path.is_file():
+                assets_root = ASSETS_DIR.resolve()
+                relative_path = path.removeprefix("/assets/")
+                release = ""
+                if path.startswith(ASSET_RELEASE_PREFIX):
+                    release, _, relative_path = path.removeprefix(ASSET_RELEASE_PREFIX).partition("/")
+                file_path = (assets_root / relative_path).resolve()
+                if not file_path.is_relative_to(assets_root) or not file_path.is_file():
                     self.send_error(404)
                     return
-                self.send_file(file_path, cache="no-store")
+                if release and release != ASSET_RELEASE:
+                    # Never store a response for one release under another release's URL.
+                    self.send_redirect("/assets/" + quote(file_path.relative_to(assets_root).as_posix()), status=302)
+                    return
+                cache = "public, max-age=31536000, immutable" if release else "no-store"
+                self.send_file(file_path, cache=cache)
                 return
 
             if report_routes.handle_get(self, path):
@@ -278,11 +323,20 @@ class Handler(BaseHTTPRequestHandler):
             if file_path is None:
                 self.send_error(404)
                 return
-            page_context = workflow_routes.page_context_script(session, self.path)
-            data = file_path.read_bytes().replace(
-                b"</head>", auth_routes.authentication_context_script(session) + page_context + b"</head>", 1
+            valuation_kind = {
+                "/valuation/general": "general",
+                "/valuation/agricultural": "agricultural",
+            }.get(path.rstrip("/"))
+            page_context = workflow_routes.page_context_script(
+                session, self.path, load_valuation_draft=valuation_kind is not None
             )
-            self.send_file(file_path, data=data)
+            if valuation_kind:
+                page_context += valuation_schema_script(valuation_kind)
+            csrf, headers = auth_routes.csrf_context(self)
+            data = versioned_page_assets(file_path.read_bytes()).replace(
+                b"</head>", auth_routes.authentication_context_script(session, csrf) + page_context + b"</head>", 1
+            )
+            self.send_file(file_path, data=data, headers=headers)
         except (workflow_service.WorkflowError, report_service.ReportDataError) as error:
             self.send_json({"ok": False, "error": str(error), "code": error.code}, error.status)
         except AuthError as error:

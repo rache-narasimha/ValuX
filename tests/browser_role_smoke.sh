@@ -44,7 +44,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-qa_task_code="$(docker compose exec -T -e VALUX_QA_TASK_MARKER="$qa_task_marker" app \
+qa_task_code="$(docker compose exec -T \
+  -e VALUX_QA_TASK_MARKER="$qa_task_marker" \
+  -e VALUX_QA_CEO_ID="${VALUX_QA_CEO_ID:-racheshiva01}" \
+  -e VALUX_QA_EMPLOYEE_ID="${VALUX_QA_EMPLOYEE_ID:-lavk0401}" app \
   python -m tests.browser_workflow_seed seed | tr -d '\r')"
 [[ -n "$qa_task_code" ]]
 qa_report_path="/valuation/general?task=$qa_task_code"
@@ -114,7 +117,7 @@ capture_mobile_page "/estimation?practice=1" "$qa_dir/ceo-estimation-practice-mo
 capture_mobile_page "/progress-completion?practice=1" "$qa_dir/ceo-progress-practice-mobile.png"
 stop_bootstrap
 
-rg -q 'K\. Sivaprasad' "$qa_dir/ceo-dashboard.html"
+rg -Fq "${VALUX_QA_CEO_NAME:-K. Sivaprasad}" "$qa_dir/ceo-dashboard.html"
 rg -q '>CEO<' "$qa_dir/ceo-dashboard.html"
 rg -q 'id="father-business"' "$qa_dir/ceo-dashboard.html"
 rg -q 'class="horizontal-chart-row"' "$qa_dir/ceo-dashboard.html"
@@ -147,7 +150,7 @@ capture_compact_page "$qa_report_path" "$qa_dir/employee-general-valuation-compa
 capture_mobile_page "/" "$qa_dir/employee-dashboard-mobile.png"
 stop_bootstrap
 
-rg -q 'Lavakumar' "$qa_dir/employee-dashboard.html"
+rg -Fq "${VALUX_QA_EMPLOYEE_NAME:-Lavakumar}" "$qa_dir/employee-dashboard.html"
 rg -q '>Employee<' "$qa_dir/employee-dashboard.html"
 rg -q 'id="father-business" hidden' "$qa_dir/employee-dashboard.html"
 rg -q 'id="payment-dashboard-card"' "$qa_dir/employee-dashboard.html"

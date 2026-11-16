@@ -7,9 +7,11 @@ import re
 from urllib.parse import parse_qs, unquote, urlparse
 
 from ..auth import routes as auth_routes
+from ..auth.database import connection
 from ..auth.service import AuthError
 from ..business_time import TENANT_TIME_ZONE_NAME
 from ..reference import service as reference_service
+from ..reports import service as report_service
 from . import notifications, service
 
 
@@ -27,33 +29,73 @@ TASK_ACTIONS = {
     "reopen": service.reopen,
 }
 
+GET_ROUTES = {
+    "/api/notifications", "/api/tasks", "/api/tasks/summary", "/api/employees",
+    "/api/institutions", "/api/valuations/eligible", "/api/estimations/eligible",
+}
 
-def page_context_script(session: dict, raw_path: str) -> bytes:
-    """Inject small reference data and the requested task; lists stay API-paginated."""
+
+def page_context_script(session: dict, raw_path: str, *, load_valuation_draft: bool = False) -> bytes:
+    """Send the initial page data together after the browser session is verified."""
     parsed = urlparse(raw_path)
     values = parse_qs(parsed.query)
     task_code = (values.get("task") or values.get("id") or [""])[-1]
-    task = None
-    linked_task = None
-    if task_code:
+    browser_values = parse_qs(parsed.query, keep_blank_values=True)
+    draft_code = browser_values.get("task", [""])[0]
+    practice = browser_values.get("practice", [""])[0] == "1"
+    include_draft = load_valuation_draft and bool(draft_code) and draft_code == task_code and not practice
+    task_queries = dashboard = draft = None
+    with connection(autocommit=True) as database:
+        with database.pipeline():
+            summary = service.query_summary(database)
+            institutions = reference_service.query_institutions(database, session["role"] == "father")
+            employees = service.query_employees(database)
+            if task_code:
+                task_queries = service.query_task_detail(database, task_code)
+            if parsed.path == "/":
+                dashboard = service.query_task_page(database, service.DASHBOARD_PAGE_SIZE, 0)
+            if include_draft:
+                draft = report_service.query_draft(database, draft_code, session)
+        context = {
+            "summary": service.summary_payload(summary.fetchall()),
+            "institutions": reference_service.institution_payloads(institutions.fetchall()),
+            "employees": service.employee_payloads(employees.fetchall()),
+            "task": None,
+            "linkedTask": None,
+            "timeZone": TENANT_TIME_ZONE_NAME,
+        }
+        if task_queries is not None:
+            try:
+                context["task"] = service.task_detail_payload(task_queries)
+            except service.WorkflowError as error:
+                if error.status != 404:
+                    raise
+        if dashboard is not None:
+            context["dashboardPage"] = service.task_page_payload(
+                dashboard.fetchall(), context["summary"]["total"], service.DASHBOARD_PAGE_SIZE
+            )
+        if draft is not None:
+            try:
+                context["reportDraft"] = {
+                    "taskCode": draft_code,
+                    "draft": report_service.draft_payload(database, draft.fetchone(), draft_code, session),
+                }
+            except report_service.ReportDataError:
+                # Keep the existing draft API and its error handling for this form.
+                pass
+
+    task = context["task"]
+    if task and task.get("linkedEstimationId"):
         try:
-            task = service.get_task(task_code)
-            if task.get("linkedEstimationId"):
-                linked_task = service.get_task(task["linkedEstimationId"])
-                if task.get("estimationSummary"):
-                    linked_task["estimationSummary"] = task["estimationSummary"]
-                    linked_task["linkedEstimationSnapshotId"] = task.get("linkedEstimationSnapshotId", "")
+            linked_task = service.get_task(task["linkedEstimationId"])
         except service.WorkflowError as error:
             if error.status != 404:
                 raise
-    context = {
-        "task": task,
-        "linkedTask": linked_task,
-        "summary": service.summary(),
-        "institutions": reference_service.list_institutions(session["role"] == "father"),
-        "employees": service.employees(),
-        "timeZone": TENANT_TIME_ZONE_NAME,
-    }
+        else:
+            if task.get("estimationSummary"):
+                linked_task["estimationSummary"] = task["estimationSummary"]
+                linked_task["linkedEstimationSnapshotId"] = task.get("linkedEstimationSnapshotId", "")
+            context["linkedTask"] = linked_task
     safe_json = json.dumps(context, separators=(",", ":")).replace("<", "\\u003c")
     return f"<script>window.__VALUX_BUSINESS_CONTEXT__={safe_json};</script>".encode("utf-8")
 
@@ -75,7 +117,9 @@ def _error(handler, error: Exception) -> None:
 
 
 def handle_get(handler, path: str) -> bool:
-    if not path.startswith("/api/"):
+    task_match = re.fullmatch(r"/api/tasks/([^/]+)", path)
+    progress_match = re.fullmatch(r"/api/estimations/([^/]+)/progress-reports", path)
+    if path not in GET_ROUTES and not (task_match or progress_match):
         return False
     try:
         session = auth_routes.require_full_session(handler, refresh=path != "/api/notifications")
@@ -89,7 +133,6 @@ def handle_get(handler, path: str) -> bool:
         if path == "/api/tasks/summary":
             handler.send_json({"ok": True, "summary": service.summary(options.get("group", "all"))})
             return True
-        task_match = re.fullmatch(r"/api/tasks/([^/]+)", path)
         if task_match:
             handler.send_json({"ok": True, "task": service.get_task(unquote(task_match.group(1)))})
             return True
@@ -111,7 +154,6 @@ def handle_get(handler, path: str) -> bool:
             )
             handler.send_json({"ok": True, **result})
             return True
-        progress_match = re.fullmatch(r"/api/estimations/([^/]+)/progress-reports", path)
         if progress_match:
             items = service.progress_reports_for(unquote(progress_match.group(1)))
             handler.send_json({"ok": True, "items": items})
