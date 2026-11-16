@@ -334,6 +334,9 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   authenticated sessions. Their draft photographs and route maps use
   task-scoped local files served only through authenticated routes. Practice
   forms remain browser-local and do not create durable task data.
+- Progress and Completion practice forms open with a linked fictional estimate
+  when the practice draft has no estimate selected. Both report types use the
+  sample's component costs for their assessments.
 - General, agricultural, Progress and Completion draft photographs (and route
   maps where applicable) are retained only while the task is In Progress or On
   Hold. They are removed from standalone draft storage when the task reaches
@@ -436,12 +439,17 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   amount wording capitalizes each word, including “Only”, and hyphenates
   compound numbers (for example, “Forty-Five”). Correct definite spelling errors while retaining valid
   spelling variants such as “Saleability”.
-- General and agricultural photographs use three columns with up to 12 photos
-  per page. Their location map is one image in a merged three-column, two-row
-  area: on the same media page for up to nine photos, on a separate page after
-  all photos for ten or more. Images retain aspect ratio and are not cropped.
-  Progress and Completion retain their existing three-column, up-to-12-photo
-  layout.
+- Newly generated online General and Agricultural Valuation, Revaluation,
+  Progress and Completion reports require at least one site photograph and one
+  location map screenshot. One site photograph is centered across the page in
+  a two-row-height area. Two photographs share that height side by side. Three
+  use a side-by-side pair with the third centered below; four use two pairs.
+  Five or six use two columns and seven or more use three columns, with up to
+  12 site photographs per page. The separately uploaded map is centered in a
+  full-width, two-row-height area on the same media page for up to nine site
+  photographs, or on its own page after all photographs for ten or more.
+  Each image keeps its aspect ratio and is individually resizable in the DOCX.
+  Existing report files and offline submissions stay on their current workflow.
 - DOCX is the completion-qualifying artifact for ordinary valuation work. A
   generated PDF is an optional direct-download copy and does not independently
   qualify the task for completion or closure.
@@ -706,11 +714,10 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   linked-estimate and assessment rules apply. A changed assessment or revised
   linked estimation requires review and a fresh attachment. The task records its
   own preparation method while the CEO filter still uses the linked estimate's.
-- Online Progress/Completion retain their existing site-photograph and document
-  rules, including at least one authenticated site photograph and a generated
-  DOCX. Offline upload qualifies with the retained DOCX or PDF and requires
-  no separate photo upload or preview. Only Filled template requires a prior
-  template download.
+- Online Progress/Completion require the shared site-photograph and location
+  map inputs and a generated DOCX. Offline upload qualifies with the retained
+  DOCX or PDF and requires no separate media upload or preview. Only Filled
+  template requires a prior template download.
 - Revaluation is a separate assignment linked to an original Completed or Closed
   General or Agricultural Valuation. It pins the original retained report version
   and starts with an editable copy of its saved fields, excluding photos and maps.

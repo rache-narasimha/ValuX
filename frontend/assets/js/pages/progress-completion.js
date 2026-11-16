@@ -9,8 +9,27 @@
   const draftScope = practice ? "practice" : `task-${taskId || "standalone"}`;
   const DRAFT_KEY = `sln.progress-completion.form.draft.v1-${draftScope}`;
   const TODAY = localToday();
+  const practiceEstimate = {
+    id: "PRACTICE-EST-001",
+    title: "Sample residential estimate (fictional)",
+    customerName: "Sample Borrower",
+    institutionName: "Sample Bank",
+    branch: "Adoni",
+    estimationSummary: {
+      identityVersion: 2,
+      applicantName: "Sample Borrower, Adoni",
+      propertyTypeLabel: "Residential building",
+      workDescription: "Construction of a residential building",
+      workAddress: "Sample Plot, Adoni",
+      totalEstimatedCost: 2000000,
+      components: [
+        { id: "ground-floor", label: "Ground Floor", estimatedCost: 1200000 },
+        { id: "first-floor", label: "First Floor", estimatedCost: 800000 },
+      ],
+    },
+  };
   const sectionLabels = { setup: "Report Setup", preparation: "Preparation Method", assessment: "Work Assessment", bank: "Bank Sanction", photos: "Photos & Generate", offline: "Complete & Upload Report" };
-  const state = { linkedEstimationId: task?.linkedEstimationId || "", current: 0, preparationMethod: "online", details: {}, components: [], bank: { releases: [] }, photos: [] };
+  const state = { linkedEstimationId: task?.linkedEstimationId || "", current: 0, preparationMethod: "online", details: {}, components: [], bank: { releases: [] }, photos: [], map: null };
   let saveTimer = null;
   let previousReports = [];
   let previewId = null;
@@ -31,7 +50,14 @@
     return ValuxTime.today();
   }
 
-  function selectedTask() { return state.linkedEstimationId ? TaskStore.get(state.linkedEstimationId) : null; }
+  function usesPracticeEstimate(estimationId) {
+    return practice && estimationId === practiceEstimate.id;
+  }
+
+  function selectedTask() {
+    if (usesPracticeEstimate(state.linkedEstimationId)) return practiceEstimate;
+    return state.linkedEstimationId ? TaskStore.get(state.linkedEstimationId) : null;
+  }
   function currentTask() { return taskId && window.TaskStore ? TaskStore.get(taskId) : null; }
   function linkedSummary() { return selectedTask()?.estimationSummary || null; }
   function requestedReportType() { return practice ? element("practice-report-type").value : task?.reportGroup || "progress"; }
@@ -113,25 +139,39 @@
     const candidates = [];
     let offset = 0;
     let hasMore = true;
-    while (hasMore) {
-      const result = await TaskStore.eligibleEstimations(requestedReportType(), TODAY, { offset, limit: 50 });
-      candidates.push(...result.items);
-      offset += result.items.length;
-      hasMore = result.hasMore && result.items.length > 0;
+    try {
+      while (hasMore) {
+        const result = await TaskStore.eligibleEstimations(requestedReportType(), TODAY, { offset, limit: 50 });
+        candidates.push(...result.items);
+        offset += result.items.length;
+        hasMore = result.hasMore && result.items.length > 0;
+      }
+    } catch (error) {
+      if (!usesPracticeEstimate(state.linkedEstimationId)) {
+        element("status").textContent = reportErrorMessage(error, "Other estimation reports could not be loaded.");
+      }
     }
-    select.innerHTML = '<option value="">Select an estimation report</option>' + candidates.map((candidate) => `<option value="${escape(candidate.id)}">${escape(candidate.id)} · ${escape(candidate.customerName)} · ${escape(currency(candidate.estimationSummary?.totalEstimatedCost || 0))}</option>`).join("");
+    select.innerHTML = '<option value="">Select an estimation report</option>'
+      + `<option value="${practiceEstimate.id}">${escape(practiceEstimate.title)} · ${currency(practiceEstimate.estimationSummary.totalEstimatedCost)}</option>`
+      + candidates.map((candidate) => `<option value="${escape(candidate.id)}">${escape(candidate.id)} · ${escape(candidate.customerName)} · ${escape(currency(candidate.estimationSummary?.totalEstimatedCost || 0))}</option>`).join("");
     select.value = state.linkedEstimationId;
   }
 
+  function loadProgressHistory(estimationId) {
+    return estimationId && !usesPracticeEstimate(estimationId)
+      ? TaskStore.progressReportsFor(estimationId) : [];
+  }
+
   async function prepareLinkedEstimate(estimationId, preserveValues = false) {
-    previousReports = estimationId ? await TaskStore.progressReportsFor(estimationId) : [];
+    previousReports = await loadProgressHistory(estimationId);
     loadLinkedEstimate(estimationId, preserveValues);
   }
 
   function renderLinkedEstimate() {
     const linked = selectedTask();
     const summary = linked?.estimationSummary;
-    element("linked-estimate-name").textContent = linked ? `${linked.id} · ${linked.customerName}` : "Not selected";
+    element("linked-estimate-name").textContent = usesPracticeEstimate(state.linkedEstimationId)
+      ? practiceEstimate.title : linked ? `${linked.id} · ${linked.customerName}` : "Not selected";
     element("linked-estimate-meta").textContent = linked && summary ? `${linked.institutionName}, ${linked.branch} · ${summary.propertyTypeLabel || summary.propertyType || "Property"} · ${currency(summary.totalEstimatedCost)}` : "Select a finalized estimation report containing a retained cost summary.";
     const invalid = !linked || !summary || !(summary.components || []).length;
     element("link-error").hidden = !invalid;
@@ -283,6 +323,7 @@
       components: state.components,
       bank: state.bank,
       photos: state.photos,
+      map: state.map,
       autofilledReportFields: [...reportDefaults],
     });
   }
@@ -327,6 +368,7 @@
     state.details = saved.details || {};
     state.bank = { releases: [], ...(saved.bank || {}) };
     state.photos = Array.isArray(saved.photos) ? saved.photos : [];
+    state.map = saved.map || null;
     renderPhotos();
     element("status").textContent = ReportData.localOnly ? "Saved locally" : "Saved";
     element("status").classList.remove("is-saving");
@@ -344,6 +386,7 @@
       state.details = saved.details || {};
       state.bank = { releases: [], ...(saved.bank || {}) };
       state.photos = Array.isArray(saved.photos) ? saved.photos : [];
+      state.map = saved.map || null;
       element("status").textContent = "Draft restored";
     } catch (_error) { element("status").textContent = "Draft could not be restored"; }
   }
@@ -358,6 +401,7 @@
     const linked = linkedSummary();
     if (!linked || !state.components.length) issues.push("Select a finalized estimation report with component costs.");
     if (!offline && !state.photos.length) issues.push("Attach at least one authenticated site photograph.");
+    if (!offline && !state.map) issues.push("Attach one location map screenshot.");
     if (!state.details.reportDate) issues.push("Enter the report date.");
     if (!state.details.visitDate) issues.push("Enter the site-visit date.");
     if (!String(state.details.place || "").trim()) issues.push("Enter the report place.");
@@ -371,7 +415,9 @@
     if (state.details.noDeviation === "no" && !String(state.details.deviationRemarks || "").trim()) issues.push("Describe the observed plan deviation.");
     const derived = computedReportType();
     if (requestedReportType() === "completion" && derived !== "completion") issues.push("A Completion report requires 100% completion and zero balance work for every component.");
-    if (requestedReportType() === "progress" && derived === "completion") issues.push("All components are complete. Create this assignment as a Completion report.");
+    if (requestedReportType() === "progress" && derived === "completion") issues.push(practice
+      ? "All components are complete. Select Completion report in Report Setup."
+      : "All components are complete. Create this assignment as a Completion report.");
     return issues;
   }
 
@@ -390,6 +436,7 @@
       components: state.components.map((component) => { const current = calculation(component); return { id: component.id, label: component.label, estimatedCost: current.estimated, completionPercent: current.percent, completedCost: current.completed }; }),
       bank: clone(state.bank),
       photos: state.photos.map(({ name, data, storedFileId }) => ({ name, data, storedFileId })),
+      map: state.map,
       preview_id: previewId,
     };
   }
@@ -455,6 +502,14 @@
       renderPhotos();
       reportInputChanged();
     }));
+    const mapPreview = element("map-preview");
+    mapPreview.innerHTML = state.map ? `<img src="${escape(state.map.data)}" alt="Location map preview"><button type="button" class="secondary" data-remove-map>Remove map</button>` : "";
+    mapPreview.querySelector("[data-remove-map]")?.addEventListener("click", () => {
+      if (!confirmReportInvalidation()) return;
+      state.map = null;
+      renderPhotos();
+      reportInputChanged();
+    });
   }
 
   function wire() {
@@ -499,13 +554,21 @@
     element("release-rows").addEventListener("input", (event) => { const dateIndex = event.target.dataset.releaseDate; const amountIndex = event.target.dataset.releaseAmount; if (!confirmReportInvalidation()) { renderReleases(); return; } if (dateIndex !== undefined) state.bank.releases[Number(dateIndex)].date = event.target.value; if (amountIndex !== undefined) state.bank.releases[Number(amountIndex)].amount = event.target.value; renderBankCalculations(); reportInputChanged(); });
     element("release-rows").addEventListener("click", (event) => { const index = event.target.dataset.removeRelease; if (index === undefined) return; if (!confirmReportInvalidation()) return; state.bank.releases.splice(Number(index), 1); renderReleases(); reportInputChanged(); });
     element("photo-upload").addEventListener("change", async (event) => { if (!confirmReportInvalidation()) { event.target.value = ""; return; } const added = await Promise.all([...event.target.files].map(fileToData)); const existing = new Set(state.photos.map((photo) => photo.key)); state.photos.push(...added.filter((photo) => !existing.has(photo.key))); event.target.value = ""; renderPhotos(); reportInputChanged(); });
+    element("map-upload").addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      event.target.value = "";
+      if (!file || !confirmReportInvalidation()) return;
+      state.map = await fileToData(file);
+      renderPhotos();
+      reportInputChanged();
+    });
     element("previous").addEventListener("click", () => showSection(state.current - 1, true));
     element("next").addEventListener("click", () => showSection(state.current + 1, true));
     element("preview-report").addEventListener("click", () => requestReport("preview"));
     element("generate-docx").addEventListener("click", () => requestReport("generate"));
     element("close-preview").addEventListener("click", () => { element("preview-modal").hidden = true; });
     element("preview-modal").addEventListener("click", (event) => { if (event.target === element("preview-modal")) element("preview-modal").hidden = true; });
-    element("discard-draft").addEventListener("click", async () => { if (!window.confirm("Discard this progress/completion draft? The retained report will become outdated and must be previewed and generated again.")) return; try { markDirty(); await ReportData.discard(DRAFT_KEY); state.details = {}; reportDefaults.clear(); state.bank = { releases: [] }; state.photos = []; loadLinkedEstimate(state.linkedEstimationId); element("status").textContent = "Draft discarded"; renderPhotos(); } catch (error) { element("status").textContent = error.message || "Draft could not be discarded"; } });
+    element("discard-draft").addEventListener("click", async () => { if (!window.confirm("Discard this progress/completion draft? The retained report will become outdated and must be previewed and generated again.")) return; try { markDirty(); await ReportData.discard(DRAFT_KEY); state.details = {}; reportDefaults.clear(); state.bank = { releases: [] }; state.photos = []; state.map = null; loadLinkedEstimate(state.linkedEstimationId); element("status").textContent = "Draft discarded"; renderPhotos(); } catch (error) { element("status").textContent = error.message || "Draft could not be discarded"; } });
   }
 
   async function setPreparationMethod(method) {
@@ -553,7 +616,7 @@
       const panel = RetrospectiveValuation.offlinePanel(task.reportKey, state.uploadType, {
         prepareUpload: prepareRetrospectiveUpload,
         downloadTemplate: async () => {
-          const { photos, ...templateData } = payload();
+          const { photos, map, ...templateData } = payload();
           return fetch("/api/progress/template", {
             method: "POST",
             headers: await ReportData.requestHeaders({ "Content-Type": "application/json" }),
@@ -578,7 +641,7 @@
       }
     }
     const restoredPreview = ReportData.preview();
-    if (restoredPreview?.id) {
+    if (restoredPreview?.id && state.photos.length && state.map) {
       previewId = restoredPreview.id;
       element("generate-docx").disabled = false;
       element("status").textContent = "Draft and latest preview restored";
@@ -586,15 +649,21 @@
     element("practice-estimation-wrap").hidden = !practice;
     element("practice-type-wrap").hidden = !practice;
     if (practice) {
+      if (!state.linkedEstimationId) state.linkedEstimationId = practiceEstimate.id;
       await populatePracticeCandidates();
       element("practice-estimation").addEventListener("change", async (event) => {
-        try { await prepareLinkedEstimate(event.target.value); }
+        try { await prepareLinkedEstimate(event.target.value); markDirty(); }
         catch (error) { element("link-error").hidden = false; element("link-error").textContent = error.message || "Linked report history could not be loaded."; }
       });
-      element("practice-report-type").addEventListener("change", async () => { await populatePracticeCandidates(); renderComponents(); scheduleSave(); });
+      element("practice-report-type").addEventListener("change", async () => {
+        markDirty();
+        await populatePracticeCandidates();
+        renderComponents();
+        scheduleSave();
+      });
     }
     if (state.linkedEstimationId) {
-      previousReports = await TaskStore.progressReportsFor(state.linkedEstimationId);
+      previousReports = await loadProgressHistory(state.linkedEstimationId);
       if (!state.components.length) loadLinkedEstimate(state.linkedEstimationId, true);
       else render();
     }

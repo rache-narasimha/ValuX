@@ -25,6 +25,7 @@ from ..estimation.generator import online_estimation_summary
 from ..estimation.summary import WorkbookTotalsMismatch, verify_generated_estimation
 from ..exports import generate_table_export
 from ..progress import generate_progress_report
+from ..valuation.media import require_online_media
 from ..progress.generator import generate_progress_template
 from ..reports import routes as report_routes
 from ..reports import service as report_service
@@ -337,6 +338,7 @@ class Handler(BaseHTTPRequestHandler):
             if task_code:
                 auth_routes.verify_csrf(self)
                 payload = report_service.hydrate_media(task_code, payload, session)
+            require_online_media(payload.get("photos"), payload.get("map"))
             values = payload.get("values", {})
             OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
             is_agricultural = request_path in agricultural_paths

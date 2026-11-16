@@ -497,7 +497,7 @@ function addFloorSection(panel) {
 }
 function addMedia(panel) {
   panel.innerHTML +=
-    '<section class="subgroup"><h3>Property photographs</h3><p class="hint">Reports use a 3 × 4 media grid with up to 12 items per page. The map follows the photographs in the next available cell; after an exact batch of 12 photographs it starts the next page. Images retain their full aspect ratio and are never cropped.</p><input id="photo-upload" type="file" accept="image/*" multiple><div id="photo-preview" class="preview-grid three-columns"></div></section><section class="subgroup"><h3>Location map</h3><p class="hint">Upload one map screenshot. It follows the photographs in the 12-item media sequence.</p><input id="map-upload" type="file" accept="image/*"><div id="map-preview" class="map-preview"></div></section>';
+    '<section class="subgroup"><h3>Property photographs</h3><p class="hint">Attach at least one site photograph. Up to 12 fit per report page. Each photograph keeps its proportions.</p><input id="photo-upload" type="file" accept="image/*" multiple><div id="photo-preview" class="preview-grid three-columns"></div></section><section class="subgroup"><h3>Location map</h3><p class="hint">Attach one map screenshot. It shares the photo page with up to nine site photographs and starts a new page after ten or more.</p><input id="map-upload" type="file" accept="image/*"><div id="map-preview" class="map-preview"></div></section>';
   panel.querySelector("#photo-upload").onchange = async (e) => {
     if (!confirmReportInvalidation()) {
       e.target.value = "";
@@ -670,9 +670,13 @@ function moveSection(offset) {
   if (next !== undefined) show(next);
 }
 function validateRequiredFields(form) {
-  if (form.checkValidity()) return true;
-  const invalid = [...form.elements].find((control) => typeof control.checkValidity === "function" && !control.checkValidity());
-  const message = NumericEntry.error(form) || "Complete the highlighted required field before previewing the report.";
+  const invalidField = [...form.elements].find((control) => typeof control.checkValidity === "function" && !control.checkValidity());
+  const missingMedia = !state.photos.length ? "photo-upload" : !state.map ? "map-upload" : "";
+  const invalid = invalidField || byId(missingMedia);
+  if (!invalid) return true;
+  const message = invalidField
+    ? NumericEntry.error(form) || "Complete the highlighted required field before previewing the report."
+    : missingMedia === "photo-upload" ? "Attach at least one site photograph." : "Attach one location map screenshot.";
   byId("status").textContent = message;
   if (invalid) {
     const panel = invalid.closest(".panel");
@@ -995,7 +999,7 @@ async function init() {
     },
   });
   const restoredPreview = ReportData.preview();
-  if (restoredPreview?.id) {
+  if (restoredPreview?.id && state.photos.length && state.map) {
     state.previewId = restoredPreview.id;
     state.previewReady = true;
     byId("generate-docx").disabled = false;
@@ -1060,7 +1064,7 @@ byId("valuation-form").addEventListener("submit", async (e) => {
     alert("Please preview the latest report before downloading.");
     return;
   }
-  if (state.processing) return;
+  if (state.processing || !validateRequiredFields(byId("valuation-form"))) return;
   const status = byId("status");
   status.textContent = `Generating ${state.format.toUpperCase()}…`;
   setProcessing(

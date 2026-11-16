@@ -191,12 +191,13 @@ def http_flow():
             "components": [
                 {**item, "completionPercent": percent, "completedCost": round(item["estimatedCost"] * percent / 100, 2)}
                 for item in components
-            ], "photos": [photo],
+            ], "photos": [photo], "map": photo,
         }
         saved_assessment = request(f"/api/tasks/{linked_code}/draft", {
             "reportKey": report_type, "schemaVersion": "1", "revision": 0, "payload": assessment,
         })["draft"]["payload"]
         assessment["photos"] = saved_assessment["photos"]
+        assessment["map"] = saved_assessment["map"]
         invalid = {**assessment, "components": [{**assessment["components"][0], "estimatedCost": 5000}]}
         assert request("/api/progress/preview", invalid, status=409)["code"] == "estimation_components_changed"
         approved = request("/api/progress/preview", assessment)

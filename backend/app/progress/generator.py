@@ -16,7 +16,7 @@ from docx.shared import Inches, Mm, Pt, RGBColor
 
 from ..business_time import tenant_today
 from ..valuation.formatting import amount_in_words, display_date, indian_number, number_value
-from ..valuation.media import insert_uploaded_media
+from ..valuation.media import insert_uploaded_media, require_online_media
 
 
 VALUER_NAME = "K.Sivaprasad"
@@ -172,7 +172,7 @@ def _add_title(document, report_type: str, is_karnataka: bool):
     _add_paragraph(document, "(Should be obtained before each disbursal)", align=WD_ALIGN_PARAGRAPH.CENTER, size=10)
 
 
-def _validate(payload: Mapping[str, Any], *, require_photos: bool = True) -> dict[str, Any]:
+def _validate(payload: Mapping[str, Any], *, require_media: bool = True) -> dict[str, Any]:
     institution = dict(payload.get("institution") or {})
     linked = dict(payload.get("linkedEstimation") or {})
     details = dict(payload.get("details") or {})
@@ -180,9 +180,10 @@ def _validate(payload: Mapping[str, Any], *, require_photos: bool = True) -> dic
     raw_components = payload.get("components")
     if not isinstance(raw_components, list) or not raw_components:
         raise ValueError("The linked estimation report has no component estimates.")
-    photos = list(payload.get("photos") or [])
-    if require_photos and not photos:
-        raise ValueError("Attach at least one authenticated site photograph before generating the report.")
+    photos = payload.get("photos") or []
+    map_image = payload.get("map")
+    if require_media:
+        require_online_media(photos, map_image)
     for index, raw in enumerate(raw_components, start=1):
         label = str((raw or {}).get("label") or "").strip()
         if not label:
@@ -248,6 +249,7 @@ def _validate(payload: Mapping[str, Any], *, require_photos: bool = True) -> dic
         "totalValue": total_value,
         "noDeviation": no_deviation,
         "photos": photos,
+        "map": map_image,
     }
 
 
@@ -540,7 +542,7 @@ def generate_progress_report(payload: Mapping[str, Any], output_path: str | Path
         temporary.write_bytes(stream.getvalue())
         remove_after = False
     try:
-        insert_uploaded_media(temporary, data["photos"], None)
+        insert_uploaded_media(temporary, data["photos"], data["map"])
         content = temporary.read_bytes()
     finally:
         if remove_after:
@@ -574,5 +576,5 @@ def retrospective_summary(draft, report_type, linked_task_code):
         "components": components,
         "requestedReportType": report_type,
         "linkedEstimation": {"taskId": linked_task_code},
-    }, require_photos=False)
+    }, require_media=False)
     return _summary(data)

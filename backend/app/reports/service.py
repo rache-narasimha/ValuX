@@ -50,12 +50,13 @@ class ReportDataError(Exception):
 
 
 def _current_template_version(report_key: str) -> str:
+    media_layout = APP_ROOT / "backend/app/valuation/media.py"
     sources = {
-        "valuation-general": [TEMPLATE],
-        "valuation-agricultural": [AGRICULTURAL_TEMPLATE],
+        "valuation-general": [TEMPLATE, media_layout],
+        "valuation-agricultural": [AGRICULTURAL_TEMPLATE, media_layout],
         "estimation": [APP_ROOT / "resources/estimation/estimation_manifest.json", APP_ROOT / "backend/app/estimation/generator.py"],
-        "progress": [APP_ROOT / "backend/app/progress/generator.py"],
-        "completion": [APP_ROOT / "backend/app/progress/generator.py"],
+        "progress": [APP_ROOT / "backend/app/progress/generator.py", media_layout],
+        "completion": [APP_ROOT / "backend/app/progress/generator.py", media_layout],
     }.get(report_key, [])
     digest = hashlib.sha256()
     for path in sources:
@@ -705,6 +706,8 @@ def report_input_fingerprint(
             "bank": _compact_payload(source.get("bank") if isinstance(source.get("bank"), dict) else {}),
             "photos": _compact_payload(source.get("photos") if isinstance(source.get("photos"), list) else []),
         }
+        if source.get("map"):
+            report_input["map"] = _compact_payload(source["map"])
         if source.get("preparationMethod") == "offline" and source.get("uploadType") == "template":
             report_input["uploadType"] = "template"
         if source.get("preparationMethod") == "offline" or source.get("preparationRevision"):

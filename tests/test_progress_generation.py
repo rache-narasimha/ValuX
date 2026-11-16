@@ -54,6 +54,7 @@ def payload():
             "releases": [{"date": "2026-09-15", "amount": 3000000}],
         },
         "photos": [photo(index) for index in range(1, 5)],
+        "map": photo(5),
     }
 
 
@@ -78,7 +79,8 @@ def main():
     assert "Sample Official, Branch Manager" in text
     assert "BRANCH SANCTION" in text
     assert "95,72,000" in text
-    assert len(progress_document.inline_shapes) == 4
+    assert len(progress_document.inline_shapes) == 5
+    assert "LOCATION MAP" in text
     assert progress.summary["totalValue"] == 9572000
 
     shared_identity = copy.deepcopy(payload())
@@ -137,6 +139,15 @@ def main():
         assert "photograph" in str(error)
     else:
         raise AssertionError("Progress and Completion reports must require a site photograph")
+
+    missing_map = copy.deepcopy(completion_payload)
+    del missing_map["map"]
+    try:
+        generate(missing_map)
+    except ValueError as error:
+        assert "location map" in str(error)
+    else:
+        raise AssertionError("Progress and Completion reports must require a location map")
 
     invalid = copy.deepcopy(completion_payload)
     invalid["requestedReportType"] = "progress"

@@ -52,16 +52,21 @@ def main():
     payload = json.loads(PAYLOAD_PATH.read_text())
     route_map = image_item(99)
     expected_layouts = {
-        0: [(2, 3, 1)],
-        4: [(2, 3, 4), (2, 3, 1)],
-        6: [(2, 3, 6), (2, 3, 1)],
-        9: [(3, 3, 9), (2, 3, 1)],
-        10: [(4, 3, 10), (2, 3, 1)],
-        11: [(4, 3, 11), (2, 3, 1)],
-        12: [(4, 3, 12), (2, 3, 1)],
-        13: [(4, 3, 12), (1, 3, 1), (2, 3, 1)],
-        23: [(4, 3, 12), (4, 3, 11), (2, 3, 1)],
-        24: [(4, 3, 12), (4, 3, 12), (2, 3, 1)],
+        0: [(1, 1, 1)],
+        1: [(1, 1, 1), (1, 1, 1)],
+        2: [(1, 2, 2), (1, 1, 1)],
+        3: [(2, 2, 3), (1, 1, 1)],
+        4: [(2, 2, 4), (1, 1, 1)],
+        5: [(3, 2, 5), (1, 1, 1)],
+        6: [(3, 2, 6), (1, 1, 1)],
+        7: [(3, 3, 7), (1, 1, 1)],
+        9: [(3, 3, 9), (1, 1, 1)],
+        10: [(4, 3, 10), (1, 1, 1)],
+        11: [(4, 3, 11), (1, 1, 1)],
+        12: [(4, 3, 12), (1, 1, 1)],
+        13: [(4, 3, 12), (1, 3, 1), (1, 1, 1)],
+        23: [(4, 3, 12), (4, 3, 11), (1, 1, 1)],
+        24: [(4, 3, 12), (4, 3, 12), (1, 1, 1)],
     }
     for count, expected in expected_layouts.items():
         photos = [image_item(index, portrait=index % 2 == 0, exif_orientation=6 if index == 1 else None) for index in range(1, count + 1)]
@@ -73,9 +78,15 @@ def main():
             for table in layout_document.tables if table._tbl.xpath(".//w:drawing")
         ]
         assert media_tables == expected, (count, media_tables)
-        map_table = [table for table in layout_document.tables if table._tbl.xpath(".//w:drawing")][-1]
-        assert map_table.cell(0, 0)._tc.grid_span == 3
-        assert len(map_table._tbl.xpath(".//w:vMerge")) == 2
+        tables = [table for table in layout_document.tables if table._tbl.xpath(".//w:drawing")]
+        map_table = tables[-1]
+        assert abs(map_table.rows[0].height.mm - 86) < 0.05
+        assert all(row.height_rule.name == "AT_LEAST" for table in tables for row in table.rows)
+        if count == 1 or count == 2:
+            assert abs(tables[0].rows[0].height.mm - 86) < 0.05
+        if count == 3:
+            assert tables[0].cell(1, 0)._tc.grid_span == 2
+        assert not any(shape._inline.xpath(".//a:srcRect") for shape in layout_document.inline_shapes)
         map_heading = next(p for p in layout_document.paragraphs if p.text == "LOCATION MAP")
         if count:
             assert bool(map_heading.paragraph_format.page_break_before) == (count >= 10)

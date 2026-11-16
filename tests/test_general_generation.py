@@ -206,17 +206,15 @@ def main():
     assert floors_doc.tables[9].rows[-1].cells[-1].text == "500/-"
     assert floors_doc.tables[10].rows[-1].cells[-1].text == "700/-"
     from tests.test_agricultural_generation import image_item
-    for count in (9, 10):
+    for count in (1, 9, 10):
         path = OUTPUT_PATH.with_name(f"general_media_{count}.docx")
         reports.generate_docx(values, path, [image_item(i, portrait=i % 2 == 0) for i in range(count)], image_item(99))
         media_document = Document(path)
         media_tables = [t for t in media_document.tables if t._tbl.xpath(".//w:drawing")]
         assert [len(t._tbl.xpath(".//w:drawing")) for t in media_tables] == [count, 1]
-        # The Word-safe export may combine the three identical grid columns
-        # into one full-width column. Assert the physical slot, not its encoding.
-        assert len(media_tables[-1].rows) == 2
+        assert abs(media_tables[-1].rows[0].height.mm - 86) < 0.05
         assert abs(media_tables[-1].cell(0, 0).width - sum(c.width for c in media_tables[0].columns)) < 36000
-        assert len(media_tables[-1]._tbl.xpath(".//w:vMerge")) == 2
+        assert media_tables[-1].rows[0].height_rule.name == "AT_LEAST"
     print(f"PASS: {OUTPUT_PATH}")
 
 

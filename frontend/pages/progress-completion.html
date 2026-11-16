@@ -87,10 +87,16 @@
             <h2>Photographs and report generation</h2>
             <section class="subgroup">
               <h3>Authenticated site photographs <span aria-hidden="true">*</span></h3>
-              <p class="hint">Attach at least one site photograph. The report follows the valuation-photo layout: 1–4 photographs use one per row, 5–6 use two per row, and 7–9 use three per row. Additional photographs continue on another page without cropping.</p>
+              <p class="hint">Attach at least one site photograph. Up to 12 fit per report page. Each photograph keeps its proportions.</p>
               <input id="photo-upload" type="file" accept="image/*" multiple />
               <p class="hint media-save-note">Task-linked photographs are retained with the draft. Practice photographs remain local to this browser.</p>
               <div id="photo-preview" class="preview-grid"></div>
+            </section>
+            <section class="subgroup">
+              <label for="map-upload" class="required">Location map</label>
+              <p class="hint">Attach one map screenshot. It shares the photo page with up to nine site photographs and starts a new page after ten or more.</p>
+              <input id="map-upload" type="file" accept="image/*" />
+              <div id="map-preview" class="map-preview"></div>
             </section>
             <div id="validation-message" class="notice error-notice" hidden></div>
           </section>

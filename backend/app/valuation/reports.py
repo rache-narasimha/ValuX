@@ -245,7 +245,7 @@ def generate_agricultural_docx(values, output_path, photos=None, map_image=None,
         revaluation=revaluation, formatted_tokens={token: rich_fields[key] for key, token in tokens.items() if key in rich_fields},
     )
     normalize_agricultural_typography(output_path)
-    insert_uploaded_media(output_path, photos or [], map_image, valuation_map=True)
+    insert_uploaded_media(output_path, photos or [], map_image)
     finalize_agricultural_pagination(output_path)
 
 
@@ -344,4 +344,4 @@ def _generate_general_docx(values, output_path, photos=None, map_image=None, *, 
     document = Document(output_path)
     keep_table_opening_together(document)
     document.save(output_path)
-    insert_uploaded_media(output_path, photos or [], map_image, valuation_map=True)
+    insert_uploaded_media(output_path, photos or [], map_image)
