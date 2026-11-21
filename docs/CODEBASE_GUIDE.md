@@ -108,6 +108,8 @@ order as a local cleanup. Those changes affect multiple pages at once.
 - `task-detail.js`: a single task's actions, payment, history and final DOCX.
 - `task-context.js`: workflow controls shown around a report form opened from a task.
 - `general.js`: general-property valuation form only.
+- `valuation-construction.js`: General Valuation/Revaluation building configuration,
+  optional issued-estimate selection, adopted construction-cost entries and totals.
 - `agricultural.js`: agricultural valuation form only.
 - `estimation.js`: preparation choice, detailed-estimation configuration, measurements, drafts and online XLSX workflow.
 - `estimation-naming.js`: display labels and compact-Abstract rules mirrored by `estimation/presentation.py`.
@@ -135,6 +137,8 @@ than by HTTP endpoint:
 - `valuation/schemas.py`: loads and prepares field schemas from `resources/`.
 - `valuation/formatting.py`: parsing and presentation utilities shared by reports.
 - `valuation/calculations.py`: valuation-only arithmetic and result assembly.
+- `valuation/construction.py` and `valuation/cover.py`: typical-floor multipliers,
+  construction-note values and the one-/two-column General cover note block.
 - `valuation/ooxml.py`: low-level WordprocessingML edits. Keep business decisions out.
 - `valuation/media.py`: image normalization and Word media placement. Keep form rules out.
 - `valuation/reports.py`: coordinates schema values, templates, calculations and output.
@@ -167,6 +171,13 @@ than by HTTP endpoint:
   are saved with drafts/artifacts; Filled template registration checks only the
   task download timestamp. `reports/routes.py` is the authenticated draft/file
   adapter.
+- `reports/valuation_reference.py`: bounded issued-estimate search and immutable
+  snapshot/configuration reads for valuation; independent of Progress/Completion locks.
+  General preview-pair reuse and one-time DOCX adoption remain in `reports/service.py`.
+- `reports/workbook_uploads.py`: XLSX package budgets, hardened XML inspection
+  and isolated upload parsing. Estimation budget exhaustion preserves manual
+  totals; KVB keeps its readable-workbook requirement. This does not replace
+  generated-workbook calculation verification in `estimation/summary.py`.
 
 Do not place workflow or reference-data queries in `auth/` merely because all
 three domains use PostgreSQL.

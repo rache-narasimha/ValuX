@@ -78,6 +78,7 @@
             if (!response.ok) throw new Error(data.error || "The report could not be read.");
             if (requestVersion !== analysisVersion || selectedFile !== file || state.details.workMode !== mode) return;
             content = encoded;
+            errorMessage = data.extractionNotice || "";
             state.details.offlineComponents = data.components?.length ? data.components.map((item, index) => ({id: `offline-${index + 1}`, label: item.label || "", estimatedCost: item.estimatedCost ?? "", plinthArea: item.plinthArea ?? ""})) : [{id: uid(), label: "", estimatedCost: ""}];
             state.details.extractedComponentFields = Object.fromEntries(rows().map((row) => [
               row.id, ["label", "estimatedCost", "plinthArea"].filter((key) => row[key] != null && row[key] !== ""),

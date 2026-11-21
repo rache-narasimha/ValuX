@@ -210,6 +210,20 @@ def prepare_floor_rows(root, values):
             first_text[0].text = str(index)
         parent.insert(parent.index(template_row) + index - 2, clone)
 
+
+def prepare_plot_sections(root, values):
+    """Omit building-only blocks without renumbering the bank's remaining parts."""
+    if not str(values.get("property.category", "")).endswith("_plot"):
+        return
+    for table in root.xpath("./w:body/w:tbl", namespaces=NS):
+        tags = table.xpath(".//w:tag/@w:val", namespaces=NS)
+        if any(tag.startswith(("building.", "construction.")) for tag in tags):
+            table.getparent().remove(table)
+    for paragraph in root.xpath("./w:body/w:p", namespaces=NS):
+        text = "".join(paragraph.xpath(".//w:t/text()", namespaces=NS)).strip()
+        if text in {"Specifications of construction", "Specifications of construction (Proposed)", "Building Valuation"}:
+            paragraph.getparent().remove(paragraph)
+
 def relabel_revaluation(root):
     """Update the template wording before filling any report fields."""
     for paragraph in root.xpath(".//w:p", namespaces=NS):

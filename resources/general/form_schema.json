@@ -1403,5 +1403,25 @@
     "highlight_only": "present_market_value",
     "cover_fair_market_value_color": "#0070C0",
     "depreciation_formula_status": "pending_user_confirmation"
+  },
+  "construction_summary": {
+    "version": 1,
+    "statuses": [
+      "proposed",
+      "under_construction"
+    ],
+    "estimate_reference": "construction.estimate_reference",
+    "adopted_costs": "construction.estimates",
+    "floor_count_suffix": "count",
+    "floor_basis_suffix": "basis",
+    "floor_bases": [
+      "combined",
+      "per_floor"
+    ],
+    "building_value": "sum_of_assessed_floor_groups",
+    "cover_note_columns": {
+      "up_to_8": 1,
+      "above_8": 2
+    }
   }
 }

@@ -3,7 +3,8 @@
   "use strict";
 
   const params = new URLSearchParams(window.location.search);
-  const taskCode = params.get("task") || "";
+  const practice = params.get("practice") === "1";
+  const taskCode = practice ? "" : params.get("task") || "";
   const localOnly = params.get("practice") === "1" || !taskCode || !window.BusinessApi;
   let revision = 0;
   let previewState = null;
@@ -67,7 +68,10 @@
 
   async function requestHeaders(headers = {}) {
     if (readOnly()) throw new Error("This retained report is read-only.");
-    if (localOnly) return { ...headers };
+    if (localOnly) return { ...headers,
+      ...(window.BusinessApi ? { "X-CSRF-Token": await BusinessApi.csrf() } : {}),
+      ...(practice ? { "X-Practice-Mode": "1" } : {}),
+    };
     return {
       ...headers,
       "X-CSRF-Token": await BusinessApi.csrf(),

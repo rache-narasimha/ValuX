@@ -4,7 +4,7 @@
 
   const params = new URLSearchParams(window.location.search);
   const practice = params.get("practice") === "1";
-  const taskId = params.get("task") || "";
+  const taskId = practice ? "" : params.get("task") || "";
   const task = taskId ? TaskStore.get(taskId) : null;
   const draftScope = practice ? "practice" : `task-${taskId || "standalone"}`;
   const DRAFT_KEY = `sln.progress-completion.form.draft.v1-${draftScope}`;
@@ -217,7 +217,7 @@
   }
 
   function canChoosePreparation() {
-    return !practice && ["progress", "completion"].includes(task?.reportGroup)
+    return practice || ["progress", "completion"].includes(task?.reportGroup)
       && !ReportData.readOnly && WorkflowAccess.can("changeWorkflow", currentTask());
   }
 
@@ -325,6 +325,8 @@
       photos: state.photos,
       map: state.map,
       autofilledReportFields: [...reportDefaults],
+      practiceOffline: state.practiceOffline || null,
+      practiceReportType: practice ? requestedReportType() : undefined,
     });
   }
 
@@ -382,6 +384,7 @@
       if (!saved || typeof saved !== "object") return;
       if (!practice && saved.linkedEstimationId !== task?.linkedEstimationId) return;
       Object.assign(state, saved);
+      if (practice && ["progress", "completion"].includes(saved.practiceReportType)) element("practice-report-type").value = saved.practiceReportType;
       (saved.autofilledReportFields || []).forEach((key) => reportDefaults.add(key));
       state.details = saved.details || {};
       state.bank = { releases: [], ...(saved.bank || {}) };
@@ -607,13 +610,16 @@
       state.uploadType = task?.ownPreparationSource === "template" ? "template" : "retrospective";
     }
     if (canChoosePreparation()) {
-      const panel = RetrospectiveValuation.preparationPanel(task.reportKey, state.preparationMethod, setPreparationMethod);
+      const panel = RetrospectiveValuation.preparationPanel(practice ? requestedReportType() : task.reportKey, state.preparationMethod, setPreparationMethod);
       panel.id = "progress-preparation";
       panel.dataset.section = "preparation";
       element("progress-preparation").replaceWith(panel);
     }
-    if (task && ["progress", "completion"].includes(task.reportGroup)) {
-      const panel = RetrospectiveValuation.offlinePanel(task.reportKey, state.uploadType, {
+    if (practice || task && ["progress", "completion"].includes(task.reportGroup)) {
+      const panel = RetrospectiveValuation.offlinePanel(practice ? requestedReportType() : task.reportKey, state.uploadType, {
+        practiceSaved: state.practiceOffline,
+        practiceChanged: async (value) => { state.practiceOffline = value; await persistDraftNow(); },
+        practiceReportType: requestedReportType,
         prepareUpload: prepareRetrospectiveUpload,
         downloadTemplate: async () => {
           const { photos, map, ...templateData } = payload();
@@ -657,6 +663,9 @@
       });
       element("practice-report-type").addEventListener("change", async () => {
         markDirty();
+        const panel = RetrospectiveValuation.preparationPanel(requestedReportType(), state.preparationMethod, setPreparationMethod);
+        panel.id = "progress-preparation"; panel.dataset.section = "preparation";
+        element("progress-preparation").replaceWith(panel);
         await populatePracticeCandidates();
         renderComponents();
         scheduleSave();

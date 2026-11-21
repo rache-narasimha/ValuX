@@ -343,3 +343,24 @@ html[data-theme="dark"] .valuation-format-actions .valuation-format-action[aria-
   opacity: .72;
   pointer-events: none;
 }
+/* General valuation construction configuration and adopted estimation costs. */
+.construction-configuration { margin: 0 0 1rem; }
+.construction-config-panel { margin-top: .75rem; padding: 1rem; border: 1px solid var(--border, #d9c8bd); border-radius: 12px; }
+.construction-cost-scroll { overflow-x: auto; }
+.construction-cost-scroll, .construction-summary, .construction-config-panel { min-width: 0; max-width: 100%; }
+.construction-cost-table { width: 100%; border-collapse: collapse; }
+.construction-cost-table th, .construction-cost-table td { text-align: left; padding: .5rem; vertical-align: top; }
+.construction-cost-table input { width: 100%; min-width: 8rem; }
+.construction-search-result { display: flex; flex-direction: column; align-items: start; text-align: left; width: 100%; gap: .25rem; margin-bottom: .5rem; }
+.construction-source-option { display: flex; gap: .5rem; align-items: center; margin: .65rem 0; }
+.construction-source-option input { width: auto; }
+.construction-totals > div { display: flex; justify-content: space-between; gap: 1rem; margin: .75rem 0; }
+.construction-totals dd { margin: 0; font-weight: 700; white-space: nowrap; }
+@media (max-width: 600px) {
+  .construction-cost-table, .construction-cost-table tbody, .construction-cost-table tr, .construction-cost-table td { display: block; width: 100%; }
+  .construction-cost-table thead { display: none; }
+  .construction-cost-table tr { border-bottom: 1px solid var(--border, #d9c8bd); padding-bottom: .5rem; }
+  .construction-cost-table td { box-sizing: border-box; padding: .35rem 0; }
+  .construction-cost-table input { min-width: 0; }
+  .construction-cost-table [data-remove-cost] { white-space: nowrap; }
+}

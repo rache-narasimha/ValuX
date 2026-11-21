@@ -7,7 +7,7 @@ from backend.app.estimation import generate_estimation_workbook
 from backend.app.estimation.presentation import component_labels, compact_abstract
 
 OUT = Path('outputs/test_artifacts'); OUT.mkdir(parents=True, exist_ok=True)
-DETAILS = {'identityVersion':2, 'applicantName':'Sample Applicant, Adoni', 'workDescription':'Proposed construction of a residential building comprising Ground and First Floors', 'workAddress':'Plot No. 52, Mandigiri, Adoni', 'estimateDate':'2026-11-05', 'place':'Adoni'}
+DETAILS = {'identityVersion':2, 'applicantName':'Sample Applicant, Adoni', 'workDescription':'Residential building in GF and FF', 'workAddress':'Plot No. 52, Mandigiri, Adoni', 'estimateDate':'2026-11-05', 'place':'Adoni'}
 
 def floor(key, label, level, amount, area):
     return {'id':key,'key':key,'label':label,'level':level,'formData':{'finalAmount':amount,'plinthArea':area}}
@@ -20,7 +20,7 @@ result=generate_estimation_workbook(state); result.save(OUT/'estimation_compact_
 w=load_workbook(BytesIO(result.content)); assert w.sheetnames==['Ground Floor','First Floor']
 gf,ff=w.worksheets
 assert gf['A11'].value=='Name of the Applicant : Sample Applicant, Adoni'
-assert gf['A8'].value.count('Plot No. 52')==1 and 'Ground Floor and First Floor' in gf['A8'].value
+assert gf['A8'].value.count('Plot No. 52')==1 and 'Residential building in GF and FF' in gf['A8'].value
 assert '755.52' in gf['A14'].value
 assert ff.row_dimensions[1].hidden and ff['A8'].value is None and ff['A11'].value is None
 assert ff['A14'].value.startswith('FIRST FLOOR') and '600.48' in ff['A14'].value
@@ -43,8 +43,8 @@ result=generate_estimation_workbook(multi);result.save(OUT/'estimation_multi_pre
 w=load_workbook(BytesIO(result.content));assert w.sheetnames==['Abstract','Heavy Machinery Hall','Office Building GF','Office Building FF','Staff Quarters GF']
 assert w['Abstract']['A14'].value is None
 assert not any('Plinth Area' in value for value in strings(w['Abstract']))
-assert 'heavy machinery hall' in w['Heavy Machinery Hall']['A8'].value.lower()
-assert 'an Office Building' in w['Office Building GF']['A8'].value
+assert 'Residential building in GF and FF' in w['Heavy Machinery Hall']['A8'].value
+assert w['Office Building GF']['A8'].value == w['Heavy Machinery Hall']['A8'].value
 assert w['Office Building FF']['A8'].value is None
 assert sum(value=='SIGNATURE OF VALUER' for sheet in w for value in strings(sheet))==1
 assert all(not any('Place :' in value for value in strings(sheet)) for sheet in list(w)[1:])
@@ -68,4 +68,4 @@ for source in (state, multi):
         assert any('Plinth Area' in value for sheet in w if sheet.title != 'Abstract' for value in strings(sheet))
         if 'Abstract' in w: assert not any('Plinth Area' in value for value in strings(w['Abstract']))
         w.close()
-print('PASS: two-field identity, derived component headings, floor naming, compact rule, plinth areas, single signature and free scrolling')
+print('PASS: shared work identity, floor naming, compact rule, plinth areas, single signature and free scrolling')

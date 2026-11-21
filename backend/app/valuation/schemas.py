@@ -94,3 +94,10 @@ def validate_report_values(report_key, values):
                 missing.append(f"{label} for Document {index}")
     if missing:
         raise ValueError(f"Complete the required field: {missing[0]}.")
+    if report_key == "valuation-general" and has_building:
+        from .construction import estimate_rows, floor_multiplier
+        from .formatting import floor_indexes
+        if values.get("property.status") in {"proposed", "under_construction"}:
+            estimate_rows(values)
+        for index in floor_indexes(values):
+            floor_multiplier(values, index)

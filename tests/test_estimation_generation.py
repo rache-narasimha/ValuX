@@ -29,9 +29,10 @@ def row_containing(sheet, text, column=2):
 
 
 def detail_totals(sheet):
+    words = row_containing(sheet, "(Rupees", 1)
     return {
-        "total": row_containing(sheet, "TOTAL CALCULATED COST", 1),
-        "estimated": row_containing(sheet, "ESTIMATED COST (Rs.)", 1),
+        "total": words - 2,
+        "estimated": words,
     }
 
 
@@ -69,10 +70,10 @@ def controlled_industrial_state():
     }
 
 
-def assert_component_work_names(generate):
+def assert_shared_work_header(generate):
     state = {
         "propertyType": "residential",
-        "details": {"applicantName": "Work Name QA", "workDescription": "Proposed residential development", "workAddress": "Adoni"},
+        "details": {"applicantName": "Work Name QA", "workDescription": "Residential development", "workAddress": "Adoni"},
         "components": [
             {
                 "kind": "residential_building",
@@ -87,12 +88,12 @@ def assert_component_work_names(generate):
         try:
             assert workbook.sheetnames == ["Abstract", "Building 1 GF", "Block 2 GF"]
             assert workbook["Building 1 GF"]["A8"].value == (
-                "Name of the Work : Proposed construction of a residential building comprising Ground Floor at Adoni"
+                "Name of the Work : Proposed construction of Residential development at Adoni"
             )
             assert workbook["Block 2 GF"]["A8"].value == (
-                "Name of the Work : Proposed construction of a Block 2 comprising Ground Floor at Adoni"
+                "Name of the Work : Proposed construction of Residential development at Adoni"
             )
-            assert row_containing(workbook["Abstract"], "Proposed residential development at Adoni", 1)
+            assert row_containing(workbook["Abstract"], "Proposed construction of Residential development at Adoni", 1)
         finally:
             workbook.close()
 
@@ -123,7 +124,7 @@ def assert_controlled_steel(generate):
     formula = sheet.cell(steel_total, 10).value
     assert all(f"J{row}" in formula for row in [*steel_rows, stair, shades]), formula
     words = [sheet.cell(row, 1).value for row in range(1, sheet.max_row + 1)]
-    assert "(Rupees One Lakh Ninety Three Thousand Three Hundred Seventy Five only)" in words
+    assert "(Rupees One Lakh Ninety Three Thousand only)" in words
     assert sheet.freeze_panes is None
     assert workbook.calculation.fullCalcOnLoad is True
     assert workbook.calculation.forceFullCalc is True
@@ -185,7 +186,7 @@ def assert_standard_item_removal(generate):
     pcc_total = next(cell.row for cell in sheet["J"] if cell.value == 42.0696)
     assert sheet.cell(pcc_total, 12).value.endswith(f'ROUND(ROUND(J{pcc_total},2)*ROUND(K{pcc_total},2),2),"")')
     assert sheet.cell(totals["estimated"], 12).data_type == "f"
-    assert "One Lakh Fifty One Thousand Four Hundred Seventy Four" in sheet.cell(totals["estimated"] + 1, 1).value
+    assert "One Lakh Fifty One Thousand" in sheet.cell(totals["estimated"], 1).value
     workbook.close()
 
     del form["omittedItems"]
@@ -222,15 +223,15 @@ def assert_centre_line_and_abstract(generate):
     assert row_containing(detail, "All-round Building")
     assert all(str(detail.cell(row, 2).value or "").strip() != "Long Walls" for row in range(1, detail.max_row + 1))
     abstract = workbook["Abstract"]
-    assert abstract.cell(row_containing(abstract, "Custom component estimate"), 12).value == 2500
-    assert abstract.cell(row_containing(abstract, "Custom common external work"), 12).value == 750
-    assert abstract.cell(row_containing(abstract, "Electrical Works"), 12).value == 500
-    total = row_containing(abstract, "TOTAL ESTIMATED PROJECT COST", 1)
+    assert abstract.cell(row_containing(abstract, "Custom component estimate"), 12).value == 3000
+    assert abstract.cell(row_containing(abstract, "Custom common external work"), 12).value == 1000
+    assert abstract.cell(row_containing(abstract, "Electrical Works"), 12).value == 1000
+    total = row_containing(abstract, "(Rupees", 1) - 1
     total_formula = abstract.cell(total, 12).value
     assert f"L{row_containing(abstract, 'Custom component estimate')}" in total_formula
     assert f"L{row_containing(abstract, 'Custom common external work')}" in total_formula
     words = abstract.cell(total + 1, 1).value
-    assert words == "(Rupees One Lakh Three Thousand Seven Hundred Fifty only)"
+    assert words == "(Rupees One Lakh Five Thousand only)"
 
 
 def assert_compact_typical_and_offline(generate):
@@ -409,7 +410,7 @@ def assert_ceiling_room_schedule(generate):
     }
     manifest = generator._load_manifest()
     spec = generator._detail_specs(state, manifest)[0]
-    assert generator._effective_final_amount(spec, manifest) == 6250
+    assert generator._effective_final_amount(spec, manifest) == 6000
     workbook = workbook_from(generate(state))
     sheet = workbook[spec.name]
     room_a = row_containing(sheet, "Room A")
@@ -451,7 +452,7 @@ def assert_ceiling_room_schedule(generate):
         "plaster-net": {"rate": 100},
     })
     spec = generator._detail_specs(state, manifest)[0]
-    assert generator._effective_final_amount(spec, manifest) == 19750
+    assert generator._effective_final_amount(spec, manifest) == 20000
     workbook = workbook_from(generate(state))
     sheet = workbook[spec.name]
     wall_room = row_containing(sheet, "Room A walls")
@@ -489,7 +490,7 @@ def assert_grouped_floor_amounts_and_direct_quantities(generate):
     manifest = generator._load_manifest()
     spec = generator._detail_specs(state, manifest)[1]
     assert spec.template_key == "commercial_rcc_upper_centre_line"
-    assert generator._effective_final_amount(spec, manifest) == 10125
+    assert generator._effective_final_amount(spec, manifest) == 10000
     with_workbook = workbook_from(generate(state))
     sheet = with_workbook[spec.name]
     assert with_workbook["Abstract"]["B17"].value == "Cost of construction for GF, FF & SF"
@@ -504,7 +505,7 @@ def assert_grouped_floor_amounts_and_direct_quantities(generate):
     del component["sheets"][1]["typicalBasis"]
     legacy = generator._detail_specs(state, manifest)[1]
     assert legacy.floor_multiplier == 1
-    assert generator._effective_final_amount(legacy, manifest) == 3375
+    assert generator._effective_final_amount(legacy, manifest) == 3000
 
 def assert_industrial_centre_line_requires_upload(generate):
     state = controlled_industrial_state()
@@ -520,6 +521,45 @@ def assert_industrial_centre_line_requires_upload(generate):
     assert workbook_from(generate(state, mode="offline")).sheetnames
 
 
+def assert_ground_floor_ending(generate):
+    from backend.app.estimation.generator import _rounded_estimate
+    for amount, expected in ((499, 0), (500, 1000), (1499.49, 1000), (1500, 2000), (2743578.72, 2744000)):
+        assert _rounded_estimate(amount) == expected
+    state = controlled_industrial_state()
+    state["propertyType"] = "residential"
+    state["details"].update(identityVersion=2, workDescription="Residential Building in GF", workAddress="Adoni")
+    component = state["components"][0]
+    component["kind"] = "residential_building"
+    component["sheets"][0]["formData"]["sheetTotalOverride"] = 2743578.72
+    for mode in ("completed", "offline"):
+        generated = generate(state, mode=mode)
+        workbook = workbook_from(generated)
+        assert len(workbook.sheetnames) == 1
+        sheet = workbook.worksheets[0]
+        text = [str(cell.value or "") for row in sheet.iter_rows(max_col=12) for cell in row]
+        assert "A B S T R A C T" not in text
+        assert "TOTAL CALCULATED COST" not in text
+        assert "TOTAL ESTIMATED PROJECT COST" not in text
+        ending = detail_totals(sheet)
+        assert sheet.cell(ending["estimated"] - 1, 12).value is None
+        assert sheet.cell(ending["total"], 1).value is None
+        assert sheet["A8"].value == "Name of the Work : Proposed construction of Residential Building in GF at Adoni"
+        assert text.count("SIGNATURE OF VALUER") == 1
+        assert sheet["F18"].font.sz >= 12, "Empty offline measurement cells must also use readable fonts"
+        assert "Phone : 9133669642" in sheet["A3"].value
+        assert "  Phone" not in sheet["A3"].value
+        assert sheet["A3"].alignment.wrap_text
+        for row in sheet.iter_rows(max_col=12):
+            for cell in row:
+                if cell.value is not None:
+                    assert cell.font.sz >= (11 if cell.row in (2, 3, 4) else 12), cell.coordinate
+        if mode == "completed":
+            assert generated.summary["totalEstimatedCost"] == 2744000
+            assert sheet.cell(ending["estimated"], 12).value == 2744000
+            assert "Twenty Seven Lakh Forty Four Thousand" in sheet.cell(ending["estimated"], 1).value
+        workbook.close()
+
+
 def main():
     generate = load_generator()
     identity_book = workbook_from(generate(controlled_industrial_state()))
@@ -527,7 +567,8 @@ def main():
     assert "Name of the Applicant : Controlled QA, QA Location" in identity_text
     assert "QA Address" not in identity_text
     identity_book.close()
-    assert_component_work_names(generate)
+    assert_shared_work_header(generate)
+    assert_ground_floor_ending(generate)
     assert_controlled_steel(generate)
     assert_industrial_centre_line_requires_upload(generate)
     assert_custom_rows_and_items(generate)

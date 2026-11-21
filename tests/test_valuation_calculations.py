@@ -74,6 +74,11 @@ def main():
                     assert results[key] == "0/-", (key, results[key])
         elif "valuation.estimated_value_display" in case["overrides"]:
             assert results["ESTIMATED_VALUE_WORDS"] == "Twelve Lakh Thirty-Four Thousand Five Hundred Sixty-Seven"
+    stale_building = {**cases()[3]["values"], "property.category": "residential_plot",
+                      "calculation.overrides": json.dumps({"abstract.building": "750000"})}
+    plot = calculated_replacements(stale_building)[0]
+    assert plot["abstract.building"] == "N/A"
+    assert number_value(plot["abstract.total"]) == 1300, plot["abstract.total"]
     # Exercise the same scenario data in the JavaScript display engine.
     path = Path(__file__).with_name("fixtures") / "editable_valuation_cases.json"
     if "--write-fixtures" in __import__("sys").argv:

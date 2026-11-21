@@ -43,6 +43,8 @@ def page_context_script(session: dict, raw_path: str, *, load_valuation_draft: b
     browser_values = parse_qs(parsed.query, keep_blank_values=True)
     draft_code = browser_values.get("task", [""])[0]
     practice = browser_values.get("practice", [""])[0] == "1"
+    if practice:
+        task_code = draft_code = ""
     include_draft = load_valuation_draft and bool(draft_code) and draft_code == task_code and not practice
     task_queries = dashboard = draft = None
     with connection(autocommit=True) as database:

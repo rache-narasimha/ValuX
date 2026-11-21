@@ -19,6 +19,22 @@ def _error(handler, error: Exception) -> None:
 
 
 def handle_get(handler, path: str) -> bool:
+    reference_match = re.fullmatch(r"/api/valuation/estimations/([^/]+)", path)
+    if path == "/api/valuation/estimations" or reference_match:
+        try:
+            from .valuation_reference import estimation_reference, estimation_references
+            session = auth_routes.require_full_session(handler)
+            query = parse_qs(urlparse(handler.path).query)
+            if reference_match:
+                result = estimation_reference(unquote(reference_match.group(1)), (query.get("snapshotId") or [""])[-1], session)
+            else:
+                result = estimation_references(session, search=(query.get("search") or [""])[-1], offset=(query.get("offset") or [0])[-1])
+            handler.send_json({"ok": True, **result})
+        except (ValueError, service.ReportDataError, AuthError) as error:
+            if isinstance(error, ValueError):
+                error = service.ReportDataError("Invalid estimation search.")
+            _error(handler, error)
+        return True
     draft_match = re.fullmatch(r"/api/tasks/([^/]+)/draft", path)
     file_match = re.fullmatch(r"/api/tasks/([^/]+)/draft-files/([^/]+)", path)
     artifact_match = re.fullmatch(r"/api/tasks/([^/]+)/artifacts/([^/]+)/download", path)

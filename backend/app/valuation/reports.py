@@ -1,11 +1,7 @@
 """High-level generators for general and agricultural valuation reports."""
 
 from zipfile import ZIP_DEFLATED, ZipFile
-from pathlib import Path
 import re
-import shutil
-import subprocess
-import tempfile
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
@@ -14,12 +10,14 @@ from docx.text.paragraph import Paragraph
 from lxml import etree
 
 from .calculations import agricultural_replacements, calculated_replacements
-from .config import AGRICULTURAL_TEMPLATE, NS, SOFFICE, TEMPLATE, qn
+from .cover import add_construction_notes
+from .config import AGRICULTURAL_TEMPLATE, NS, TEMPLATE, qn
 from .formatting import valuation_amount_in_words, document_indexes, normalized_document_values
 from .media import insert_uploaded_media
 from .narrative import NUMBERING_PART, WordNarrative, formatted_fields
 from .ooxml import (
     prepare_floor_rows,
+    prepare_plot_sections,
     prepare_general_document_rows,
     prepare_general_party_rows,
     relabel_revaluation,
@@ -141,35 +139,6 @@ def align_signature_fields(document):
             run.font.size = Pt(11)
 
 
-def normalize_word_package(docx_path):
-    """Re-export the completed general report with the established Word-safe filter.
-
-    This must run after filling controls and inserting media. The office filter
-    removes legacy package residue, so the same finalization serves both app
-    reports and blank offline templates.
-    """
-    # Filled reports no longer need automation wrappers. Cloned controls can
-    # retain duplicate IDs, and their removal also avoids office-version
-    # differences in interpreting control content during compatibility export.
-    unwrap_content_controls(docx_path)
-    with tempfile.TemporaryDirectory(prefix="valuation-word-") as temporary:
-        temporary = Path(temporary)
-        source = temporary / "source.docx"
-        destination = temporary / "normalized"
-        destination.mkdir()
-        shutil.copyfile(docx_path, source)
-        result = subprocess.run(
-            [SOFFICE, f"-env:UserInstallation={(temporary / 'profile').as_uri()}",
-             "--headless", "--convert-to", "docx:Office Open XML Text",
-             "--outdir", str(destination), str(source)],
-            capture_output=True, timeout=120, check=False,
-        )
-        normalized = destination / source.name
-        if result.returncode or not normalized.is_file():
-            raise ValueError("The Word report could not be prepared. Please try again.")
-        shutil.copyfile(normalized, docx_path)
-
-
 def set_construction_heading(paragraph, proposed):
     set_paragraph_text(paragraph, "Specifications of construction", color="000000", preserve_style=True)
     if not proposed:
@@ -271,12 +240,13 @@ def generate_offline_template(report_key, output_path, *, revaluation=False):
     # Offline copies contain editable blank cells, without automation IDs or
     # computed values left inside controls by the normal generator.
     unwrap_content_controls(output_path, clear=True)
-    if report_key == "valuation-general":
-        normalize_word_package(output_path)
 
 def generate_docx(values, output_path, photos=None, map_image=None, *, revaluation=False):
     _generate_general_docx(values, output_path, photos, map_image, revaluation=revaluation)
-    normalize_word_package(output_path)
+    # Filled reports do not need the template's automation wrappers or cloned
+    # control IDs. Native Word and PDF rendering accept this cleaned package
+    # directly; no extra LibreOffice DOCX-to-DOCX re-export is needed.
+    unwrap_content_controls(output_path)
 
 
 def _generate_general_docx(values, output_path, photos=None, map_image=None, *, blank=False, revaluation=False):
@@ -312,6 +282,7 @@ def _generate_general_docx(values, output_path, photos=None, map_image=None, *, 
                 prepare_general_document_rows(root, values)
                 prepare_general_party_rows(root)
                 prepare_floor_rows(root, values)
+                prepare_plot_sections(root, values)
                 if revaluation:
                     relabel_revaluation(root)
                 rich_paragraphs = {}
@@ -342,6 +313,18 @@ def _generate_general_docx(values, output_path, photos=None, map_image=None, *, 
         if narrative:
             zout.writestr(NUMBERING_PART, narrative.to_xml())
     document = Document(output_path)
+    if not blank:
+        add_construction_notes(document, values, replacements)
+    acknowledgment = next((p for p in document.paragraphs if p.text.startswith("The undersigned")), None)
+    if acknowledgment is not None:
+        heading = acknowledgment.insert_paragraph_before("For Office use only")
+        heading.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        heading.paragraph_format.space_after = Pt(12)
+        heading.paragraph_format.keep_with_next = True
+        for run in heading.runs:
+            run.font.name = "Calibri"
+            run.font.size = Pt(11)
+            run.bold = False
     keep_table_opening_together(document)
     document.save(output_path)
     insert_uploaded_media(output_path, photos or [], map_image)

@@ -223,6 +223,9 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   badge. The Due date cell is blank for Completed and Closed tasks.
 - The layout should use available horizontal space efficiently, show useful
   task details before opening a record, and become compact on smaller screens.
+  An opened mobile sidebar has a visible close control. Mobile task details
+  show assignment information first, followed by full-width payment details
+  and the remaining report/history cards.
 - Normal action buttons share a 14px-equivalent font, with 13px-equivalent
   compact table actions and matching primary/secondary control sizing. Long
   labels wrap inside their controls and action groups reflow without overflow;
@@ -313,6 +316,9 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Sequential keyboard navigation skips locked fields and values the form can
   identify as supplied by the app. Editable prefilled fields remain clickable.
   Manual entries and overrides stay in the normal Tab sequence.
+  Estimation is an exception: Tab and Shift+Tab include every visible editable
+  field, including defaults and calculated values. Disabled, hidden and
+  read-only fields are skipped; calculation refreshes preserve focus.
 
 - Report-generation forms contain only the valuation/report fields approved
   for the generated document. Workflow fields, assignee data, application
@@ -327,6 +333,13 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   the backend; changing a report input makes the retained report outdated and
   requires a new preview and DOCX before completion. Workflow-only changes do
   not invalidate a report.
+- General Valuation and General Revaluation retain the preview DOCX/PDF pair
+  against the saved-input/media/schema/template fingerprint. Unchanged preview
+  requests reuse that pair, including after reload or restart. Missing stored
+  bytes cause regeneration. Preview alone does not qualify report completion;
+  the first DOCX generation/download adopts that exact preview artifact, and
+  repeated downloads add no duplicate revision or report-history event. PDF
+  download remains non-qualifying. Reopened tasks cannot reuse a pre-reopen pair.
 - Draft status indicators remain visually quiet: the existing status text is
   retained while a small saving activity cue appears, then resolves to the
   saved state without moving the form layout.
@@ -334,6 +347,17 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   authenticated sessions. Their draft photographs and route maps use
   task-scoped local files served only through authenticated routes. Practice
   forms remain browser-local and do not create durable task data.
+- All Practice forms offer online and offline preparation. Offline Practice uses
+  the same template/upload controls, with filled-template and retrospective
+  choices, but creates no task artifacts, work-history entries or completion
+  transitions. Temporary Practice uploads, including estimation and bank-specific
+  attachments, are accessible only to their uploader for download, preview, availability
+  checks and removal. Older estimation/bank Practice links without trustworthy
+  owner metadata expire; users reattach those files once. Clearing an expired
+  bank attachment reference does not delete unowned file bytes. Practice uploads
+  and removals require the existing CSRF token, with no additional form steps.
+  Expired temporary files can be attached again. Practice mode ignores task
+  query parameters and rejects requests combining Practice mode with a task ID.
 - Progress and Completion practice forms open with a linked fictional estimate
   when the practice draft has no estimate selected. Both report types use the
   sample's component costs for their assessments.
@@ -358,6 +382,33 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   Under Construction or Proposed. “Purchase loan” belongs in Purpose of
   valuation. The red “(Proposed)” suffix is shown beside Specifications of
   construction only when Proposed is selected.
+- General Valuation and General Revaluation use building configuration before
+  floor-wise assessment for building properties. Configuration changes preserve
+  matching entries; removing populated entries requires explicit confirmation.
+  Typical-floor groups specify a represented-floor count and either per-floor
+  or combined inputs. Per-floor assessed amounts multiply once by the count;
+  combined amounts never multiply again. Building value is the sum of assessed
+  floor/group totals, not a separate override. Plot-only reports omit these controls.
+- Proposed and Under Construction General Valuation/Revaluation offer an optional
+  issued-estimate reference, or N/A with manual construction-cost entries. The
+  reference stores the selected immutable snapshot/revision and selected final
+  component costs; it does not create a Progress/Completion lock. Later estimate
+  revisions are not imported automatically. Adopted costs remain editable in the
+  valuation without modifying the source estimate. Combined estimate totals are
+  never multiplied by typical-floor counts again. Estimate configuration may
+  populate floor names/counts, but must not populate assessed floor values.
+  Existing and plot-only properties omit estimate linkage and cover cost notes.
+- Estimated construction costs follow floor-wise assessment. Blank is unknown,
+  not zero. For Under Construction, construction as on date equals Building
+  value; balance equals the adopted estimated total less Building value. Keep
+  balance unknown until all adopted costs are known and flag negative balances
+  for review without altering either input. Proposed properties show the estimate
+  total and the construction-not-commenced statement instead.
+- General Valuation/Revaluation cover notes follow Enclosure on the cover page:
+  site cost with extent in square yards/cents, adopted component estimate costs,
+  construction total, then the applicable Proposed/Under Construction statements.
+  Up to eight points use one column; more than eight use two columns. The cover
+  property description derives (u/c), (Proposed), or no suffix from current status.
 - General-property Extra Items, Amenities, Miscellaneous and Services offer a
   one-shot action that changes only blank item rows to “Included.” Numeric item
   entries are totaled into their editable calculated abstract fields; non-numeric text is
@@ -370,6 +421,8 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   them. The app shows the calculated baseline and a Use calculated value action
   for an override. Report labels remain unchanged and no override notes are
   added to generated documents. Duplicate controls for one amount stay in sync.
+  General Building value and combined floor-group totals are read-only sums;
+  their component assessment inputs remain editable.
 - Automatically calculated final Market, Realizable and Distress Values round
   to the nearest thousand: a remainder below 500 rounds down, above 500 rounds
   up, and exactly 500 remains unchanged for manual adjustment. Realizable and
@@ -435,6 +488,16 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   type and extension; internal storage identifiers remain independent.
   The general offline template
   and app-generated DOCX share the same Word compatibility finalization.
+  Python removes content-control wrappers and duplicate automation IDs;
+  general reports do not perform an additional LibreOffice DOCX-to-DOCX
+  re-export. LibreOffice still renders PDF previews, and report-specific
+  calculation, source-estimate and freshness checks remain required.
+- Plot-only general valuations omit building technical details, construction
+  specifications and floor-valuation tables. Their summary shows Building:
+  N/A, and retained building measurements or building overrides do not
+  contribute to the plot valuation. The bank-manager acknowledgment page has
+  a left-aligned, regular-weight “For Office use only” heading, with one line
+  of spacing before its acknowledgment.
 - General cover letters address “Bank Manager”. General and agricultural
   amount wording capitalizes each word, including “Only”, and hyphenates
   compound numbers (for example, “Forty-Five”). Correct definite spelling errors while retaining valid
@@ -481,11 +544,11 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   borrower fields, without another location suffix or assignment-name change.
 - Estimation Report Setup has two shared fields: Name of the Work (the overall
   description without its address) and Address of the Work. The overall report
-  joins them with one "at" connector. Component descriptions are derived from
-  component names and floor configurations using that same address, without
-  per-component work-description inputs. The worksheet's Name of the Work
-  omits numbering from default component names and keeps distinct named
-  blocks. Progress/Completion construction-site
+  uses “Proposed construction of [Name of the Work] at [Address of the Work]”.
+  An empty Name of the Work is prefilled from the assignment's Property
+  description and remains editable; saved manual descriptions are preserved.
+  Component selection supplies worksheet identities, never this report text
+  or an added “comprising” phrase. Progress/Completion construction-site
   fields use Name of the Work, Address of the Work. Karnataka Bank's site
   certificate uses Address of the Work alone. Older
   saved descriptions/identities remain intact until reviewed; no automatic
@@ -504,6 +567,23 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   or G+3 and above, use a separate Abstract; typical groups use their actual floors.
   Place, Date and signature occur only after that applicable Abstract, with
   Place and Date on consecutive rows and no detail-sheet signature blocks.
+  A single residential Ground Floor without additional independent custom
+  components omits the compact Abstract; its footer follows the detail totals.
+- Newly generated estimation component final amounts round to the nearest
+  thousand, with 500 rounding up. The Abstract aggregates adopted component
+  amounts and also rounds its final total. Those rounded amounts become the
+  approved component costs used by linked Progress/Completion reports.
+  Existing retained reports/snapshots remain unchanged. Measurements, rates
+  and individual item pricing retain their existing calculation rules.
+  Detail endings show the calculated amount, a blank row, then the adopted
+  rounded amount with words. Abstract endings show the aggregate amount,
+  then the rounded amount with words. Neither ending uses the former Total
+  Calculated Cost, Estimated Cost or Total Estimated Project Cost labels.
+  Current and legacy uploaded workbooks remain readable for component extraction.
+- Estimation main details and table text use at least 12-point fonts;
+  credentials/secondary text below the valuer's name use at least 11 points.
+  Larger headings retain their sizes. Wrapping, row heights and page breaks
+  accommodate the text while preserving the table structure and all details.
 - Optional plinth areas in sft. are entered per component/floor worksheet,
   including the total area of all floors represented on a typical sheet. Report
   Setup and both Abstract layouts have no Overall Plinth Area field or aggregate
@@ -628,6 +708,16 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   green tick and download/remove controls replace attachment entry; Submit becomes
   Mark Completed. Completion reuses the upload note. Removal/replacement or changed
   report inputs reset completion qualification.
+- Workbook uploads retain their current 25 MB limit and preparation/template
+  rules. Uploaded XLSX XML is checked with DTDs/entities disabled and parsed in
+  bounded, separate processes. Automatic estimation extraction has time/memory
+  and XML-size budgets; exceeding them keeps the attachment available for the
+  existing manual component-entry path, with an inline explanation. Reviewed
+  manual totals do not trigger another totals-extraction pass on submission.
+  Malformed or unsafe XML receives a clear format error. Institution-specific
+  XLSX attachments still require a readable workbook; their validation uses
+  the same isolated parser. Generated internal workbooks retain their existing
+  authoritative calculation/recalculation checks.
 - An online estimation preview remains approved across reloads while saved workbook
   inputs, component configuration, schema and template version remain unchanged.
   The server calculates final component amounts from the saved measurements and

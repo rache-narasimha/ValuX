@@ -163,3 +163,114 @@ connections and keys. Use the image digest to identify what a revision runs.
 - Change styling inside the responsibility folder imported by the stable
   `frontend/assets/css/*.css` entry point.
 - Do not make production changes inside `archive/`; it is historical evidence only.
+
+## Identical app image in local development and staging
+
+Use `compose.image.yaml` with the normal Compose file and set
+`VALUX_RUNTIME_IMAGE` to the tested Artifact Registry `image@sha256:digest`.
+This keeps the existing `valux` stack and its database, Mailpit and report
+volume, while removing app source-code bind mounts. The app and migration
+runner use the baked Linux/AMD64 image; the Mac runs it under emulation.
+Local and staging configuration/secrets/storage remain independent.
+
+Build the candidate once, test and scan it, then tag/push that exact candidate.
+Promote its registry digest rather than rebuilding separately for staging.
+Compare the serving Cloud Run revision's image digest with the local
+container's manifest digest and verify the baked app source fingerprint using
+`scripts/image_source_fingerprint.py`. A matching multi-architecture tag alone
+is insufficient proof of a matching executable image.
+
+Changing code while using the immutable-image override requires a rebuilt,
+retested app image. To intentionally return to source-mounted development,
+use only `compose.yaml`; that mode does not certify image parity with staging.
+
+Offline Practice regression checks:
+
+```sh
+node tests/test_practice_isolation.js
+docker compose exec -T app python -m tests.test_practice_uploads  # source-mounted development
+```
+
+The immutable image intentionally omits test fixtures. Temporarily copy only `tests/` into `/app/tests` in the running app container
+and run its test modules; do not copy or mount replacement backend, frontend
+or resource directories. Remove that temporary test directory after validation
+and recheck the app-source fingerprint. Test-created records and files must be
+cleaned.
+
+## Ubuntu runtime candidate and rollback
+
+The Ubuntu 26.04 candidate uses a digest-pinned official base and upstream
+Python 3.14.10, built from its SHA-256-verified official source in a separate
+Ubuntu build stage. Only `/opt/python` is copied into the runtime; compilers and
+OS development packages stay out. The app uses `/opt/valux-venv`. No-GUI Writer/Calc
+retain the existing report fonts and server conversion entry points. Pip and
+its bootstrap files are removed after dependency installation.
+Build it under a separate candidate tag. A successful build is not a release
+approval: scan the complete image, run the regression checks, and compare
+rendered reports before changing the running app's image reference.
+
+When official package downloads are interrupted, an optional BuildKit context
+can supply the same dependencies without network access during installation:
+
+```sh
+docker build --platform linux/amd64 --provenance=false \
+  --build-context wheelhouse=/absolute/path/to/verified-wheels \
+  --build-arg VALUX_SOURCE_FINGERPRINT="$(python3 scripts/image_source_fingerprint.py)" \
+  --tag valux-app:ubuntu2604-candidate .
+```
+
+That directory must contain the official wheels and `requirements.lock`, with
+every dependency pinned and its published SHA-256 hash. Pip validates the hashes,
+then checks the app's `requirements.txt` against the installed packages with no
+package source available; incompatible or missing packages fail the build.
+Wheels are mounted for that build step only
+and are not copied into the final image. With no context supplied, the empty
+`wheelhouse` stage selects the usual online installation path. Keep downloaded
+wheels outside Git and do not substitute unverified package mirrors.
+The same optional context can contain `Python-3.14.10.tar.xz`; the Dockerfile
+always verifies its pinned Python.org checksum before unpacking it. Without
+that cached archive, the build downloads it from Python.org with TLS verification.
+
+Workbook upload regression checks:
+
+```sh
+docker compose exec -T app python -m tests.test_workbook_uploads
+docker compose exec -T app python -m tests.test_workbook_uploads_http
+```
+
+They exercise ordinary and photo-heavy XLSX files near 25 MB, zero/manual
+component totals, immutable attachment bytes, XML declaration rejection,
+processing budgets, timeout recovery and existing estimation/KVB HTTP routes.
+They also verify uploader-only Practice downloads, HEAD availability and bank
+attachment removal, expired legacy links and unchanged live business-data counts.
+As with other immutable-image checks, copy only the test fixtures temporarily
+and remove them after validation. Generated-workbook verification remains
+separate from uploaded-workbook inspection.
+
+Before switching images, retain the running app's immutable image reference,
+add a local rollback tag, and save the current Dockerfile, requirements and
+Compose settings. Keep any environment-file backup owner-readable and outside
+Git. Do not prune the rollback image while validating the replacement.
+For recovery after Docker cache removal, export the rollback tag with
+`docker image save` into restricted local backup storage and record its file
+checksum. Load that saved archive with `docker image load --input <archive>`
+before selecting its recorded tag or digest.
+
+For an app-image-only rollback, set `VALUX_RUNTIME_IMAGE` to that recorded
+reference and recreate only `app`, with the same local configuration:
+
+```sh
+VALUX_RUNTIME_IMAGE='<recorded-image-reference>' \
+  docker compose -f compose.yaml -f compose.image.yaml up -d --no-deps --no-build app
+docker compose exec -T app python -c \
+  "import urllib.request; print(urllib.request.urlopen('http://localhost:4173/api/health').read().decode())"
+```
+
+After recovery, persist the restored image reference in the ignored local
+environment file so later Compose commands cannot select the rejected image.
+An app-only runtime change must not run schema migrations or replace database
+and report-storage volumes. Image rollback does not undo application data
+written while an image was running; those records remain in the shared database.
+Keep the previous Cloud Run revision and its digest when promoting staging;
+route traffic back to that recorded revision if the replacement fails checks.
+Staging and local configuration remain separate.

@@ -1,8 +1,9 @@
-/** Keep locked and system-filled fields out of sequential keyboard navigation. */
+/** Keep locked fields out of navigation; estimation includes editable defaults. */
 (function () {
   "use strict";
 
-  const skippedFields = "input[readonly], textarea[readonly], [data-tab-autofilled]";
+  const includePrefilled = document.documentElement.hasAttribute("data-tab-include-prefilled");
+  const skippedFields = "input[readonly], textarea[readonly]" + (includePrefilled ? "" : ", [data-tab-autofilled]");
   const savedTabIndex = new WeakMap();
 
   function updateField(field) {

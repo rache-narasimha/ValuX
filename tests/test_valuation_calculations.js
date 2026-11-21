@@ -16,6 +16,21 @@ for (const item of cases) {
 for (const [input, expected] of [[0, 0], [499, 0], [500, 500], [501, 1000], [4542500, 4542500]])
   assert.equal(engine.roundFinal(input), expected);
 const values = cases[0].values;
+for (const [basis, expected] of [["per_floor", 2400000], ["combined", 1200000]]) {
+  const groups = Object.fromEntries(engine.evaluate("general", {
+    "construction.summary_version": "1", "property.category": "residential_land_building",
+    "building.floors.1.structure_type": "rcc", "building.floors.1.plinth_area": "1000",
+    "building.floors.1.replacement_rate": "1200", "building.floors.1.age": "0",
+    "building.floors.1.count": "2", "building.floors.1.basis": basis,
+  }, { "abstract.building": "9999999", "building.floors.1.group_value": "9999999" }).map(node => [node.id, node.value]));
+  assert.equal(groups["abstract.building"], expected);
+  assert.equal(groups["building.floors.1.group_value"], expected);
+}
+const plot = Object.fromEntries(engine.evaluate("general", {
+  ...cases[3].values, "property.category": "residential_plot",
+}, { "abstract.building": "750000" }).map(node => [node.id, node.value]));
+assert.equal(plot["abstract.building"], 0);
+assert.equal(plot["abstract.total"], 1300, "Hidden building entries must not affect a plot valuation");
 const overrides = { "land.estimated_value": "2000000", "abstract.extra": "1000",
   "valuation.present_market_value": "2500000", "valuation.distress_value": "1800000" };
 let nodes = engine.evaluate("general", values, overrides);

@@ -188,7 +188,7 @@
       sidebar.className = "app-sidebar";
       shell.prepend(sidebar);
     }
-    sidebar.innerHTML = `<div class="sidebar-brand-mobile">${logo("sidebar")}${brandWordmark}</div>
+    sidebar.innerHTML = `<div class="sidebar-brand-mobile">${logo("sidebar")}${brandWordmark}<button type="button" class="sidebar-mobile-close" aria-label="Close application navigation" title="Close menu">×</button></div>
       ${sidebarNavigation()}<button class="sidebar-collapse" id="sidebar-toggle" type="button" aria-label="Collapse application navigation" title="Collapse menu" aria-expanded="true"><span>${icons.chevron}</span></button>${poweredBy}`;
     const toggle = sidebar.querySelector("#sidebar-toggle");
     const mobileButton = document.querySelector(".mobile-menu-button");
@@ -222,6 +222,7 @@
     });
 
     mobileButton?.addEventListener("click", () => document.body.classList.toggle("sidebar-mobile-open"));
+    sidebar.querySelector(".sidebar-mobile-close")?.addEventListener("click", () => { closeMobile(); mobileButton?.focus(); });
     sidebar.addEventListener("click", (event) => { if (event.target.closest("a")) closeMobile(); });
     document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeMobile(); });
   }

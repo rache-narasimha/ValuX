@@ -56,7 +56,10 @@ class ReportDataError(Exception):
 def _current_template_version(report_key: str) -> str:
     media_layout = APP_ROOT / "backend/app/valuation/media.py"
     sources = {
-        "valuation-general": [TEMPLATE, media_layout],
+        "valuation-general": [
+            TEMPLATE, media_layout,
+            *[APP_ROOT / f"backend/app/valuation/{name}.py" for name in ("reports", "ooxml", "calculations", "construction", "cover")],
+        ],
         "valuation-agricultural": [AGRICULTURAL_TEMPLATE, media_layout],
         "estimation": [APP_ROOT / "resources/estimation/estimation_manifest.json", APP_ROOT / "backend/app/estimation/generator.py"],
         "progress": [APP_ROOT / "backend/app/progress/generator.py", media_layout],
@@ -376,6 +379,94 @@ def preview_input_fingerprint(task_code: str, session: dict[str, Any]) -> str:
     if not row or not row["input_fingerprint"]:
         raise ReportDataError("Save the current draft before previewing the report.", 409, "draft_required")
     return row["input_fingerprint"]
+
+
+def cached_general_report(task_code, session, payload, *, preview=False, pdf=False):
+    """Reuse a durable matching DOCX/PDF pair; preview never completes a task.
+
+    Download promotes the exact preview DOCX once under the task lock. The
+    existing draft, template, authorization and reopening guards still apply.
+    """
+    actor = _actor(session)
+    remove_keys = []
+    with connection() as database:
+        task = _task(database, task_code, lock=True)
+        _require_editable(actor, task)
+        if task["report_key"] != "valuation-general":
+            return None
+        draft = database.execute("SELECT * FROM app.report_drafts WHERE task_id=%s", (task["id"],)).fetchone()
+        if not draft:
+            return None
+        incoming = {**payload, "preparationRevision": draft["payload"].get("preparationRevision", 0)}
+        fingerprint = report_input_fingerprint(incoming, task["report_key"], draft["schema_version"], _current_template_version(task["report_key"]))
+        if fingerprint != draft["input_fingerprint"]:
+            raise ReportDataError("Save the current form before preparing its report.", 409, "draft_required")
+        if not preview and (not payload.get("preview_id") or payload["preview_id"] != draft["preview_token"]
+                            or draft["preview_fingerprint"] != fingerprint):
+            raise ReportDataError("Preview the latest report before downloading.", 409, "preview_required")
+        if not preview and not pdf:
+            _validate_artifact(task, "valuation_docx", "generated", payload)
+        rows = database.execute(
+            """SELECT a.id AS artifact_id,a.artifact_type,sf.* FROM app.task_artifacts a
+               JOIN app.stored_files sf ON sf.id=a.stored_file_id AND sf.removed_at IS NULL
+               WHERE a.task_id=%s AND a.input_fingerprint=%s AND a.artifact_source='generated'
+                 AND a.artifact_type IN ('valuation_docx','preview_pdf') AND a.stale_at IS NULL
+                 AND (%s::timestamptz IS NULL OR a.created_at >= %s)
+               ORDER BY a.created_at DESC LIMIT 40""",
+            (task["id"], fingerprint, task.get("reopened_at"), task.get("reopened_at")),
+        ).fetchall()
+        pair = {}
+        for row in rows:
+            if row["artifact_type"] in pair:
+                continue
+            try:
+                _file_location(row, "The cached report is no longer available.")
+            except ReportDataError as error:
+                if error.code == "file_missing":
+                    continue
+                raise
+            pair[row["artifact_type"]] = row
+        required = {"valuation_docx", "preview_pdf"} if preview else {"preview_pdf" if pdf else "valuation_docx"}
+        if not required.issubset(pair):
+            return None
+        document = pair.get("valuation_docx")
+        if preview:
+            token = str(draft["preview_token"] or "")
+            if not token or draft["preview_fingerprint"] != fingerprint:
+                # An older matching pair may be adopted after editing back to
+                # the same values; it still receives a fresh validation token.
+                import time
+                token = str(time.time_ns())
+            database.execute("UPDATE app.report_drafts SET preview_token=%s,preview_fingerprint=%s,preview_artifact_id=%s WHERE task_id=%s",
+                             (token, fingerprint, pair["preview_pdf"]["artifact_id"], task["id"]))
+            return {"ok": True, "preview": f'/api/tasks/{task_code}/artifacts/{pair["preview_pdf"]["artifact_id"]}/download',
+                    "preview_id": token, "reused": True}
+        selected = pair["preview_pdf"] if pdf else document
+        if not pdf and task.get("latest_artifact_id") != document["artifact_id"]:
+            workflow_service.set_preparation_source(database, task, actor, "online")
+            previous = database.execute(
+                """SELECT a.id,sf.id AS file_id,sf.storage_backend,sf.storage_key FROM app.task_artifacts a
+                   JOIN app.stored_files sf ON sf.id=a.stored_file_id WHERE a.id=%s""",
+                (task.get("latest_artifact_id"),),
+            ).fetchone()
+            if previous:
+                database.execute("UPDATE app.task_artifacts SET superseded_at=NOW() WHERE id=%s", (previous["id"],))
+                if task.get("final_artifact_id") != previous["id"] and not _revaluation_pins_artifact(database, previous["id"]):
+                    database.execute("UPDATE app.stored_files SET removed_at=NOW() WHERE id=%s", (previous["file_id"],))
+                    remove_keys.append((previous["storage_backend"], previous["storage_key"]))
+            database.execute("UPDATE app.task_artifacts SET superseded_at=NULL WHERE id=%s", (document["artifact_id"],))
+            database.execute("UPDATE app.tasks SET latest_artifact_id=%s,report_generated_at=NOW(),version=version+1,updated_at=NOW() WHERE id=%s",
+                             (document["artifact_id"], task["id"]))
+            database.execute(
+                """INSERT INTO app.task_activities (id,task_id,event_type,actor_user_id,actor_name_snapshot,message,details)
+                   VALUES (%s,%s,'report',%s,%s,'DOCX report generated successfully.',%s)""",
+                (uuid.uuid4(), task["id"], actor["id"], actor["name"], Jsonb({"artifactId": str(document["artifact_id"]), "artifactType": "valuation_docx"})),
+            )
+        result = {"ok": True, "download": f'/api/tasks/{task_code}/artifacts/{selected["artifact_id"]}/download' + ("?download=1" if pdf else ""),
+                  "filename": selected["original_filename"], "registered": not pdf, "reused": True}
+    _delete_physical(remove_keys)
+    result["task"] = workflow_service.get_task(task_code)
+    return result
 
 
 def online_estimation_draft(task_code: str, session: dict[str, Any], preview_token: str | None = None):

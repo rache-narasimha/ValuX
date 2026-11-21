@@ -1,8 +1,10 @@
 """Regression check for dynamic general-report documents and numeric parsing."""
 
 import sys
+import json
 from pathlib import Path
 from zipfile import ZipFile
+from unittest.mock import patch
 
 from docx import Document
 from docx.enum.text import WD_TAB_ALIGNMENT
@@ -29,7 +31,8 @@ def main():
     assert valuation_amount_in_words(4542058) == "Forty-Five Lakh Forty-Two Thousand Fifty-Eight"
     assert amount_in_words(4542058) == "Forty Five Lakh Forty Two Thousand Fifty Eight", "Other report types retain their existing wording"
     offline_path = OUTPUT_DIR / "general_offline_template.docx"
-    reports.generate_offline_template("valuation-general", offline_path)
+    with patch("subprocess.run", side_effect=AssertionError("DOCX templates must not invoke LibreOffice")):
+        reports.generate_offline_template("valuation-general", offline_path)
     with ZipFile(offline_path) as archive:
         offline_root = etree.fromstring(archive.read("word/document.xml"))
     offline_text = " ".join(offline_root.xpath(".//w:t/text()", namespaces=NS))
@@ -100,7 +103,8 @@ def main():
         "extra.item_2": "2,500",
         "amenity.item_1": "1,500",
     }
-    reports.generate_docx(values, OUTPUT_PATH)
+    with patch("subprocess.run", side_effect=AssertionError("DOCX generation must not invoke LibreOffice")):
+        reports.generate_docx(values, OUTPUT_PATH)
     with ZipFile(OUTPUT_PATH) as archive:
         root = etree.fromstring(archive.read("word/document.xml"))
     document_details = ("Document No. 1", "Rectification document", "Legal scrutiny report", "EC through 11-10-2026", "Agreement dated 01-10-2026")
@@ -138,7 +142,11 @@ def main():
         assert next(p for p in master_paragraphs if p.text == heading).paragraph_format.page_break_before
     bank_index = next(i for i, p in enumerate(master_paragraphs) if p.text.startswith("The undersigned"))
     assert master_paragraphs[bank_index - 1].paragraph_format.page_break_before
-    declaration_block = paragraphs[method_index:acknowledgment_index - 1]
+    office_index = next(i for i, p in enumerate(paragraphs) if p.text == "For Office use only")
+    office = paragraphs[office_index]
+    assert office_index < acknowledgment_index and office.paragraph_format.space_after.pt == 12
+    assert all(not run.bold for run in office.runs)
+    declaration_block = paragraphs[method_index:office_index - 1]
     assert any(p.text == "Declaration" for p in declaration_block)
     assert any("Signature of Valuer" in p.text for p in declaration_block)
     assert not any("undersigned" in p.text for p in declaration_block)
@@ -205,6 +213,29 @@ def main():
     assert any("42,05,000/-" in p.text for p in floors_doc.paragraphs)
     assert floors_doc.tables[9].rows[-1].cells[-1].text == "500/-"
     assert floors_doc.tables[10].rows[-1].cells[-1].text == "700/-"
+    plot_path = OUTPUT_PATH.with_name("general_plot_only_test.docx")
+    reports.generate_docx({**floor_values, "property.category": "residential_plot",
+                          "calculation.overrides": '{"abstract.building":"750000"}'}, plot_path)
+    plot_doc = Document(plot_path)
+    plot_text = " ".join([p.text for p in plot_doc.paragraphs] +
+                         [cell.text for table in plot_doc.tables for row in table.rows for cell in row.cells])
+    assert "Building Valuation" not in plot_text
+    assert "Specifications of construction" not in plot_text
+    assert not any(len(table.columns) == 9 for table in plot_doc.tables)
+    plot_summary = next(table for table in plot_doc.tables if "Summary of property Value" in table.cell(0, 0).text)
+    building_row = next(row for row in plot_summary.rows if row.cells[1].text == "Building")
+    assert building_row.cells[-1].text == "N/A"
+    narrative_path = OUTPUT_PATH.with_name("general_formatted_documents_test.docx")
+    blocks = [{"kind": "number", "runs": [{"text": text, "bold": True}]}
+              for text in ("First document", "Second document")]
+    reports.generate_docx({**values, "documents.1.details": "1. First document\n2. Second document",
+                          "documents.1.details_formatting": json.dumps(blocks)}, narrative_path)
+    with ZipFile(narrative_path) as archive:
+        narrative_root = etree.fromstring(archive.read("word/document.xml"))
+    numbered = narrative_root.xpath(".//w:p[w:pPr/w:numPr]", namespaces=NS)
+    assert any("First document" in "".join(p.xpath(".//w:t/text()", namespaces=NS)) for p in numbered)
+    assert any("Second document" in "".join(p.xpath(".//w:t/text()", namespaces=NS)) for p in numbered)
+    assert narrative_root.xpath(".//w:r[w:t='First document']/w:rPr/w:b", namespaces=NS)
     from tests.test_agricultural_generation import image_item
     for count in (1, 9, 10):
         path = OUTPUT_PATH.with_name(f"general_media_{count}.docx")

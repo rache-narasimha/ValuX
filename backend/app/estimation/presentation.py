@@ -44,6 +44,18 @@ def compact_abstract(state):
     )
 
 
+def ground_floor_only(state):
+    """A standalone residential GF needs no duplicate one-line Abstract."""
+    components = state.get("components") or []
+    if state.get("propertyType") != "residential" or len(components) != 1:
+        return False
+    sheets = components[0].get("sheets") or []
+    custom = (state.get("details") or {}).get("customComponentEstimates") or []
+    return (len(sheets) == 1 and sheets[0].get("key") == "ground"
+            and not sheets[0].get("typicalFloorKeys")
+            and not any(str(item.get("description") or "").strip() or item.get("amount") not in (None, "") for item in custom))
+
+
 def component_name(component):
     name = re.sub(r"\s+", " ", str(component.get("name") or "Building")).strip()
     name = re.sub(r"^Residential Building\s*/?\s*Block\s*(\d+)$", r"Building \1", name, flags=re.I)
@@ -95,8 +107,10 @@ def work_text(details, description=None):
         address = str(details.get("workAddress") or "").strip()
         if not address:
             raise ValueError("Enter Address of the Work before preparing the report.")
-        return f"{work.rstrip(' .')} at {address}"
-    return f"{work} at {details.get('projectLocation') or '[Project / Location]'}"
+    else:
+        address = details.get("projectLocation") or "[Project / Location]"
+    work = re.sub(r"^Proposed construction of\s+", "", work, flags=re.I)
+    return f"Proposed construction of {work.rstrip(' .')} at {address}"
 
 
 def applicant_text(details):

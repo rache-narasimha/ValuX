@@ -61,7 +61,7 @@ def fixtures():
         "details": {"workAddress": "Adoni", "workMode": "online", "commonExternalWorks": {"Electrical Works": 999}},
         "components": [{"id": "house", "name": "House", "kind": "residential_building", "sheets": [
             {"id": "gf", "key": "ground", "label": "Ground Floor", "level": 1,
-             "formData": {"sheetTotalOverride": "35.005", "rows": {
+             "formData": {"sheetTotalOverride": "3535.005", "rows": {
                  "pcc-total": {"directQuantity": 1, "rate": 3},
                  "concrete-roof-slab": {
                      "no": 1, "length": 12, "breadth": 9, "rate": 10,
@@ -144,11 +144,11 @@ def http_flow():
     assert request("/api/estimation/workbook", body, status=409)["code"] == "preview_required"
     preview = request("/api/estimation/preview", body)
     body["preview_id"] = preview["preview_id"]
-    assert preview["summary"]["totalEstimatedCost"] == 35.01
+    assert preview["summary"]["totalEstimatedCost"] == 4000
     assert request("/api/estimation/totals", body)["summary"] == preview["summary"]
     refreshed = request(f"/api/tasks/{code}/draft")["draft"]
     assert refreshed["revision"] == saved["revision"] and refreshed["payload"] == saved["payload"]
-    draft["components"][0]["sheets"][0]["formData"]["sheetTotalOverride"] = "40.005"
+    draft["components"][0]["sheets"][0]["formData"]["sheetTotalOverride"] = "4500.005"
     request(f"/api/tasks/{code}/draft", {
         "reportKey": "estimation", "schemaVersion": "3", "revision": saved["revision"], "payload": draft,
     })
@@ -160,12 +160,12 @@ def http_flow():
     workbook = load_workbook(BytesIO(content))
     try:
         sheet, cell, _ = generate_estimation_workbook(draft).checks[1]
-        assert workbook[sheet][cell].value == 40.01
+        assert workbook[sheet][cell].value == 5000
     finally:
         workbook.close()
     task = request(f"/api/tasks/{code}")["task"]
     assert task["estimationSummary"]["components"][0]["id"] == "measure-house-gf"
-    assert task["estimationSummary"]["totalEstimatedCost"] == 40.01
+    assert task["estimationSummary"]["totalEstimatedCost"] == 5000
     assert task["reportFresh"]
     print("PASS: saved inputs, current preview, Excel download and PostgreSQL snapshot agree")
 
@@ -198,7 +198,7 @@ def http_flow():
         })["draft"]["payload"]
         assessment["photos"] = saved_assessment["photos"]
         assessment["map"] = saved_assessment["map"]
-        invalid = {**assessment, "components": [{**assessment["components"][0], "estimatedCost": 5000}]}
+        invalid = {**assessment, "components": [{**assessment["components"][0], "estimatedCost": 6000}]}
         assert request("/api/progress/preview", invalid, status=409)["code"] == "estimation_components_changed"
         approved = request("/api/progress/preview", assessment)
         assert approved["reportType"] == report_type
@@ -206,7 +206,7 @@ def http_flow():
         invalid["preview_id"] = approved["preview_id"]
         assert request("/api/progress/generate", invalid, status=409)["code"] == "estimation_components_changed"
         generated = request("/api/progress/generate", assessment)
-        assert generated["summary"]["components"][0]["estimatedCost"] == 40.01
+        assert generated["summary"]["components"][0]["estimatedCost"] == 5000
         assert request(generated["download"], binary=True).startswith(b"PK")
     print("PASS: online Progress and Completion reject altered costs and generate from pinned component totals")
 
@@ -227,7 +227,7 @@ if __name__ == "__main__":
                 assert {item["id"]: item["estimatedCost"] for item in browser[index]} == expected
             verify_generated_estimation(generated, SOFFICE)
         assert cases[0]["components"][0]["sheets"][0]["formData"]["finalAmount"] == 999999
-        assert expected == {"measure-house-gf": 35.01}
+        assert expected == {"measure-house-gf": 4000}
         workbook = load_workbook(BytesIO(generated.content))
         sheet, coordinate, _ = generated.checks[-1]
         workbook[sheet][coordinate] = 999999

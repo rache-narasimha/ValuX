@@ -44,7 +44,7 @@ function reportErrorMessage(error, fallback) {
 
 // Assignment context and report-specific field helpers.
 function linkedTaskValues() {
-  const taskId = PAGE_PARAMS.get("task");
+  const taskId = ReportData.taskCode;
   const task = taskId && window.TaskStore ? TaskStore.get(taskId) : null;
   return task ? {
     "institution.type": task.institutionType,
@@ -449,7 +449,7 @@ function applyPreparationMode() {
     state.sections[index].toggleAttribute("hidden", !visible);
     document.querySelectorAll(`[data-section-index="${index}"]`).forEach((button) => button.toggleAttribute("hidden", !visible));
     state.sections[index].querySelectorAll("input,select,textarea,button").forEach((control) => {
-      if (!control.dataset.preparationMethod) control.disabled = !visible;
+      if (!control.dataset.preparationMethod) control.disabled = !visible || control.dataset.practiceSubmitted === "true";
     });
   });
   ["preview-report", "generate-docx", "generate-pdf"].forEach((id) => byId(id).toggleAttribute("hidden", !online));
@@ -494,6 +494,7 @@ async function persistDraftNow() {
     exampleFill: exampleAssistance?.serialize(),
     preparationMethod: state.preparationMethod,
     uploadType: byId("valuation-upload-type")?.value || "",
+    practiceOffline: state.practiceOffline || null,
     documentCount: state.documentCount,
     photos: state.photos,
     map: state.map,
@@ -580,6 +581,7 @@ async function init() {
     restoreDraft(),
   ]);
   state.schema = schema;
+  state.practiceOffline = draft?.practiceOffline || null;
   const initialValues = { ...(draft?.values || {}), ...(ReportData.readOnly ? {} : linkedTaskValues()) };
   const revaluation = currentTask()?.reportGroup === "revaluation";
   if (revaluation) {
@@ -606,7 +608,11 @@ async function init() {
     if (section.id === "preparation") {
       panel = window.RetrospectiveValuation.preparationPanel("valuation-agricultural", state.preparationMethod, setPreparationMethod);
     } else if (section.id === "offline") {
-      panel = window.RetrospectiveValuation.offlinePanel("valuation-agricultural", draft?.uploadType, { uploadTypeChanged: async () => { await persistDraftNow(); markDirty(); } });
+      panel = window.RetrospectiveValuation.offlinePanel("valuation-agricultural", draft?.uploadType, {
+        uploadTypeChanged: async () => { await persistDraftNow(); markDirty(); },
+        practiceSaved: state.practiceOffline,
+        practiceChanged: async (value) => { state.practiceOffline = value; await persistDraftNow(); },
+      });
     } else {
       panel = document.createElement("div");
       panel.className = "panel";

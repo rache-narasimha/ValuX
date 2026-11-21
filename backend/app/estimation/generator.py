@@ -15,18 +15,22 @@ from copy import copy
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP, localcontext
 from io import BytesIO
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping, MutableMapping, Sequence
 
 from openpyxl import load_workbook
+from openpyxl.cell.cell import MergedCell
+from openpyxl.worksheet.pagebreak import Break, RowBreak
 from openpyxl.formula import Tokenizer
 from openpyxl.styles import Border, Font, PatternFill, Side
-from openpyxl.utils import range_boundaries
+from openpyxl.utils import get_column_letter, range_boundaries
 from openpyxl.workbook.properties import CalcProperties
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.worksheet.views import Selection
+from PIL import ImageFont
 
-from .presentation import abstract_description, applicant_text, compact_abstract, component_labels, component_work, industrial_centre_line, modern_identity, work_text
+from .presentation import abstract_description, applicant_text, compact_abstract, component_labels, ground_floor_only, industrial_centre_line, modern_identity, work_text
 
 
 RESOURCE_DIRECTORY = Path(__file__).resolve().parents[3] / "resources" / "estimation"
@@ -113,7 +117,7 @@ class DetailResult:
 
     @property
     def estimated_cell(self) -> str:
-        return f"L{self.estimated_row}"
+        return f"L{self.words_row}"
 
 
 def _load_manifest() -> dict[str, Any]:
@@ -235,7 +239,7 @@ def _detail_specs(state: Mapping[str, Any], manifest: Mapping[str, Any]) -> list
         name = _clean_sheet_name(component_name if modern_identity(state.get("details") or {}) else sheet.get("label") if typical else component_name, used_names)
         multiplier = len(sheet["typicalFloorKeys"]) if typical and sheet.get("typicalBasis") == "per-floor" else 1
         specs.append(DetailSpec(
-            name, component_name, key, form_data, component_work(component), record["first"],
+            name, component_name, key, form_data, "", record["first"],
             (sheet or {}).get("label", ""), abstract_description(state, component, sheet, component_name), multiplier,
             record["id"], record["legacyLabel"],
         ))
@@ -599,7 +603,11 @@ def _effective_final_amount(spec: DetailSpec, manifest: Mapping[str, Any]) -> fl
 
 def _adopted_sheet_amount(spec: DetailSpec, total: float) -> float:
     override = _numeric(spec.form_data.get("sheetTotalOverride"))
-    return _money(total if override is None else override)
+    return _rounded_estimate(total if override is None else override)
+
+
+def _rounded_estimate(value: Any) -> float:
+    return float(Decimal(str(_money(value))).quantize(Decimal("1E3"), rounding=ROUND_HALF_UP))
 
 
 def _money(value: Any, *, signed: bool = False) -> float:
@@ -1051,9 +1059,10 @@ def _repair_detail_totals(ws: Worksheet, result: DetailResult) -> None:
     amount_rows = _formula_amount_rows(ws, result.total_row)
     references = ",".join(f"L{row}" for row in amount_rows)
     ws.cell(result.total_row, 12).value = f'=IF(COUNT({references})=0,"",SUM({references}))' if references else '=""'
-    ws.cell(result.estimated_row, 12).value = f'=IF(COUNT(L{result.total_row})=0,"",L{result.total_row})'
-    ws["L14"] = f'=IF(COUNT(L{result.estimated_row})=0,"",L{result.estimated_row})'
-    ws.cell(result.words_row, 12).value = f'=IF(COUNT(L{result.estimated_row})=0,"",L{result.estimated_row})'
+    ws.cell(result.estimated_row, 12).value = None
+    ws.cell(result.words_row, 12).value = f'=IF(COUNT(L{result.total_row})=0,"",ROUND(L{result.total_row},-3))'
+    ws["L14"] = f'=IF(COUNT({result.estimated_cell})=0,"",{result.estimated_cell})'
+    # The rounded amount and its words share the final row; the row above is blank.
 
 
 def _amount_in_words(value: Any) -> str:
@@ -1104,7 +1113,7 @@ def _abstract_items(details: Mapping[str, Any], key: str, fallback: str) -> list
 def _abstract_costs(details: Mapping[str, Any], separate: bool) -> list[dict[str, Any]]:
     def custom(key, label, source):
         return [
-            {"id": item["id"], "label": item["description"], "estimatedCost": _money(item["amount"] or 0), "source": source}
+            {"id": item["id"], "label": item["description"], "estimatedCost": _rounded_estimate(item["amount"] or 0), "source": source}
             for item in _abstract_items(details, key, label)
         ]
 
@@ -1117,7 +1126,8 @@ def _abstract_costs(details: Mapping[str, Any], separate: bool) -> list[dict[str
             raise ValueError("Enter valid amounts for the common external works.")
         for index, label in enumerate(COMMON_EXTERNAL_WORKS, 1):
             amount = _numeric(common_values.get(label))
-            if amount is not None and (cost := _money(amount)) != 0:
+            if amount is not None and _money(amount) != 0:
+                cost = _rounded_estimate(amount)
                 costs.append({"id": f"common-{index}", "label": label, "estimatedCost": cost, "source": "common"})
         costs.extend(custom("customCommonExternalWorks", "Custom external work", "common"))
     return costs
@@ -1229,7 +1239,7 @@ def _plinth_area_text(value):
 
 def _apply_detail_report_text(ws: Worksheet, state: Mapping[str, Any], result: DetailResult, spec: DetailSpec) -> None:
     work, applicant, place, date = _report_text(state)
-    ws["A8"] = f"Name of the Work : {work_text(state.get('details') or {}, spec.work_description)}" if modern_identity(state.get("details") or {}) else work
+    ws["A8"] = work
     ws["A11"] = applicant
     if modern_identity(state.get("details") or {}) or "plinthArea" in spec.form_data:
         ws["A14"] = f"Plinth Area : {_plinth_area_text(spec.form_data.get('plinthArea'))}"
@@ -1283,7 +1293,7 @@ def _build_separate_abstract(
         row += 1
     for custom in custom_components:
         if completed:
-            custom["amount"] = _money(custom["amount"] or 0)
+            custom["amount"] = _rounded_estimate(custom["amount"] or 0)
         _add_abstract_direct_row(ws, row, len(amount_rows) + 1, custom["description"], custom["amount"], input_amount=True)
         if completed and custom["amount"] is not None:
             checks.append((ws.title, f"L{row}", custom["amount"]))
@@ -1303,7 +1313,7 @@ def _build_separate_abstract(
     for label in COMMON_EXTERNAL_WORKS:
         value = _numeric(common_values.get(label)) if completed else None
         if value is not None:
-            value = _money(value)
+            value = _rounded_estimate(value)
         _add_abstract_direct_row(ws, row, len(amount_rows) + 1, label, value, input_amount=True)
         if completed and value is not None:
             checks.append((ws.title, f"L{row}", value))
@@ -1313,7 +1323,7 @@ def _build_separate_abstract(
         row += 1
     for custom in custom_common:
         if completed:
-            custom["amount"] = _money(custom["amount"] or 0)
+            custom["amount"] = _rounded_estimate(custom["amount"] or 0)
         _add_abstract_direct_row(ws, row, len(amount_rows) + 1, custom["description"], custom["amount"], input_amount=True)
         if completed and custom["amount"] is not None:
             checks.append((ws.title, f"L{row}", custom["amount"]))
@@ -1324,7 +1334,7 @@ def _build_separate_abstract(
 
     total_row = row + 1
     ws.merge_cells(start_row=total_row, start_column=1, end_row=total_row, end_column=11)
-    ws.cell(total_row, 1).value = "TOTAL ESTIMATED PROJECT COST"
+    ws.cell(total_row, 1).value = None
     references = ",".join(f"L{number}" for number in amount_rows)
     ws.cell(total_row, 12).value = f'=IF(COUNT({references})=0,"",SUM({references}))'
     _style_total_or_words_row(ws, total_row, YELLOW, right_label=True)
@@ -1332,7 +1342,7 @@ def _build_separate_abstract(
     ws.merge_cells(start_row=words_row, start_column=1, end_row=words_row, end_column=11)
     words = f"(Rupees {_amount_in_words(known_total)} only)" if known else "(Rupees [amount in words to be generated by the application] only)"
     ws.cell(words_row, 1).value = words
-    ws.cell(words_row, 12).value = f'=IF(COUNT(L{total_row})=0,"",L{total_row})'
+    ws.cell(words_row, 12).value = f'=IF(COUNT(L{total_row})=0,"",ROUND(L{total_row},-3))'
     _style_total_or_words_row(ws, words_row, YELLOW)
 
     place_row = words_row + 2
@@ -1420,6 +1430,104 @@ def _apply_a4_print_layout(ws: Worksheet) -> None:
     ws.sheet_view.topLeftCell = f"A{first_row}"
 
 
+@lru_cache(maxsize=32)
+def _estimation_text_font(size: float, bold: bool):
+    """Use the Arial-compatible font already installed in the app image."""
+    filename = f"LiberationSans-{'Bold' if bold else 'Regular'}.ttf"
+    for directory in ("/usr/share/fonts/truetype/liberation", "/usr/share/fonts/truetype/liberation2"):
+        path = Path(directory) / filename
+        if path.is_file():
+            return ImageFont.truetype(str(path), round(size * 4))
+    return ImageFont.load_default(size=round(size * 4))
+
+
+def _wrapped_estimation_height(text: str, size: float, bold: bool, width: float) -> float:
+    font = _estimation_text_font(size, bold)
+    lines = 0
+    for paragraph in text.split("\n"):
+        line = ""
+        for word in paragraph.split():
+            candidate = line + word
+            if line and font.getlength(candidate) / 4 > width:
+                lines += 1
+                line = ""
+            # Long identifiers/addresses must wrap too, even without spaces.
+            for character in word:
+                candidate = line + character
+                if line and font.getlength(candidate) / 4 > width:
+                    lines += 1
+                    line = ""
+                line += character
+            line += " "
+        lines += 1
+    return lines * size * 1.2 + 6
+
+
+def _readable_estimation_layout(ws: Worksheet, ending_start: int) -> None:
+    """Raise printed text without squeezing the twelve-column reference layout."""
+    # The master uses long runs of spaces to position its phone number. At
+    # readable font sizes that pushes it outside the merged header cell.
+    for row in ws.iter_rows(min_row=1, max_row=4, min_col=1, max_col=12):
+        for cell in row:
+            if isinstance(cell.value, str):
+                cell.value = re.sub(r" {2,}", " ", cell.value)
+                cell.alignment = _alignment_with(cell, wrap_text=True)
+    for row in ws.iter_rows(min_col=1, max_col=12):
+        ratio = 1.0
+        for cell in row:
+            if isinstance(cell, MergedCell):
+                continue
+            old_size = cell.font.sz or 10
+            target = 11 if cell.row in (2, 3, 4) else 12
+            if old_size < target:
+                font = copy(cell.font)
+                font.sz = target
+                cell.font = font
+                if cell.value is not None:
+                    ratio = max(ratio, target / old_size)
+        if ratio > 1:
+            height = ws.row_dimensions[row[0].row].height or 15
+            ws.row_dimensions[row[0].row].height = max(20, height * ratio)
+    # Reclaim blank header padding before moving an entire first measurement
+    # item to another page. Merged work/applicant fields are fitted below.
+    for number in range(4, 16):
+        if not any(ws.cell(number, column).value is not None for column in range(1, 13)):
+            ws.row_dimensions[number].height = min(ws.row_dimensions[number].height or 15, 6)
+    merged = {(area.min_row, area.min_col): area for area in ws.merged_cells.ranges}
+    for row in ws.iter_rows(min_col=1, max_col=12):
+        for cell in row:
+            if not isinstance(cell.value, str) or cell.data_type == "f" or not cell.alignment.wrap_text:
+                continue
+            area = merged.get((cell.row, cell.column))
+            last_column = area.max_col if area else cell.column
+            last_row = area.max_row if area else cell.row
+            width = sum((ws.column_dimensions[get_column_letter(column)].width * 7 + 5) * 0.75
+                        for column in range(cell.column, last_column + 1)) - 6
+            required = _wrapped_estimation_height(cell.value, cell.font.sz, cell.font.bold, max(width, 12))
+            current = sum(ws.row_dimensions[number].height or 15 for number in range(cell.row, last_row + 1))
+            if required > current:
+                ws.row_dimensions[cell.row].height = (ws.row_dimensions[cell.row].height or 15) + required - current
+    # Keep each item together when it fits, and keep the final amounts/footer
+    # together rather than producing a signature-only page.
+    first = 14 if ws.row_dimensions[1].hidden else 1
+    item_starts = [r for r in range(17, ending_start)
+                   if _numeric(ws.cell(r, 1).value) is not None
+                   or re.fullmatch(r"[b-z]", str(ws.cell(r, 1).value or ""))]
+    if item_starts and item_starts[0] == 17 and str(ws.cell(16, 1).value or "").startswith("S.No"):
+        item_starts[0] = 16
+    starts = [first, *item_starts, ending_start, ws.max_row + 1]
+    starts = sorted(set(starts))
+    available = 595.28 - 72 * (ws.page_margins.top + ws.page_margins.bottom)
+    ws.row_breaks = RowBreak()
+    used = 0
+    for start, end in zip(starts, starts[1:]):
+        height = sum(0 if ws.row_dimensions[r].hidden else ws.row_dimensions[r].height or 15 for r in range(start, end))
+        if used and height <= available and used + height > available:
+            ws.row_breaks.append(Break(id=start - 1))
+            used = 0
+        used = (used + height) % available
+
+
 def _append_compact_abstract(
     ws: Worksheet,
     state: Mapping[str, Any],
@@ -1467,7 +1575,7 @@ def _append_compact_abstract(
         row += 1
     for custom in custom_components:
         if completed:
-            custom["amount"] = _money(custom["amount"] or 0)
+            custom["amount"] = _rounded_estimate(custom["amount"] or 0)
         _add_abstract_direct_row(ws, row, len(amount_rows) + 1, custom["description"], custom["amount"], input_amount=True)
         if completed and custom["amount"] is not None:
             checks.append((ws.title, f"L{row}", custom["amount"]))
@@ -1476,7 +1584,7 @@ def _append_compact_abstract(
         amount_rows.append(row)
         row += 1
     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=11)
-    ws.cell(row, 1).value = "TOTAL ESTIMATED PROJECT COST"
+    ws.cell(row, 1).value = None
     references = ",".join(f"L{number}" for number in amount_rows)
     ws.cell(row, 12).value = f'=IF(COUNT({references})=0,"",SUM({references}))'
     _style_total_or_words_row(ws, row, YELLOW, right_label=True)
@@ -1484,7 +1592,7 @@ def _append_compact_abstract(
     ws.merge_cells(start_row=words_row, start_column=1, end_row=words_row, end_column=11)
     words = f"(Rupees {_amount_in_words(known_total)} only)" if known else "(Rupees [amount in words to be generated by the application] only)"
     ws.cell(words_row, 1).value = words
-    ws.cell(words_row, 12).value = f'=IF(COUNT(L{row})=0,"",L{row})'
+    ws.cell(words_row, 12).value = f'=IF(COUNT(L{row})=0,"",ROUND(L{row},-3))'
     _style_total_or_words_row(ws, words_row, YELLOW)
     place_row = words_row + 2
     date_row = place_row + 1
@@ -1546,20 +1654,20 @@ def generate_estimation_workbook(
             if mode == "completed" and spec.floor_multiplier > 1:
                 _group_detail_amounts(ws, result, spec.floor_multiplier)
         _repair_detail_totals(ws, result)
+        ws.cell(result.total_row, 1).value = None
+        ws.cell(result.estimated_row, 1).value = None
         if mode == "completed":
             calculated, unadjusted = _sheet_amounts(spec, manifest)
             effective_final_amount = _adopted_sheet_amount(spec, calculated)
             sheet_amounts[spec.name] = effective_final_amount
+            adjustment = Decimal(str(calculated - unadjusted)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            if adjustment:
+                ws.cell(result.total_row, 12).value = f'=ROUND(({ws.cell(result.total_row, 12).value[1:]})+({adjustment}),2)'
             if _numeric(spec.form_data.get("sheetTotalOverride")) is not None:
                 ws[result.estimated_cell] = effective_final_amount
             else:
-                # Keep the workbook's own measurement formulas in the calculation.
-                adjustment = Decimal(str(calculated - unadjusted)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                if adjustment:
-                    ws[result.estimated_cell] = f"=ROUND(SUM(L{result.total_row})+({adjustment}),2)"
-                else:
-                    ws[result.estimated_cell] = f"=ROUND(SUM(L{result.total_row}),2)"
-            checks.extend(((spec.name, f"L{result.total_row}", _money(unadjusted, signed=True)),
+                ws[result.estimated_cell] = f'=IF(COUNT(L{result.total_row})=0,"",ROUND(L{result.total_row},-3))'
+            checks.extend(((spec.name, f"L{result.total_row}", _money(calculated, signed=True)),
                            (spec.name, result.estimated_cell, effective_final_amount)))
             ws.cell(result.words_row, 1).value = f"(Rupees {_amount_in_words(effective_final_amount)} only)"
         else:
@@ -1569,7 +1677,7 @@ def generate_estimation_workbook(
     if separate_abstract:
         abstract = workbook["Abstract"]
         words_row, _ = _build_separate_abstract(abstract, state, specs, results, sheet_amounts, mode == "completed", checks)
-    else:
+    elif not ground_floor_only(state):
         last_spec = specs[-1]
         abstract = sheets[last_spec.name]
         last_result = results[last_spec.name]
@@ -1577,10 +1685,17 @@ def generate_estimation_workbook(
             abstract, state, specs, results, last_result, sheet_amounts, mode == "completed", checks
         )
         words_row = last_result.compact_abstract_words_row
+    else:
+        last_spec = specs[-1]
+        abstract = sheets[last_spec.name]
+        last_result = results[last_spec.name]
+        words_row = last_result.words_row
+        _write_footer(abstract, words_row + 2, words_row + 3, state)
+        last_result.last_row = words_row + 3
     summary = None
     if mode == "completed":
         summary = _online_summary(state, specs, sheet_amounts, separate_abstract)
-        checks.append((abstract.title, f"L{words_row - 1}", summary["totalEstimatedCost"]))
+        checks.append((abstract.title, f"L{words_row}", summary["totalEstimatedCost"]))
 
     if workbook.calculation is None:
         workbook.calculation = CalcProperties()
@@ -1594,6 +1709,9 @@ def generate_estimation_workbook(
                 if cell.data_type == "f" or (cell.data_type == "n" and cell.value is not None):
                     cell.number_format = "#,##0.00"
         _apply_a4_print_layout(worksheet)
+        ending_start = results[worksheet.title].total_row if worksheet.title in results else next(
+            (r for r in range(16, worksheet.max_row + 1) if str(worksheet.cell(r, 1).value or "").startswith("(Rupees")), worksheet.max_row) - 1
+        _readable_estimation_layout(worksheet, ending_start)
     workbook.active = 0
 
     output = BytesIO()

@@ -2,10 +2,12 @@
 
 import json
 import base64
+import hashlib
 import mimetypes
 import os
 import re
 import shutil
+import secrets
 import subprocess
 import time
 from datetime import date
@@ -17,12 +19,11 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
 
 from ..auth import routes as auth_routes
 from ..auth.service import AuthError
-from ..estimation import extract_estimation_summary, generate_estimation_workbook
+from ..estimation import generate_estimation_workbook
 from ..estimation.generator import online_estimation_summary
 from ..estimation.summary import WorkbookTotalsMismatch, verify_generated_estimation
 from ..exports import generate_table_export
@@ -31,6 +32,7 @@ from ..valuation.media import require_online_media
 from ..progress.generator import generate_progress_template
 from ..reports import routes as report_routes
 from ..reports import service as report_service
+from ..reports.workbook_uploads import extract_uploaded_estimation_summary, inspect_uploaded_workbook, validate_uploaded_workbook
 from ..valuation.config import AGRICULTURAL_TEMPLATE, ASSETS_DIR, OUTPUT_DIR, PAGES_DIR, SOFFICE, TEMPLATE
 from ..valuation.kvb_template import generate_kvb_template
 from ..valuation.reports import generate_agricultural_docx, generate_docx, generate_offline_template
@@ -82,6 +84,14 @@ def safe_upload_name(value, allowed_suffixes, fallback):
     return name if Path(name).suffix.lower() in allowed_suffixes else fallback
 
 
+def practice_report_accessible(name, user_id):
+    # Older temporary uploads have no trustworthy owner metadata. Their links
+    # expire rather than assigning another user's attachment to the requester.
+    if name.startswith(("estimation-upload-", "kvb-valuation-upload-", "karnataka-valuation-upload-")):
+        return False
+    return not name.startswith("practice-report-") or name.startswith(f"practice-report-{user_id}-")
+
+
 def estimation_summary(state, extracted=None):
     """Combine validated workbook costs with the task-linked form identity."""
     state = state if isinstance(state, dict) else {}
@@ -107,7 +117,10 @@ def estimation_summary(state, extracted=None):
 
 
 def task_code_from(handler, payload=None):
-    return str((payload or {}).get("taskCode") or handler.headers.get("X-Task-Code") or "").strip()
+    task_code = str((payload or {}).get("taskCode") or handler.headers.get("X-Task-Code") or "").strip()
+    if task_code and handler.headers.get("X-Practice-Mode") == "1":
+        raise ValueError("Practice requests cannot update an assignment.")
+    return task_code
 
 
 def validate_online_estimation(state):
@@ -187,11 +200,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         try:
-            auth_routes.require_full_session(self)
+            session = auth_routes.require_full_session(self)
         except AuthError:
             self.send_error(401)
             return
-        file_path = OUTPUT_DIR / Path(path).name
+        file_path = OUTPUT_DIR / Path(unquote(path)).name
+        if not practice_report_accessible(file_path.name, session["user_id"]):
+            self.send_error(404)
+            return
         if not file_path.exists() or not file_path.is_file():
             self.send_error(404)
             return
@@ -243,7 +259,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(agricultural_schema_payload())
                 return
             if path.startswith("/downloads/"):
-                file_path = OUTPUT_DIR / Path(path).name
+                file_path = OUTPUT_DIR / Path(unquote(path)).name
+                if not practice_report_accessible(file_path.name, session["user_id"]):
+                    self.send_error(404)
+                    return
                 if not file_path.exists():
                     self.send_error(404)
                     return
@@ -256,8 +275,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(data)
                 return
             if path.startswith("/previews/"):
-                file_path = OUTPUT_DIR / Path(path).name
-                if not file_path.exists() or file_path.suffix.lower() != ".pdf":
+                file_path = OUTPUT_DIR / Path(unquote(path)).name
+                if not practice_report_accessible(file_path.name, session["user_id"]) or not file_path.exists() or file_path.suffix.lower() != ".pdf":
                     self.send_error(404)
                     return
                 self.send_file(
@@ -405,8 +424,23 @@ class Handler(BaseHTTPRequestHandler):
                 revaluation = report_task["report_group"] == "revaluation"
                 if not is_preview:
                     report_service.require_current_preview(task_code, session, payload.get("preview_id", ""))
+                if not is_agricultural:
+                    cached = report_service.cached_general_report(task_code, session, payload, preview=is_preview, pdf=payload.get("format") == "pdf")
+                    if cached:
+                        self.send_json(cached)
+                        return
             prefix = "agricultural-valuation" if is_agricultural else "valuation"
             preview_id = str(time.time_ns()) if is_preview else str(payload.get("preview_id", ""))
+            if not task_code and not is_agricultural:
+                fingerprint = report_service.report_input_fingerprint(payload, expected_report_key, "practice", report_service._current_template_version(expected_report_key))
+                expected_token = str(int(hashlib.sha256(f"{session['user_id']}:{fingerprint}".encode()).hexdigest(), 16))
+                if not is_preview and preview_id != expected_token:
+                    raise ValueError("The form changed after preview. Preview the latest report before downloading.")
+                preview_id = expected_token
+                cached_name = f"{prefix}-preview-{preview_id}"
+                if is_preview and all((OUTPUT_DIR / f"{cached_name}{suffix}").is_file() for suffix in (".docx", ".pdf")):
+                    self.send_json({"ok": True, "preview": f"/previews/{cached_name}.pdf", "preview_id": preview_id, "reused": True})
+                    return
             if preview_id and not re.fullmatch(r"\d+", preview_id):
                 raise ValueError("Invalid preview identifier")
             generation_id = str(time.time_ns())
@@ -423,6 +457,13 @@ class Handler(BaseHTTPRequestHandler):
                 shutil.copyfile(preview_docx, docx_path)
             else:
                 generator(values, docx_path, payload.get("photos", []), payload.get("map"), revaluation=revaluation)
+            if task_code and is_preview and not is_agricultural:
+                report_service.register_artifact(
+                    task_code, session, content=docx_path.read_bytes(),
+                    filename=report_service.valuation_download_filename(task_code, session, ".docx"),
+                    artifact_type="valuation_docx", source="generated", payload=payload, current=False,
+                    preview_token=preview_id, preview_input=preview_input,
+                )
             if requested_format == "pdf":
                 pdf_name = f"{base_name}.pdf"
                 pdf_path = OUTPUT_DIR / pdf_name
@@ -438,7 +479,7 @@ class Handler(BaseHTTPRequestHandler):
                 artifact = None
                 if task_code:
                     artifact = report_service.register_artifact(
-                        task_code, session, content=pdf_path.read_bytes(), filename=pdf_name if is_preview else report_service.valuation_download_filename(task_code, session, ".pdf"),
+                        task_code, session, content=pdf_path.read_bytes(), filename=pdf_name if is_preview and is_agricultural else report_service.valuation_download_filename(task_code, session, ".pdf"),
                         artifact_type="preview_pdf", source="generated", payload=payload, current=False,
                         preview_token=preview_id if is_preview else "", preview_input=preview_input,
                     )
@@ -581,9 +622,9 @@ class Handler(BaseHTTPRequestHandler):
     def handle_estimation_upload(self):
         try:
             session = auth_routes.require_full_session(self)
+            auth_routes.verify_csrf(self)
             task_code = task_code_from(self)
             if task_code:
-                auth_routes.verify_csrf(self)
                 report_service.require_report_key(task_code, session, "estimation")
             size = int(self.headers.get("Content-Length", "0"))
             if size <= 0 or size > 36 * 1024 * 1024:
@@ -606,19 +647,19 @@ class Handler(BaseHTTPRequestHandler):
             if suffix == ".pdf":
                 if not content.startswith(b"%PDF-"):
                     raise ValueError("Select a readable PDF report.")
-            else:
+            elif suffix == ".docx":
                 with ZipFile(BytesIO(content)) as archive:
-                    expected = "xl/workbook.xml" if suffix == ".xlsx" else "word/document.xml"
-                    if expected not in archive.namelist():
+                    if "word/document.xml" not in archive.namelist():
                         raise ValueError("The selected report package is invalid.")
             extracted = None
             if suffix == ".xlsx":
-                try:
-                    extracted = extract_estimation_summary(content)
-                except Exception:
-                    extracted = None
+                if isinstance(metadata.get("summary"), dict) and not urlparse(self.path).path.endswith("/analyze"):
+                    inspect_uploaded_workbook(content)
+                else:
+                    extracted = extract_uploaded_estimation_summary(content)
             if urlparse(self.path).path.endswith("/analyze"):
-                self.send_json({"ok": True, "components": (extracted or {}).get("components", []), "totalEstimatedCost": (extracted or {}).get("totalEstimatedCost")})
+                notice = "" if suffix != ".xlsx" or extracted else "No totals were extracted. The attachment is kept. Enter the component totals manually."
+                self.send_json({"ok": True, "components": (extracted or {}).get("components", []), "totalEstimatedCost": (extracted or {}).get("totalEstimatedCost"), "extractionNotice": notice})
                 return
             upload_type = metadata.get("uploadType") or self.headers.get("X-Upload-Type")
             if upload_type not in {"template", "retrospective"}:
@@ -650,7 +691,7 @@ class Handler(BaseHTTPRequestHandler):
                 download = artifact["download"]
             else:
                 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-                stored = OUTPUT_DIR / f"estimation-upload-{time.time_ns()}-{file_name}"
+                stored = OUTPUT_DIR / f"practice-report-{session['user_id']}-estimation-upload-{secrets.token_hex(16)}-{file_name}"
                 stored.write_bytes(content)
                 download = f"/downloads/{stored.name}"
             self.send_json({"ok": True, "fileName": file_name, "savedName": artifact["artifactId"] if artifact else stored.name,
@@ -667,9 +708,8 @@ class Handler(BaseHTTPRequestHandler):
         """Retain the offline artifact required by an institution-specific valuation."""
         try:
             session = auth_routes.require_full_session(self)
+            auth_routes.verify_csrf(self)
             task_code = task_code_from(self)
-            if task_code:
-                auth_routes.verify_csrf(self)
             size = int(self.headers.get("Content-Length", "0"))
             if size <= 0:
                 raise ValueError("Select the completed report file to attach.")
@@ -680,8 +720,7 @@ class Handler(BaseHTTPRequestHandler):
                 file_name = safe_upload_name(self.headers.get("X-File-Name"), {".xlsx"}, "completed-kvb-valuation.xlsx")
                 if len(content) < 4 or content[:2] != b"PK":
                     raise ValueError("Select a completed KVB Excel workbook (.xlsx).")
-                workbook = load_workbook(BytesIO(content), read_only=True, data_only=False)
-                workbook.close()
+                validate_uploaded_workbook(content)
                 prefix = "kvb-valuation-upload"
             else:
                 file_name = safe_upload_name(self.headers.get("X-File-Name"), {".docx", ".pdf"}, "completed-valocity-report.pdf")
@@ -707,7 +746,7 @@ class Handler(BaseHTTPRequestHandler):
                 download = artifact["download"]
             else:
                 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-                stored_name = f"{prefix}-{time.time_ns()}-{file_name}"
+                stored_name = f"practice-report-{session['user_id']}-{prefix}-{secrets.token_hex(16)}-{file_name}"
                 (OUTPUT_DIR / stored_name).write_bytes(content)
                 download = f"/downloads/{stored_name}"
             self.send_json({
@@ -736,7 +775,8 @@ class Handler(BaseHTTPRequestHandler):
             if session.get("role") not in {"father", "employee"}:
                 raise report_service.ReportDataError("Your account cannot attach completed valuation reports.", 403, "forbidden")
             task_code = task_code_from(self)
-            if not task_code:
+            practice = self.headers.get("X-Practice-Mode") == "1"
+            if not task_code and not practice:
                 task_type = "Progress or Completion" if progress else "valuation"
                 raise ValueError(f"Open an active {task_type} task before attaching a completed report.")
             note = unquote(str(self.headers.get("X-Work-Note", ""))).strip()
@@ -759,6 +799,15 @@ class Handler(BaseHTTPRequestHandler):
                 with ZipFile(BytesIO(content)) as archive:
                     if "word/document.xml" not in archive.namelist():
                         raise ValueError("The selected file is not a valid DOCX report.")
+            if practice:
+                expected_types = {"progress", "completion"} if progress else {"valuation-general", "valuation-agricultural"}
+                if self.headers.get("X-Report-Type") not in expected_types or self.headers.get("X-Upload-Type") not in {"template", "retrospective"}:
+                    raise ValueError("Select a valid Practice report and upload type.")
+                OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+                stored = OUTPUT_DIR / f"practice-report-{session['user_id']}-{secrets.token_hex(16)}-{file_name.replace(' ', '_')}"
+                stored.write_bytes(content)
+                self.send_json({"ok": True, "fileName": file_name, "download": f"/downloads/{stored.name}", "registered": False, "task": None}, 201)
+                return
             group = "valuation"
             if progress:
                 group = workflow_service.get_task(task_code)["reportGroup"]
@@ -792,16 +841,23 @@ class Handler(BaseHTTPRequestHandler):
         """Remove only a validated institution-upload artifact from the local output store."""
         try:
             session = auth_routes.require_full_session(self)
+            auth_routes.verify_csrf(self)
             task_code = task_code_from(self)
             if task_code:
-                auth_routes.verify_csrf(self)
                 task = report_service.remove_latest_artifact(task_code, session)
                 self.send_json({"ok": True, "task": task})
                 return
             stored_name = Path(unquote(str(self.headers.get("X-Stored-Name", "")))).name
             prefix = "kvb-valuation-upload-" if institution == "kvb" else "karnataka-valuation-upload-"
             allowed_suffixes = {".xlsx"} if institution == "kvb" else {".docx", ".pdf"}
-            if not stored_name.startswith(prefix) or Path(stored_name).suffix.lower() not in allowed_suffixes:
+            if stored_name.startswith(prefix):
+                # Clear an expired local reference without deleting unowned bytes.
+                self.send_json({"ok": True, "expired": True})
+                return
+            if not stored_name.startswith(f"practice-report-{session['user_id']}-{prefix}"):
+                self.send_json({"ok": False, "error": "The Practice attachment is unavailable."}, 404)
+                return
+            if Path(stored_name).suffix.lower() not in allowed_suffixes:
                 raise ValueError("The completed report attachment reference is invalid.")
             stored_path = OUTPUT_DIR / stored_name
             if stored_path.exists():
@@ -829,16 +885,19 @@ class Handler(BaseHTTPRequestHandler):
             if request_path.endswith("/template"):
                 auth_routes.verify_csrf(self)
                 report_type = payload.get("requestedReportType")
-                if not task_code or report_type not in {"progress", "completion"}:
+                practice = self.headers.get("X-Practice-Mode") == "1"
+                if (not task_code and not practice) or report_type not in {"progress", "completion"}:
                     raise ValueError("Open an active Progress or Completion task to download its template.")
-                task = report_service.require_report_key(task_code, session, report_type)
-                payload["institution"] = {
-                    "code": task["institution_code_snapshot"],
-                    "name": task["institution_name_snapshot"],
-                    "branch": task["branch"],
-                }
+                if task_code:
+                    task = report_service.require_report_key(task_code, session, report_type)
+                    payload["institution"] = {
+                        "code": task["institution_code_snapshot"],
+                        "name": task["institution_name_snapshot"],
+                        "branch": task["branch"],
+                    }
                 content = generate_progress_template(payload, report_type)
-                workflow_service.record_template_download(task_code, session, linked_report_inputs=payload)
+                if task_code:
+                    workflow_service.record_template_download(task_code, session, linked_report_inputs=payload)
                 filename = f"{report_type.title()}_Offline_Template.docx"
                 self.send_file(Path(filename), data=content, headers=[("Content-Disposition", f'attachment; filename="{filename}"')])
                 return

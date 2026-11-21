@@ -49,7 +49,7 @@ function reportErrorMessage(error, fallback) {
 
 // Assignment context and report-section configuration.
 function linkedTaskValues() {
-  const taskId = PAGE_PARAMS.get("task");
+  const taskId = ReportData.taskCode;
   const task = taskId && window.TaskStore ? TaskStore.get(taskId) : null;
   return task ? {
     "institution.type": task.institutionType,
@@ -441,6 +441,33 @@ function removeFloor(index) {
   calculateAll();
   saveDraft();
 }
+function configureFloors(floors) {
+  const existing = collectValues();
+  const old = Array.from({ length: state.floorCount }, (_, i) => {
+    const prefix = `building.floors.${i + 1}.`;
+    return { index: i + 1, values: Object.fromEntries(Object.entries(existing).filter(([key]) => key.startsWith(prefix)).map(([key, value]) => [key.slice(prefix.length), value])) };
+  });
+  const used = new Set();
+  const matches = floors.map((floor) => {
+    const match = old.find((item) => !used.has(item.index) && ((floor.source_id && floor.source_id === item.values.source_id) || String(floor.name).toLowerCase() === String(item.values.name).toLowerCase()));
+    if (match) used.add(match.index);
+    return match;
+  });
+  const removed = old.filter((item) => !used.has(item.index) && ["plinth_area", "replacement_rate", "age", "roof_height"].some((key) => String(item.values[key] || "").trim()));
+  if (removed.length && !confirm(`This configuration removes populated entries: ${removed.map((item) => item.values.name || `Floor ${item.index}`).join(", ")}. Continue?`)) return false;
+  const values = Object.fromEntries(Object.entries(existing).filter(([key]) => !key.startsWith("building.floors.")));
+  const overrides = JSON.parse(calculations?.serialize() || "{}");
+  const shifted = Object.fromEntries(Object.entries(overrides).filter(([key]) => !key.startsWith("building.floors.") && !key.startsWith("abstract.") && !key.startsWith("valuation.")));
+  floors.forEach((floor, i) => {
+    const match = matches[i], prefix = `building.floors.${i + 1}.`;
+    Object.entries({ ...floor, ...(match?.values || {}), name: floor.name, count: floor.count || 1, basis: match?.values.basis || floor.basis || "combined", source_id: floor.source_id || match?.values.source_id || "" }).forEach(([key, value]) => { values[prefix + key] = value; });
+    if (match) Object.entries(overrides).forEach(([key, value]) => { const oldPrefix = `building.floors.${match.index}.`; if (key.startsWith(oldPrefix)) shifted[prefix + key.slice(oldPrefix.length)] = value; });
+  });
+  values[ValuationCalculations.overridesKey] = JSON.stringify(shifted);
+  state.floorCount = floors.length;
+  renderFloors(values); setValues(values); calculations.restore(values); wireInputs(); calculateAll();
+  return true;
+}
 function renderFloors(saved = {}) {
   const host = byId("floor-list");
   if (!host) return;
@@ -450,6 +477,7 @@ function renderFloors(saved = {}) {
     const card = document.createElement("div");
     card.className = "floor-card";
     card.innerHTML = `<div class="floor-head"><h4>${i === 1 ? "Ground floor" : `Additional floor ${i - 1}`}</h4>${i > 1 ? `<button type="button" class="remove-floor" data-remove-floor="${i}">Remove</button>` : ""}</div><div class="grid"></div>`;
+    card.querySelector("h4").textContent = existing[`building.floors.${i}.name`] || floorName(i);
     const grid = card.querySelector(".grid");
     [
       { key: "name", label: "Floor name" },
@@ -459,7 +487,7 @@ function renderFloors(saved = {}) {
       { key: "replacement_rate", label: "Replacement rate per sq.ft" },
     ].forEach((f) => {
       const id = `building.floors.${i}.${f.key}`;
-      const control = customField(id, f.label, "text", existing[id] ?? "");
+      const control = customField(id, f.label, "text", existing[id] ?? (f.key === "name" ? floorName(i) : ""));
       if (f.key !== "name") control.querySelector("input").setAttribute("data-arithmetic-optional", "");
       grid.append(control);
     });
@@ -475,10 +503,22 @@ function renderFloors(saved = {}) {
         { [structureId]: existing[structureId] || "" },
       ),
     );
+    const countId = `building.floors.${i}.count`, basisId = `building.floors.${i}.basis`;
+    const count = customField(countId, "Number of represented floors", "number", existing[countId] || "1");
+    count.querySelector("input").min = "1"; count.querySelector("input").step = "1";
+    grid.append(count);
+    const basis = fieldControl({ id: basisId, label: "Assessment input basis", type: "select", options: ["combined", "per_floor"] }, { [basisId]: existing[basisId] || "combined" });
+    basis.querySelectorAll("option").forEach((option) => { option.textContent = option.value === "per_floor" ? "Per floor · multiply by floor count" : "Combined · already includes all floors"; });
+    grid.append(basis);
+    const source = document.createElement("input"); source.type = "hidden"; source.name = `building.floors.${i}.source_id`; source.value = existing[source.name] || ""; grid.append(source);
     ["total_life", "replacement_cost", "depreciation", "net_value"].forEach(
       (key) =>
         grid.append(calculatedField(`building.floors.${i}.${key}`, title(key))),
     );
+    const group = calculatedField(`building.floors.${i}.group_value`, "Combined assessed building value");
+    group.querySelector("input").readOnly = true;
+    grid.append(group);
+    const hint = document.createElement("p"); hint.className = "hint"; hint.textContent = "For matching typical floors, use per-floor area and assessed amounts with Per floor selected. Combined values are never multiplied again."; card.append(hint);
     host.append(card);
   }
   host
@@ -489,6 +529,7 @@ function renderFloors(saved = {}) {
 }
 function addFloorSection(panel) {
   const block = document.createElement("section");
+  block.id = "floor-valuation-section";
   block.className = "subgroup";
   block.innerHTML =
     '<h3>Floor-wise valuation</h3><p class="hint">Use GF only for ground-floor properties. Add as many additional floors as required.</p><div id="floor-list"></div><button type="button" class="secondary" id="add-floor">Add additional floor</button>';
@@ -711,9 +752,11 @@ function setValues(values) {
 let calculations;
 let addressAutofill;
 let exampleAssistance;
+let constructionSummary;
 function calculateAll(changedId) {
   if (ReportData.readOnly) return;
   calculations?.refresh(changedId);
+  constructionSummary?.refresh();
 }
 
 let saveTimer;
@@ -727,6 +770,7 @@ async function persistDraftNow() {
     exampleFill: exampleAssistance?.serialize(),
     preparationMethod: state.preparationMethod,
     uploadType: byId("valuation-upload-type")?.value || "",
+    practiceOffline: state.practiceOffline || null,
     floorCount: state.floorCount,
     documentCount: state.documentCount,
     matchedSiteFields: state.matchedSiteFields,
@@ -774,7 +818,7 @@ function applyRules() {
     state.sections[sectionIndex].toggleAttribute("hidden", !finalVisible);
     document.querySelectorAll(`[data-section-index="${sectionIndex}"]`).forEach((button) => button.toggleAttribute("hidden", !finalVisible));
     state.sections[sectionIndex].querySelectorAll("input,select,textarea,button").forEach((control) => {
-      if (!control.dataset.preparationMethod) control.disabled = !finalVisible;
+      if (!control.dataset.preparationMethod) control.disabled = !finalVisible || control.dataset.practiceSubmitted === "true";
     });
   });
   ["preview-report", "generate-docx", "generate-pdf"].forEach((id) => byId(id).toggleAttribute("hidden", !online));
@@ -789,6 +833,7 @@ function applyRules() {
   else if (state.sections[state.current]?.hidden) show(sectionPlan.findIndex((section) => section.id === "preparation"));
   else updateSectionNavigation();
   exampleAssistance?.refresh();
+  constructionSummary?.refresh();
 }
 function wireInputs() {
   document
@@ -847,6 +892,7 @@ async function init() {
     restoreDraft(),
   ]);
   state.schema = schema;
+  state.practiceOffline = draft?.practiceOffline || null;
   const labels = Object.fromEntries(
       state.schema.groups.map((g) => [g.id, g.label]),
     ),
@@ -874,7 +920,11 @@ async function init() {
     if (section.id === "preparation") {
       panel = window.RetrospectiveValuation.preparationPanel("valuation-general", state.preparationMethod, setPreparationMethod);
     } else if (section.id === "offline") {
-      panel = window.RetrospectiveValuation.offlinePanel("valuation-general", draft?.uploadType, { uploadTypeChanged: async () => { await persistDraftNow(); markDirty(); } });
+      panel = window.RetrospectiveValuation.offlinePanel("valuation-general", draft?.uploadType, {
+        uploadTypeChanged: async () => { await persistDraftNow(); markDirty(); },
+        practiceSaved: state.practiceOffline,
+        practiceChanged: async (value) => { state.practiceOffline = value; await persistDraftNow(); },
+      });
     } else {
       panel = document.createElement("div");
       panel.className = "panel";
@@ -973,6 +1023,13 @@ async function init() {
   document.querySelectorAll("[data-site-match-group]").forEach((block) => {
     addSiteMatchControl(block, draft?.matchedSiteFields?.[block.dataset.siteMatchGroup]);
   });
+  constructionSummary = ValuationConstruction.install(byId("floor-valuation-section"), {
+    values: initialValues, getValues: collectValues, floorCount: () => state.floorCount,
+    configure: configureFloors, beforeEdit: confirmReportInvalidation,
+    changed: () => { calculateAll(); markDirty(); saveDraft(); },
+  });
+  const buildingValue = byId("abstract.building");
+  if (buildingValue) buildingValue.readOnly = true;
   calculations.restore(initialValues);
   addressAutofill = ValuationWriting.installAddress(byId("valuation-form"), "general", draft?.postalAddressMode, {
     beforeEdit: confirmReportInvalidation,
@@ -1023,7 +1080,7 @@ byId("preview-report").onclick = async () => {
   setProcessing(
     true,
     "Creating report preview",
-    "Generating the exact Word file, then rendering that file as a PDF preview…",
+    "Checking the saved report; generating and rendering only when its inputs have changed…",
   );
   const cancel = ReportProcessing.cancellation(byId("processing"));
   try {

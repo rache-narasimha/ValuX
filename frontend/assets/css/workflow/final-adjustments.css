@@ -82,6 +82,16 @@ body:not(.workflow-page) .mobile-menu-button { display: none; }
 .sidebar-collapsed #sidebar-toggle.sidebar-collapse { width: 44px; transform: none; }
 
 @media (max-width: 900px) {
+  .sidebar-mobile-close { margin-inline-start: auto; flex: 0 0 36px; width: 36px; height: 36px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 24px; }
+  .detail-layout { grid-template-columns: minmax(0, 1fr); }
+  .detail-layout > .detail-main, .detail-layout > .detail-aside { display: contents; }
+  .detail-layout > .detail-main > .work-card, .detail-layout > .detail-aside > .work-card { min-width: 0; }
+  .detail-layout #payment-card { order: 1; }
+  .detail-layout #final-report-card { order: 2; }
+  .detail-layout #revaluation-links { order: 3; }
+  .detail-layout #activity-card { order: 4; }
+  .detail-layout .detail-grid { grid-template-columns: minmax(0, 1fr); }
+  .detail-layout .detail-grid dd { overflow-wrap: anywhere; }
   .app-sidebar .application-navigation { display: grid; min-width: 0; }
   .sidebar-collapsed .assignment-subnav { display: grid; }
   #sidebar-toggle.sidebar-collapse { display: none; }

@@ -41,8 +41,10 @@
       const land = add("land.estimated_value", ["land.converted_extent", "land.adopted_rate_value"],
         converted === null ? null : converted * source("land.adopted_rate_value"), money,
         ["land.estimated_value_display", "abstract.land"]);
-      const floorKeys = [];
-      for (let index = 1; index <= floorCount; index++) {
+      const floorKeys = [], plotOnly = String(inputs["property.category"] || "").endsWith("_plot");
+      overrides = Object.fromEntries(Object.entries(overrides).filter(([key]) => !key.endsWith(".group_value") && !(inputs["construction.summary_version"] === "1" && key === "abstract.building")));
+      if (plotOnly) overrides = Object.fromEntries(Object.entries(overrides).filter(([key]) => key !== "abstract.building" && !key.startsWith("building.floors.")));
+      for (let index = 1; index <= (plotOnly ? 0 : floorCount); index++) {
         const p = `building.floors.${index}.`, type = inputs[p + "structure_type"],
           area = source(p + "plinth_area"), rate = source(p + "replacement_rate"), age = Math.max(0, source(p + "age"));
         const life = add(p + "total_life", [p + "structure_type"],
@@ -53,9 +55,11 @@
           replacement !== null && life !== null ? (life ? replacement * Math.min(age, life) / life * 0.9 : 0) : null);
         add(p + "net_value", [p + "replacement_cost", p + "depreciation"],
           replacement !== null && depreciation !== null ? Math.max(0, replacement - depreciation) : null);
-        floorKeys.push(p + "net_value");
+        const count = Math.max(1, source(p + "count") || 1), multiplier = inputs[p + "basis"] === "per_floor" ? count : 1;
+        add(p + "group_value", [p + "net_value", p + "count", p + "basis"], value(p + "net_value") * multiplier);
+        floorKeys.push(p + "group_value");
       }
-      const building = add("abstract.building", floorKeys, floorKeys.reduce((sum, id) => sum + value(id), 0));
+      const building = add("abstract.building", ["property.category", ...floorKeys], floorKeys.reduce((sum, id) => sum + value(id), 0));
       const sections = { "abstract.extra": "extra.item_", "abstract.amenities": "amenity.item_",
         "abstract.miscellaneous": "misc.item_", "abstract.services": "service.item_" };
       let total = (land || 0) + building + source("abstract.machinery");

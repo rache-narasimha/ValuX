@@ -28,5 +28,10 @@
     const sheets = state.components[0].sheets || [];
     return sheets.length > 0 && sheets.every((sheet) => Math.max(Number(sheet.level || 0), ...(sheet.typicalFloorKeys || []).map((key) => floorKeys.includes(key) ? floorKeys.indexOf(key) - 1 : 99)) <= 3);
   }
-  global.EstimationNaming = {label, abstractLabel, compact};
+  function groundOnly(state) {
+    const sheets = state.components[0]?.sheets || [];
+    return state.propertyType === "residential" && state.components.length === 1 && sheets.length === 1 && sheets[0].key === "ground" && !sheets[0].typicalFloorKeys?.length
+      && !(state.details.customComponentEstimates || []).some((item) => String(item.description || "").trim() || item.amount != null && item.amount !== "");
+  }
+  global.EstimationNaming = {label, abstractLabel, compact, groundOnly};
 })(window);

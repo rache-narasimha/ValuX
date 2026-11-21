@@ -488,7 +488,7 @@
   function reviewPanel() {
     const sheets = allWorksheetNames();
     const worksheetOrder = sheets.length && requiresSeparateAbstract() ? ["Abstract", ...sheets] : sheets;
-    return `<div class="panel" data-key="review"><h2>Configuration Review</h2><p class="hint">Review the planned worksheets and report totals before creating a generated Excel report or a configured offline workbook.</p><div class="review-grid"><div class="review-stat"><small>Property</small><strong>${escapeHtml(propertyProfile()?.label || "Not selected")}</strong></div><div class="review-stat"><small>Components</small><strong>${state.components.length}</strong></div><div class="review-stat"><small>Worksheets</small><strong>${worksheetOrder.length}</strong></div><div class="review-stat"><small>Abstract</small><strong>${sheets.length ? (requiresSeparateAbstract() ? "Separate first sheet" : "Compact on last sheet") : "Not determined"}</strong></div></div>${worksheetOrder.length ? `<section class="subgroup"><h3>Planned workbook order</h3><ol class="worksheet-order">${worksheetOrder.map((sheet) => `<li>${escapeHtml(sheet)}${sheet === "Abstract" ? "" : " <span class=\"soft-badge\">detail sheet</span>"}</li>`).join("")}</ol>${!requiresSeparateAbstract() ? `<p class="hint">The compact Abstract will be placed above Place, Date and Signature on the final selected residential sheet.</p>` : ""}</section>${reportOutputPanel()}` : `<div class="empty-state">Select components to see the planned workbook order.</div>`}</div>`;
+    return `<div class="panel" data-key="review"><h2>Configuration Review</h2><p class="hint">Review the planned worksheets and report totals before creating a generated Excel report or a configured offline workbook.</p><div class="review-grid"><div class="review-stat"><small>Property</small><strong>${escapeHtml(propertyProfile()?.label || "Not selected")}</strong></div><div class="review-stat"><small>Components</small><strong>${state.components.length}</strong></div><div class="review-stat"><small>Worksheets</small><strong>${worksheetOrder.length}</strong></div><div class="review-stat"><small>Abstract</small><strong>${sheets.length ? (EstimationNaming.groundOnly(state) ? "Not needed for Ground Floor only" : requiresSeparateAbstract() ? "Separate first sheet" : "Compact on last sheet") : "Not determined"}</strong></div></div>${worksheetOrder.length ? `<section class="subgroup"><h3>Planned workbook order</h3><ol class="worksheet-order">${worksheetOrder.map((sheet) => `<li>${escapeHtml(sheet)}${sheet === "Abstract" ? "" : " <span class=\"soft-badge\">detail sheet</span>"}</li>`).join("")}</ol>${!requiresSeparateAbstract() && !EstimationNaming.groundOnly(state) ? `<p class="hint">The compact Abstract will be placed above Place, Date and Signature on the final selected residential sheet.</p>` : ""}</section>${reportOutputPanel()}` : `<div class="empty-state">Select components to see the planned workbook order.</div>`}</div>`;
   }
 
   function finalReportRecord() { return state.details.finalReport && typeof state.details.finalReport === "object" ? state.details.finalReport : null; }
@@ -708,7 +708,8 @@
     const calculatedAmount = calculations.reduce((sum, entry) => sum + entry.calculation.amount, 0);
     const entered = numberOrBlank(data.sheetTotalOverride);
     const overrideAmount = entered == null || !roundPricing ? entered : displayedNumber(entered);
-    const amount = overrideAmount ?? (roundPricing ? displayedNumber(calculatedAmount) : calculatedAmount);
+    const adopted = overrideAmount ?? (roundPricing ? displayedNumber(calculatedAmount) : calculatedAmount);
+    const amount = ReportData.readOnly && state.details.roundingBasis !== "thousands" ? adopted : roundedEstimate(adopted);
     return { items, calculations, calculatedAmount, overrideAmount, amount };
   }
 
@@ -1262,7 +1263,7 @@
     const data = measurementData(entry.component, entry.sheet);
     const multiplier = typicalMultiplier(entry.sheet);
     const totals = sheetCalculations(schema, data, multiplier);
-    return `<div class="panel" data-key="${entry.key}"><h2>${escapeHtml(entry.label)}</h2><p class="hint">Qty calculates from the dimensions. Edit Qty to enter or adjust it directly, or clear it to restore the calculation. For grouped measurements within an item, use its total quantity row to price the entire item.${multiplier > 1 ? ` Enter quantities, rates and lump sums for one floor. Line amounts shown include all ${multiplier} floors.` : ""}</p><div class="worksheet-summary"><button type="button" class="text-button" data-action="edit-dimensions" data-section-key="${escapeHtml(entry.key)}">Edit dimensions &amp; defaults</button><span>Approved template: <strong>${escapeHtml(schema.label)}</strong></span>${editableFinalAmount(totals.overrideAmount, totals.calculatedAmount, `data-sheet-final-input="1" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, `data-action="reset-sheet-total" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, "Final sheet total", `data-sheet-calculated data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`)}</div><div class="field worksheet-plinth-area"><label for="plinth-${entry.key}">Plinth Area (sft.)</label><input id="plinth-${entry.key}" type="text" value="${escapeHtml(data.plinthArea ?? "")}" data-plinth-area data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"><small class="hint">Enter the area for all floors represented on this sheet. Optional. Text or notes may be included.</small></div>${omittedItemsControl(schema, data, entry.component.id, entry.sheet?.id || "component")}<div class="worksheet-item-list">${totals.calculations.map(({ item, calculation }) => {
+    return `<div class="panel" data-key="${entry.key}"><h2>${escapeHtml(entry.label)}</h2><p class="hint">Qty calculates from the dimensions. Edit Qty to enter or adjust it directly, or clear it to restore the calculation. For grouped measurements within an item, use its total quantity row to price the entire item.${multiplier > 1 ? ` Enter quantities, rates and lump sums for one floor. Line amounts shown include all ${multiplier} floors.` : ""}</p><div class="worksheet-summary"><button type="button" class="text-button" data-action="edit-dimensions" data-section-key="${escapeHtml(entry.key)}">Edit dimensions &amp; defaults</button><span>Approved template: <strong>${escapeHtml(schema.label)}</strong></span><span>Report amount${!ReportData.readOnly || state.details.roundingBasis === "thousands" ? " (rounded to ₹1,000)" : ""}: <strong data-sheet-adopted data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}">${formatNumber(totals.amount)}</strong></span>${editableFinalAmount(totals.overrideAmount, totals.calculatedAmount, `data-sheet-final-input="1" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, `data-action="reset-sheet-total" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, "Final sheet total", `data-sheet-calculated data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`)}</div><div class="field worksheet-plinth-area"><label for="plinth-${entry.key}">Plinth Area (sft.)</label><input id="plinth-${entry.key}" type="text" value="${escapeHtml(data.plinthArea ?? "")}" data-plinth-area data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"><small class="hint">Enter the area for all floors represented on this sheet. Optional. Text or notes may be included.</small></div>${omittedItemsControl(schema, data, entry.component.id, entry.sheet?.id || "component")}<div class="worksheet-item-list">${totals.calculations.map(({ item, calculation }) => {
       const serial = item.displaySno == null ? "" : `${item.displaySno}. `;
       const label = item.isCustomItem ? `<span data-custom-item-display>${escapeHtml(item.label)}</span>` : escapeHtml(item.label);
       const actions = item.isCustomItem
@@ -1312,9 +1313,11 @@
     return customAbstractEntries(key).reduce((sum, item) => sum + abstractAmount(item.amount), 0);
   }
 
+  function roundedEstimate(value) { return Math.floor((displayedNumber(value) + 500) / 1000) * 1000; }
+
   function abstractAmount(value) {
     const number = numberOrBlank(value) ?? 0;
-    return ReportData.readOnly && state.details.pricingBasis !== "displayed" ? number : displayedNumber(number);
+    return ReportData.readOnly && state.details.roundingBasis !== "thousands" ? number : roundedEstimate(number);
   }
 
   function customAbstractRows(entries, offset, type) {
@@ -1332,7 +1335,7 @@
     const commonTotal = COMMON_EXTERNAL_WORKS.reduce((sum, label) => sum + abstractAmount(commonWorks[label]), 0) + customAbstractTotal("customCommonExternalWorks");
     const compact = !requiresSeparateAbstract();
     const commonWorksSection = abstractIncludesCommonWorks() ? `<section class="abstract-section"><div class="abstract-section-heading"><div><h3>Common External Works and Project Charges</h3><p class="hint">These values are entered directly by the valuer.</p></div><button type="button" class="text-button" data-action="add-abstract-custom" data-abstract-custom-type="common">Add custom field</button></div><div class="abstract-table-wrap"><table class="abstract-table abstract-edit-table"><thead><tr><th>S.No.</th><th>Description</th><th>Amount (Rs.)</th><th aria-label="Remove custom field"></th></tr></thead><tbody>${COMMON_EXTERNAL_WORKS.map((label, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(label)}</td><td><input type="number" step="any" inputmode="decimal" value="${escapeHtml(commonWorks[label] ?? "")}" data-common-work="${escapeHtml(label)}"></td><td></td></tr>`).join("")}${customAbstractRows(customCommonWorks, COMMON_EXTERNAL_WORKS.length, "common")}</tbody><tfoot><tr><th colspan="2">Total common works and charges</th><th colspan="2">₹ <span data-common-works-total>${formatNumber(commonTotal)}</span></th></tr><tr class="abstract-grand-total"><th colspan="2">Total estimated project cost</th><th colspan="2">₹ <span data-abstract-total>${formatNumber(componentTotal + commonTotal)}</span></th></tr></tfoot></table></div></section>` : `<section class="abstract-section"><div class="abstract-table-wrap"><table class="abstract-table"><tfoot><tr class="abstract-grand-total"><th colspan="2">Total estimated project cost</th><th colspan="2">₹ <span data-abstract-total>${formatNumber(componentTotal)}</span></th></tr></tfoot></table></div></section>`;
-    return `<div class="panel" data-key="abstract"><h2>${compact ? "Compact Abstract" : "Abstract"}</h2><p class="hint">This is the final online-form section. Component values remain linked to their source sheets. Editing a component amount here changes the same final sheet total after confirmation.</p><section class="abstract-section"><div class="abstract-section-heading"><h3>Component estimates</h3><button type="button" class="text-button" data-action="add-abstract-custom" data-abstract-custom-type="component">Add custom field</button></div><div class="abstract-table-wrap"><table class="abstract-table abstract-edit-table"><thead><tr><th>S.No.</th><th>Component / Work</th><th>Calculated amount (Rs.)</th><th>Final amount (Rs.)</th><th aria-label="Remove custom field"></th></tr></thead><tbody>${componentRows.length ? componentRows.map(({ entry, totals }, index) => {
+    return `<div class="panel" data-key="abstract"><h2>${EstimationNaming.groundOnly(state) ? "Estimate summary" : compact ? "Compact Abstract" : "Abstract"}</h2><p class="hint">This is the final online-form section. Component values remain linked to their source sheets. Editing a component amount here changes the same final sheet total after confirmation.</p><section class="abstract-section"><div class="abstract-section-heading"><h3>Component estimates</h3><button type="button" class="text-button" data-action="add-abstract-custom" data-abstract-custom-type="component">Add custom field</button></div><div class="abstract-table-wrap"><table class="abstract-table abstract-edit-table"><thead><tr><th>S.No.</th><th>Component / Work</th><th>Calculated amount (Rs.)</th><th>Final amount (Rs.)</th><th aria-label="Remove custom field"></th></tr></thead><tbody>${componentRows.length ? componentRows.map(({ entry, totals }, index) => {
       if (!totals) return `<tr><td>${index + 1}</td><td>${escapeHtml(entry.label)}</td><td>—</td><td>Online template not available</td></tr>`;
       const value = totals.amount;
       return `<tr><td>${index + 1}</td><td>${escapeHtml(EstimationNaming.abstractLabel(state, entry.component, entry.sheet))}</td><td>${formatNumber(totals.calculatedAmount)}</td><td><input type="number" step="any" inputmode="decimal" value="${decimalInput(value)}" data-abstract-component-final="1" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"></td><td></td></tr>`;
@@ -1389,7 +1392,7 @@
     const dimensionSheets = dimensionEntries();
     const dimensions = dimensionSheets.length ? [{ key: "dimensions", label: "Dimensions & Defaults", html: dimensionsPanel(dimensionSheets) }] : [];
     const measurements = state.propertyType ? componentMeasurementEntries().map((entry) => ({key: entry.key, label: entry.label, html: measurementPanel(entry)})) : [];
-    const abstract = state.propertyType && state.components.length ? [{key: "abstract", label: requiresSeparateAbstract() ? "Abstract" : "Compact Abstract", html: abstractPanel()}] : [];
+    const abstract = state.propertyType && state.components.length ? [{key: "abstract", label: EstimationNaming.groundOnly(state) ? "Estimate summary" : requiresSeparateAbstract() ? "Abstract" : "Compact Abstract", html: abstractPanel()}] : [];
     return [...setup, ...configuration, ...dimensions, ...measurements, ...abstract, {key: "review", label: "Configuration Review", html: reviewPanel()}].map((section) => {
       const gate = sectionGate(section.key);
       return gate.allowed ? {...section, locked: false} : {...section, locked: true, html: lockedPanel(section.key, section.label, gate)};
@@ -1502,7 +1505,7 @@
       .filter((entry) => String(entry.description || "").trim() || numberOrBlank(entry.amount) !== null)
       .map((entry) => ({ id: entry.id, estimatedCost: abstractAmount(entry.amount) }));
     const commonWorks = abstractIncludesCommonWorks()
-      ? COMMON_EXTERNAL_WORKS.flatMap((label, index) => !abstractAmount(state.details.commonExternalWorks?.[label]) ? []
+      ? COMMON_EXTERNAL_WORKS.flatMap((label, index) => !displayedNumber(state.details.commonExternalWorks?.[label]) ? []
         : [{ id: `common-${index + 1}`, estimatedCost: abstractAmount(state.details.commonExternalWorks[label]) }])
       : [];
     const customCommon = abstractIncludesCommonWorks()
@@ -1612,7 +1615,7 @@
     const previewDescription = previewMode === "offline"
       ? "Previewing the configured blank workbook that will be downloaded for completion in Excel."
       : "Previewing the completed workbook generated from the current online entries.";
-    $("review-content").innerHTML = `${issues.length ? `<div class="notice"><strong>${issues.length} item${issues.length === 1 ? "" : "s"} need attention</strong><ul>${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul></div>` : `<div class="notice"><strong>${escapeHtml(previewDescription)}</strong></div>`}<div class="review-grid"><div class="review-stat"><small>Draft scope</small><strong>${escapeHtml(draftScope)}</strong></div><div class="review-stat"><small>Property</small><strong>${escapeHtml(propertyProfile()?.label || "—")}</strong></div><div class="review-stat"><small>Worksheets</small><strong>${worksheets.length}</strong></div><div class="review-stat"><small>Abstract</small><strong>${worksheets.length ? (requiresSeparateAbstract() ? "Separate" : "Compact") : "—"}</strong></div></div>${worksheets.length ? `<p><strong>Workbook order:</strong> ${worksheets.map(escapeHtml).join(" → ")}</p><div id="estimation-server-totals"></div>` : ""}<div id="workbook-preview" class="workbook-preview"><p class="hint">${issues.length ? "Resolve the listed items to render the workbook preview." : "Rendering the workbook…"}</p></div>`;
+    $("review-content").innerHTML = `${issues.length ? `<div class="notice"><strong>${issues.length} item${issues.length === 1 ? "" : "s"} need attention</strong><ul>${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul></div>` : `<div class="notice"><strong>${escapeHtml(previewDescription)}</strong></div>`}<div class="review-grid"><div class="review-stat"><small>Draft scope</small><strong>${escapeHtml(draftScope)}</strong></div><div class="review-stat"><small>Property</small><strong>${escapeHtml(propertyProfile()?.label || "—")}</strong></div><div class="review-stat"><small>Worksheets</small><strong>${worksheets.length}</strong></div><div class="review-stat"><small>Abstract</small><strong>${worksheets.length ? (EstimationNaming.groundOnly(state) ? "Not needed for Ground Floor only" : requiresSeparateAbstract() ? "Separate" : "Compact") : "—"}</strong></div></div>${worksheets.length ? `<p><strong>Workbook order:</strong> ${worksheets.map(escapeHtml).join(" → ")}</p><div id="estimation-server-totals"></div>` : ""}<div id="workbook-preview" class="workbook-preview"><p class="hint">${issues.length ? "Resolve the listed items to render the workbook preview." : "Rendering the workbook…"}</p></div>`;
     $("review-modal").hidden = false;
     if (issues.length) return;
     const restoredPreview = ReportData.preview();
@@ -1678,6 +1681,7 @@
     // server-normalized media, so keep the current browser state rather than
     // replacing newer edits with the earlier request's payload.
     state.details.identityVersion = 2;
+    state.details.roundingBasis = "thousands";
     if (state.details.workMode === "online") state.details.pricingBasis = "displayed";
     const saved = await ReportData.save(DRAFT_KEY, "estimation", state, "3");
     if (savedVersion !== editVersion || saveTimer !== null) return;
@@ -1794,6 +1798,7 @@
       if (calculated) target.value = decimalInput(current.calculation.calculatedAmount / typicalMultiplier(sheet));
       FormTabOrder.mark(target, calculated);
     });
+    document.querySelectorAll(`[data-sheet-adopted]${scope}`).forEach((target) => { target.textContent = formatNumber(totals.amount); });
     document.querySelectorAll(`[data-sheet-calculated]${scope}`).forEach((target) => { target.textContent = formatNumber(totals.calculatedAmount); });
     document.querySelectorAll(`[data-sheet-final-input]${scope}`).forEach((target) => {
       const calculated = totals.overrideAmount == null;
@@ -2144,5 +2149,6 @@
   $("review-modal").addEventListener("click", (event) => { if (event.target === $("review-modal")) $("review-modal").hidden = true; });
   await restoreDraft();
   if (currentTask() && !String(state.details.applicantName || "").trim()) state.details.applicantName = currentTask().customerName;
+  if (currentTask() && !String(state.details.workDescription || "").trim()) state.details.workDescription = currentTask().propertyBrief;
   renderAll({ sectionKey: "setup" });
 })();

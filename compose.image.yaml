@@ -1,0 +1,14 @@
+# Run the existing local ValuX stack with the exact immutable staging image.
+# No source-code mounts: /app is supplied entirely by the tested image.
+services:
+  app:
+    image: ${VALUX_RUNTIME_IMAGE:?Set VALUX_RUNTIME_IMAGE to the tested registry image@sha256 digest}
+    platform: linux/amd64
+    build: !reset null
+    volumes: !override
+      - ./outputs/generated_reports:/app/outputs/generated_reports
+  db-migrate:
+    image: ${VALUX_RUNTIME_IMAGE:?Set VALUX_RUNTIME_IMAGE to the tested registry image@sha256 digest}
+    platform: linux/amd64
+    build: !reset null
+    volumes: !reset []

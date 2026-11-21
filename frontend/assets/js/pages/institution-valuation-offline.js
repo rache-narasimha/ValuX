@@ -5,6 +5,7 @@
   const params = new URLSearchParams(window.location.search);
 
   function workflowForTask() {
+    if (params.get("practice") === "1") return null;
     const taskId = params.get("task");
     const task = taskId && window.TaskStore ? TaskStore.get(taskId) : null;
     if (!task || task.reportKey !== "valuation-general") return null;

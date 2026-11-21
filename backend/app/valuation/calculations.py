@@ -67,11 +67,12 @@ def calculate_floor(values, index, overrides=None):
     return replacement, depreciation, net, life
 
 def calculated_replacements(values):
+    from .construction import VERSION, cover_description, floor_multiplier
     overrides = calculation_overrides(values)
     result = {k: display_date(v) if k.startswith("report.") and k.endswith("date") else v for k, v in values.items()}
     # One canonical property description feeds both the cover summary and the
     # detailed report. Older templates may still carry the legacy cover tag.
-    result["property.summary_description"] = values.get("property.description", "")
+    result["property.summary_description"] = cover_description(values)
     if values.get("building.plan_validity"):
         result["building.plan_validity"] = f"Dt.{display_date(values['building.plan_validity'])}"
     valuation_date = display_date(values.get("report.valuation_date"))
@@ -100,21 +101,31 @@ def calculated_replacements(values):
     building_values = []
     floor_summaries = []
     plinth_summaries = []
-    for index in floor_indexes(values):
+    plot_only = str(values.get("property.category", "")).endswith("_plot")
+    for index in ([] if plot_only else floor_indexes(values)):
         prefix = f"building.floors.{index}."
         replacement, depreciation, net, life = calculate_floor(values, index, overrides)
-        result[prefix + "replacement_cost"] = currency(replacement)
-        result[prefix + "depreciation"] = currency(depreciation)
-        result[prefix + "net_value"] = currency(net)
+        multiplier = floor_multiplier(values, index)
+        result[prefix + "replacement_cost"] = currency(replacement * multiplier)
+        result[prefix + "depreciation"] = currency(depreciation * multiplier)
+        result[prefix + "net_value"] = currency(net * multiplier)
+        if multiplier > 1:
+            result[prefix + "plinth_area"] = f"{(number_value(values.get(prefix + 'plinth_area')) or 0) * multiplier:g}"
         result[prefix + "total_life"] = f"{life:g}"
-        building_values.append(net)
+        building_values.append(net * multiplier)
         name = values.get(prefix + "name", f"Floor {index}")
+        if multiplier > 1:
+            name = f"{name} ({multiplier} typical floors)"
+            result[prefix + "name"] = name
         height = values.get(prefix + "roof_height", "")
-        area = values.get(prefix + "plinth_area", "")
+        area = result.get(prefix + "plinth_area", "")
         floor_summaries.append(f"{name}: {height} ft" if height else str(name))
         plinth_summaries.append(f"{name}: {area} Sq.ft" if area else str(name))
-    building = calculation_value(overrides, "abstract.building", sum(building_values))
-    if building_values or "abstract.building" in overrides:
+    building = 0 if plot_only else (sum(building_values) if values.get(VERSION) == "1"
+                                   else calculation_value(overrides, "abstract.building", sum(building_values)))
+    if plot_only:
+        result["abstract.building"] = "N/A"
+    if not plot_only and (building_values or "abstract.building" in overrides):
         result["abstract.building"] = currency(building)
         result["BUILDING_VALUE"] = currency(building)
         result["building.floor_summary"] = ", ".join(floor_summaries)

@@ -489,8 +489,57 @@ try:
     assert reports.get_draft(progress["id"], father)["preview"] is None
     expect_report_error(lambda: reports.require_current_preview(progress["id"], father, "246813579"), "preview_required")
 
+    from backend.app.reports.valuation_reference import estimation_reference, estimation_references
+    database.execute("UPDATE app.tasks SET final_artifact_id=(SELECT id FROM app.task_artifacts WHERE task_id=app.tasks.id AND artifact_type='estimation_xlsx' ORDER BY created_at,id LIMIT 1) WHERE task_code=%s", (estimation["id"],))
+    choices = estimation_references(father, search=f"Estimate {suffix}")
+    assert any(item["taskCode"] == estimation["id"] for item in choices["items"])
+    assert next(item for item in choices["items"] if item["taskCode"] == estimation["id"])["snapshotId"] == estimation["estimationSummary"]["snapshotId"], "A newly completed correction uses its latest issued revision, not the old Closed revision"
+    adopted = estimation_reference(estimation["id"], estimation["estimationSummary"]["snapshotId"], father)
+    assert adopted["components"][0]["estimatedCost"] == 125000
+    assert adopted["components"][1]["source"] == "common"
+    typical_task = workflow.create_task(task_payload("estimation", f"Typical {suffix}"), father)
+    typical_state = {**estimation_state, "components": [{"id": "house", "name": "Building", "sheets": [{"id": "typical", "key": "ff", "label": "FF, SF & TF", "typicalFloorKeys": ["ff", "sf", "tf"]}]}]}
+    reports.save_draft(typical_task["id"], {"reportKey": "estimation", "schemaVersion": "3", "revision": 0, "payload": typical_state}, father)
+    typical_task = reports.register_artifact(typical_task["id"], father, content=b"combined typical-floor estimate", filename="typical.xlsx", artifact_type="estimation_xlsx", source="generated", payload=typical_state,
+        summary={**summary, "components": [{"id": "measure-house-typical", "label": "FF, SF & TF", "source": "component", "estimatedCost": 300000}], "totalEstimatedCost": 300000})["task"]
+    typical_task = workflow.complete(typical_task["id"], {"version": typical_task["version"], "note": "Typical group verified."}, father)
+    typical_snapshot = typical_task["estimationSummary"]["snapshotId"]
+    typical_reference = estimation_reference(typical_task["id"], typical_snapshot, father)
+    assert typical_reference["components"][0]["floorCount"] == 3
+    assert typical_reference["components"][0]["estimatedCost"] == 300000, "Already combined estimate cost is not multiplied"
+    workflow.reopen(typical_task["id"], {"version": typical_task["version"], "note": "Source correction test."}, father)
+    assert not any(item["taskCode"] == typical_task["id"] for item in estimation_references(father, search=f"Typical {suffix}")["items"])
+    assert estimation_reference(typical_task["id"], typical_snapshot, father)["components"] == typical_reference["components"], "Adopted immutable reference survives a later source reopening"
+    cache_task = workflow.create_task(task_payload("valuation-general", f"Cached {suffix}"), father)
+    cache_payload = {"values": {"property.description": "Cache fixture"}, "photos": [], "map": None, "preparationMethod": "online"}
+    saved_cache = reports.save_draft(cache_task["id"], {"reportKey": "valuation-general", "schemaVersion": "3", "revision": 0, "payload": cache_payload}, father)
+    cache_input = reports.preview_input_fingerprint(cache_task["id"], father)
+    doc = reports.register_artifact(cache_task["id"], father, content=b"exact preview DOCX", filename="cached.docx", artifact_type="valuation_docx", source="generated", payload=cache_payload, current=False, preview_input=cache_input, preview_token="9999999999999")
+    pdf = reports.register_artifact(cache_task["id"], father, content=b"exact preview PDF", filename="cached.pdf", artifact_type="preview_pdf", source="generated", payload=cache_payload, current=False, preview_input=cache_input, preview_token="9999999999999")
+    assert workflow.get_task(cache_task["id"])["reportGeneratedAt"] is None, "Preview must not qualify completion"
+    cached = reports.cached_general_report(cache_task["id"], father, cache_payload, preview=True)
+    assert cached["preview"] == pdf["download"] and cached["preview_id"] == "9999999999999"
+    download_payload = {**cache_payload, "preview_id": cached["preview_id"]}
+    result = reports.cached_general_report(cache_task["id"], father, download_payload)
+    assert result["download"] == doc["download"] and result["registered"]
+    assert result["task"]["reportFresh"] is True
+    counts = database.execute("SELECT (SELECT COUNT(*) FROM app.report_revisions WHERE task_id=t.id) AS revisions,(SELECT COUNT(*) FROM app.task_activities WHERE task_id=t.id AND event_type='report') AS events FROM app.tasks t WHERE task_code=%s", (cache_task["id"],)).fetchone()
+    repeated = reports.cached_general_report(cache_task["id"], father, download_payload)
+    assert repeated["download"] == result["download"]
+    assert database.execute("SELECT COUNT(*) AS count FROM app.task_activities WHERE task_id=(SELECT id FROM app.tasks WHERE task_code=%s) AND event_type='report'", (cache_task["id"],)).fetchone()["count"] == counts["events"] == 1
+    assert counts["revisions"] == 1, "Promoting a preview must not create duplicate revisions"
+    expect_report_error(lambda: reports.cached_general_report(cache_task["id"], employee, cache_payload, preview=True), "forbidden")
+    expect_report_error(lambda: reports.cached_general_report(cache_task["id"], father, {**download_payload, "values": {"property.description": "Unsaved change"}}), "draft_required")
+    pdf_file = reports.artifact_file(cache_task["id"], pdf["artifactId"], father)
+    pdf_file["path"].unlink()
+    assert reports.cached_general_report(cache_task["id"], father, cache_payload, preview=True) is None, "Missing bytes must trigger regeneration"
+    assert reports.cached_general_report(cache_task["id"], father, download_payload)["download"] == doc["download"], "A missing PDF must not create duplicate DOCX revisions on download"
+    changed_cache = {**cache_payload, "values": {"property.description": "Edited"}}
+    reports.save_draft(cache_task["id"], {"reportKey": "valuation-general", "schemaVersion": "3", "revision": saved_cache["revision"], "payload": changed_cache}, father)
+    assert reports.cached_general_report(cache_task["id"], father, changed_cache, preview=True) is None
+    assert workflow.get_task(cache_task["id"])["reportFresh"] is False
     stored_keys = [row["storage_key"] for row in database.execute("SELECT storage_key FROM app.stored_files WHERE created_by_user_id = ANY(%s)", ([father_id, employee_id],)).fetchall()]
-    print("PASS: durable report drafts, local files, artifacts, and estimation snapshots")
+    print("PASS: durable report drafts, local files, artifacts, estimation references, cached preview promotion and freshness")
 finally:
     database.rollback()
     database.close()

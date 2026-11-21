@@ -9,7 +9,7 @@
   if (!reportForm) return;
 
   // Practice mode intentionally does not create a task context.
-  if (practiceMode && !taskId) {
+  if (practiceMode) {
     const banner = document.createElement("section");
     banner.className = "practice-banner";
     banner.innerHTML = `<div><strong>Practice mode</strong><span>Preview and generate test documents safely. Nothing is linked to an assignment.</span></div><a href="/practice">Back to practice forms</a>`;

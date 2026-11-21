@@ -91,28 +91,37 @@ def expected_estimation_components(state: dict[str, Any] | None) -> list[str]:
 
 def _abstract_rows(workbook):
     for sheet in workbook.worksheets:
+        rows = list(sheet.iter_rows(max_col=12, values_only=True))
         header_row = None
         total_row = None
-        for row in range(1, sheet.max_row + 1):
-            values = [_text(sheet.cell(row, column).value).lower() for column in range(1, min(sheet.max_column, 12) + 1)]
+        adopted_row = None
+        for row, cells in enumerate(rows, 1):
+            values = [_text(value).lower() for value in cells]
             joined = " | ".join(values)
-            if "description of component / work" in joined:
+            if "description of component / work" in joined or values[0] == "a b s t r a c t":
                 header_row = row
             if header_row and "total estimated project cost" in joined:
                 total_row = row
+                break
+            if header_row and values[0].startswith("(rupees"):
+                # Current exports deliberately omit the total label. The
+                # amount-in-words row follows the unlabelled Abstract sum and
+                # carries the adopted rounded total.
+                total_row = row - 1
+                adopted_row = row
                 break
         if not header_row or not total_row:
             continue
         components = []
         for row in range(header_row + 1, total_row):
-            label = _text(sheet.cell(row, 2).value)
-            amount = _number(sheet.cell(row, 12).value)
+            label = _text(rows[row - 1][1])
+            amount = _number(rows[row - 1][11])
             if not label or label.upper() == "COMMON EXTERNAL WORKS AND PROJECT CHARGES":
                 continue
             if label.lower().startswith("cost of construction of "):
                 label = label[len("Cost of construction of "):]
             components.append({"id": f"workbook-{len(components) + 1}", "label": label, "estimatedCost": amount, "source": "workbook"})
-        total = _number(sheet.cell(total_row, 12).value)
+        total = _number(rows[(adopted_row or total_row) - 1][11])
         if components:
             known = [item["estimatedCost"] for item in components if item["estimatedCost"] is not None]
             return {"components": components, "totalEstimatedCost": total if total is not None else sum(known)}

@@ -1191,5 +1191,23 @@
       "row": 9,
       "cell": 3
     }
-  ]
+  ],
+  "generated_sections": {
+    "construction_notes": {
+      "after": "Enclosure: Detailed Valuation Report",
+      "statuses": [
+        "proposed",
+        "under_construction"
+      ],
+      "layout": "single_column_up_to_8_else_two_columns"
+    },
+    "property.summary_description": {
+      "source": "property.description",
+      "status_suffix": {
+        "under_construction": "(u/c)",
+        "proposed": "(Proposed)",
+        "existing": ""
+      }
+    }
+  }
 }
