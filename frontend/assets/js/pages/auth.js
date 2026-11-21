@@ -82,7 +82,7 @@
         <div class="auth-field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required placeholder="Enter your password" /></div>
         <div class="auth-form-row"><button class="auth-link" id="forgot-link" type="button">Forgot password?</button></div>
         <button class="auth-primary" type="submit">Sign in securely</button>
-        <p class="auth-note">Accounts are issued by your ValuX administrator. Contact the account operator if your activation password has expired.</p>
+        <p class="auth-note">Use only the ValuX account issued by your administrator. Enter your ValuX password, never a bank or email-account password. Contact the account operator if your activation password has expired.</p>
       </form>`);
     document.getElementById("forgot-link").addEventListener("click", forgotView);
     document.getElementById("login-form").addEventListener("submit", (event) => {
@@ -296,7 +296,7 @@
       }
       routeStep(context.next);
     } catch (_error) {
-      render(`${head("ValuX is unavailable", "The authentication service could not be reached.", "!")}${message("Check that Docker and PostgreSQL are running, then refresh this page.", "error")}`);
+      render(`${head("ValuX is unavailable", "The authentication service could not be reached.", "!")}${message("Refresh the page and try again. If the problem continues, contact your ValuX administrator.", "error")}`);
     }
   }
 

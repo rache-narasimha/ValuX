@@ -150,6 +150,9 @@ than by HTTP endpoint:
   creates typed, filter-aware A4 Excel workbooks inside the existing Python
   application container.
 - `web/handler.py`: HTTP parsing, validation, static delivery, previews and downloads.
+- `web/browser_security.py`: response CSP/HSTS and trusted bootstrap-script
+  nonces; allows existing first-party/blob report previews without external
+  executable sources. Authentication/account permissions remain in `auth/`.
 - `auth/`: PostgreSQL identity boundary. `routes.py` adapts HTTP, `service.py`
   owns account/session use cases, `security.py` owns cryptographic primitives,
   `database.py` owns runtime connections, `migrations.py` owns migration and

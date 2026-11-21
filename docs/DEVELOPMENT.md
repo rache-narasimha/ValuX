@@ -274,3 +274,26 @@ written while an image was running; those records remain in the shared database.
 Keep the previous Cloud Run revision and its digest when promoting staging;
 route traffic back to that recorded revision if the replacement fails checks.
 Staging and local configuration remain separate.
+
+### Browser security verification
+
+Run `tests/test_browser_security.py`, `tests/test_browser_security_http.py`
+and `node tests/test_auth_redirects.js` when changing response policy or sign-in.
+The HTTP test uses the existing local app and revokes its temporary session.
+Run the normal authentication/Mailpit and role smoke checks as well.
+
+`tests/browser_security_smoke.mjs` accepts `VALUX_SECURITY_BASE_URL`, a private
+`VALUX_SECURITY_OUTPUT` directory, and optional temporary operator-created
+`VALUX_SECURITY_SESSION` / `VALUX_SECURITY_SECOND_SESSION` environment values.
+It checks desktop/mobile sign-in, same-origin redirects, CSP enforcement,
+authenticated pages, Practice file isolation, PDF preview/download and logout.
+It removes its synthetic Practice attachment. Revoke test sessions afterward;
+never print or commit them. Operator-assisted sessions do not test password/TOTP
+sign-in, which remains covered by the normal local authentication flow tests.
+
+Verify the public URL separately in a normal browser and check the correct
+Search Console property. Automated browser checks and vulnerability scanners
+cannot guarantee Google's Safe Browsing or hosting-abuse decisions. A cleared
+Search Console report does not clear a separate Cloud hosting suspension.
+Use the published application URL for `APP_BASE_URL` so recovery links resolve;
+retain any existing hosting appeal rather than submitting duplicate appeals.

@@ -828,6 +828,16 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 
 ## 8. Authentication lifecycle
 
+- Sign-in identifies ValuX as SLN Consultancy & Engineering Services' private
+  property-report workspace and requests only ValuX-issued account credentials.
+  It does not claim an unverified session-encryption strength or request a bank
+  or email-account password. The support address is support.valux@gmail.com.
+- Browser responses restrict scripts and network connections to the app origin.
+  Trusted server bootstrap scripts receive a fresh per-response CSP nonce;
+  user-provided HTML is never authorized by adding a nonce. Same-origin/blob
+  PDF previews and current chart styling remain available. HTTPS deployments
+  use HSTS; local HTTP development stays supported. Authentication, recovery
+  and role rules below remain unchanged.
 - Accounts are provisioned by an operator; there is no public registration.
 - Initial access uses an assigned User ID and one-time activation password.
 - Activation requires a permanent password, authenticator-app enrollment,

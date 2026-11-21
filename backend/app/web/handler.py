@@ -22,6 +22,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from openpyxl.utils.exceptions import InvalidFileException
 
 from ..auth import routes as auth_routes
+from ..auth.config import COOKIE_SECURE
 from ..auth.service import AuthError
 from ..estimation import generate_estimation_workbook
 from ..estimation.generator import online_estimation_summary
@@ -39,6 +40,7 @@ from ..valuation.reports import generate_agricultural_docx, generate_docx, gener
 from ..valuation.schemas import agricultural_schema_payload, schema_payload, validate_report_values
 from ..workflow import routes as workflow_routes
 from ..workflow import service as workflow_service
+from .browser_security import response_headers, trusted_inline_script
 
 
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -153,11 +155,16 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "ValuX"
     sys_version = ""
 
+    def _response_nonce(self):
+        if not getattr(self, "_browser_nonce", None):
+            self._browser_nonce = secrets.token_urlsafe(24)
+        return self._browser_nonce
+
     def end_headers(self):
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "SAMEORIGIN")
-        self.send_header("Referrer-Policy", "same-origin")
+        for name, value in response_headers(self._response_nonce(), secure_transport=COOKIE_SECURE):
+            self.send_header(name, value)
         super().end_headers()
+        self._browser_nonce = None
 
     def send_json(self, payload, status=200, headers=None):
         data = json.dumps(payload).encode("utf-8")
@@ -346,14 +353,15 @@ class Handler(BaseHTTPRequestHandler):
                 "/valuation/general": "general",
                 "/valuation/agricultural": "agricultural",
             }.get(path.rstrip("/"))
-            page_context = workflow_routes.page_context_script(
+            nonce = self._response_nonce()
+            page_context = trusted_inline_script(workflow_routes.page_context_script(
                 session, self.path, load_valuation_draft=valuation_kind is not None
-            )
+            ), nonce)
             if valuation_kind:
-                page_context += valuation_schema_script(valuation_kind)
+                page_context += trusted_inline_script(valuation_schema_script(valuation_kind), nonce)
             csrf, headers = auth_routes.csrf_context(self)
             data = versioned_page_assets(file_path.read_bytes()).replace(
-                b"</head>", auth_routes.authentication_context_script(session, csrf) + page_context + b"</head>", 1
+                b"</head>", trusted_inline_script(auth_routes.authentication_context_script(session, csrf), nonce) + page_context + b"</head>", 1
             )
             self.send_file(file_path, data=data, headers=headers)
         except (workflow_service.WorkflowError, report_service.ReportDataError) as error:

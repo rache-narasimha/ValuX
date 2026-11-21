@@ -98,6 +98,18 @@ def assert_shared_work_header(generate):
             workbook.close()
 
 
+def assert_measurement_labels_are_literal_text(generate):
+    state = controlled_industrial_state()
+    state["components"][0]["sheets"][0]["formData"]["rows"]["concrete-footings"]["setupLabel"] = "=1+1"
+    workbook = workbook_from(generate(state))
+    try:
+        labels = [cell for sheet in workbook for cell in sheet["B"] if cell.value == "=1+1"]
+        assert labels, "The entered measurement label must be retained."
+        assert all(cell.data_type == "s" for cell in labels), "Labels must never become Excel formulas."
+    finally:
+        workbook.close()
+
+
 def assert_controlled_steel(generate):
     result = generate(controlled_industrial_state())
     workbook = workbook_from(result)
@@ -568,6 +580,7 @@ def main():
     assert "QA Address" not in identity_text
     identity_book.close()
     assert_shared_work_header(generate)
+    assert_measurement_labels_are_literal_text(generate)
     assert_ground_floor_ending(generate)
     assert_controlled_steel(generate)
     assert_industrial_centre_line_requires_upload(generate)
