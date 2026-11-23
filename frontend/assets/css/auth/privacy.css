@@ -1,0 +1,32 @@
+.privacy-notice {
+  width: min(48rem, calc(100% - 2rem));
+  margin: clamp(1rem, 5vw, 3rem) auto;
+  padding: clamp(1.25rem, 5vw, 3rem);
+  box-sizing: border-box;
+  background: var(--auth-card);
+  border: 1px solid var(--auth-line);
+  border-radius: var(--auth-radius);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.privacy-notice h1 {
+  margin: 1.25rem 0 0.5rem;
+  line-height: 1.2;
+}
+
+.privacy-notice h2 {
+  margin: 1.5rem 0 0.35rem;
+  font-size: 1.125rem;
+  line-height: 1.35;
+}
+
+.privacy-notice p {
+  margin: 0 0 0.65rem;
+  color: var(--auth-copy);
+}
+
+.privacy-notice a {
+  color: var(--auth-ink);
+  text-underline-offset: 0.15em;
+}

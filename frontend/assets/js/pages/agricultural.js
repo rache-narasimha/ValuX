@@ -73,12 +73,7 @@ function renderDocuments(saved = {}) {
   const existing = { ...collectValues(), ...saved };
   host.innerHTML = "";
   for (let index = 1; index <= state.documentCount; index++) {
-    const card = document.createElement("div");
-    card.className = "document-card";
-    const isLast = index === state.documentCount;
-    const addIcon = window.AppShell?.icons?.add || "+";
-    const trashIcon = window.AppShell?.icons?.trash || "×";
-    card.innerHTML = `<div class="document-head"><h4>Document ${index}</h4><div class="document-actions">${isLast ? `<button type="button" class="document-icon-button add-document" data-add-document title="Add another document" aria-label="Add another document">${addIcon}</button>` : ""}${index > 1 ? `<button type="button" class="document-icon-button remove-document" data-remove-document="${index}" title="Remove document ${index}" aria-label="Remove document ${index}">${trashIcon}</button>` : ""}</div></div><div class="grid"></div>`;
+    const card = ValuxUI.valuationDocumentCard(index, index === state.documentCount);
     const grid = card.querySelector(".grid");
     const typeId = `documents.${index}.type`,
       customId = `documents.${index}.custom_type`,
@@ -296,41 +291,14 @@ function mediaSection(panel) {
 }
 
 function renderPreviews() {
-  const host = byId("photo-preview");
-  if (host) {
-    host.classList.remove("one-column");
-    host.classList.add("three-columns");
-    host.replaceChildren(...state.photos.map((photo, index) => {
-      const tile = document.createElement("div");
-      tile.className = "photo-tile";
-      const image = document.createElement("img");
-      image.src = photo.data;
-      image.alt = photo.name || `Property photograph ${index + 1}`;
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.dataset.removePhoto = String(index);
-      remove.setAttribute("aria-label", `Remove ${photo.name || `photograph ${index + 1}`}`);
-      remove.textContent = "Remove";
-      tile.append(image, remove);
-      return tile;
-    }));
-    host.querySelectorAll("[data-remove-photo]").forEach(
-      (button) =>
-        (button.onclick = () => {
-          if (!confirmReportInvalidation()) return;
-          state.photos.splice(Number(button.dataset.removePhoto), 1);
-          renderPreviews();
-          markDirty();
-          saveDraft();
-        }),
-    );
-  }
-  const mapHost = byId("map-preview");
-  if (mapHost)
-    mapHost.innerHTML = state.map
-      ? `<div class="media-preview-item"><img src="${state.map.data}" alt="Route map preview"><button type="button" class="secondary remove-map">Remove map</button></div>`
-      : "";
-  mapHost?.querySelector(".remove-map")?.addEventListener("click", () => {
+  ValuxUI.paintReportPhotos(byId("photo-preview"), state.photos, (index) => {
+    if (!confirmReportInvalidation()) return;
+    state.photos.splice(index, 1);
+    renderPreviews();
+    markDirty();
+    saveDraft();
+  });
+  ValuxUI.paintReportMap(byId("map-preview"), state.map, "Route map preview", () => {
     if (!confirmReportInvalidation()) return;
     state.map = null;
     const upload = byId("map-upload");
@@ -614,10 +582,7 @@ async function init() {
         practiceChanged: async (value) => { state.practiceOffline = value; await persistDraftNow(); },
       });
     } else {
-      panel = document.createElement("div");
-      panel.className = "panel";
-      panel.dataset.section = section.id;
-      panel.innerHTML = `<h2>${section.label}</h2>`;
+      panel = ValuxUI.valuationPanel(section.label, { "data-section": section.id });
     }
     if (revaluation && index === 0) RetrospectiveValuation.displayRevaluationSource(panel, currentTask());
     if (section.id === "media") {
@@ -630,9 +595,7 @@ async function init() {
       );
       const groups = [...new Set(fields.map((field) => field.group))];
       groups.forEach((group) => {
-        const block = document.createElement("section");
-        block.className = "subgroup";
-        block.innerHTML = `<h3>${group}</h3><div class="grid"></div>`;
+        const block = ValuxUI.valuationGroup(group);
         fields
           .filter((field) => field.group === group)
           .forEach((field) =>
@@ -645,13 +608,8 @@ async function init() {
     host.append(panel);
     if (section.id === "property") renderDocuments(initialValues);
     state.sections.push(panel);
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = section.label;
-    button.dataset.sectionIndex = index;
-    button.onclick = () => show(index);
-    byId("nav").append(button);
   });
+  ValuxUI.paintReportNav(byId("nav"), state.sectionPlan, { onSelect: show });
   calculations = window.ValuationCalculations.create("agricultural", byId("agricultural-form"), {
     floorCount: () => state.floorCount || 1,
     beforeReset: confirmReportInvalidation,

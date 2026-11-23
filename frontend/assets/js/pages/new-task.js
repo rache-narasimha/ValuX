@@ -162,12 +162,8 @@
       day: "2-digit", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit",
       timeZone: ValuxTime.timeZone, timeZoneName: "short",
     }).format(new Date(value)) : "Not recorded";
-    linkedResults.innerHTML = linkedRows.length ? linkedRows.map((candidate) => `<button type="button" class="estimation-picker-row" data-estimation-id="${WorkflowUI.escape(candidate.id)}">
-      <span><strong>${WorkflowUI.escape(candidate.id)}</strong><small>${WorkflowUI.escape(candidate.institutionCode)} · ${WorkflowUI.escape(candidate.branch)}</small></span>
-      <span><strong>${WorkflowUI.escape(candidate.customerName)}</strong><small>${WorkflowUI.escape(candidate.propertyBrief)}</small></span>
-      <span class="picker-dates"><strong>Assigned: ${WorkflowUI.date(candidate.assignedDate)}</strong><small>Completed: ${completedDate(candidate.completedAt)}</small><small class="status-badge">${WorkflowUI.escape(candidate.status)}</small></span>
-      <em>Select</em>
-    </button>`).join("") : WorkflowUI.empty(`No eligible ${linkedReportName()} report matches the current search and filters.`);
+    ValuxUI.paintLinkedChoices(linkedResults, linkedRows, completedDate,
+      `No eligible ${linkedReportName()} report matches the current search and filters.`);
     const noun = isRevaluation() ? "valuation" : "estimate";
     document.getElementById("estimation-picker-count").textContent = `${total} eligible ${noun}${total === 1 ? "" : "s"}`;
   }
@@ -190,7 +186,7 @@
     } catch (exception) {
       error.textContent = exception.message || `Eligible ${linkedReportName()} reports could not be loaded.`;
       error.hidden = false;
-      if (!linkedRows.length) linkedResults.innerHTML = WorkflowUI.empty(`Eligible ${linkedReportName()} reports could not be loaded. Try again.`);
+      if (!linkedRows.length) ValuxUI.paintEmpty(linkedResults, `Eligible ${linkedReportName()} reports could not be loaded. Try again.`);
     } finally {
       linkedMore.disabled = false;
       linkedResults.removeAttribute("aria-busy");

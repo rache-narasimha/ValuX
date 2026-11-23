@@ -12,7 +12,6 @@
     const readAll = panel.querySelector("[data-notifications-read-all]");
     let items = [], loading = null, unread = 0;
     const shownUnread = new Set();
-    const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     function renderBadge() {
       badge.hidden = !unread;
       badge.textContent = unread > 99 ? "99+" : String(unread);
@@ -27,10 +26,7 @@
     function render() {
       if (!panel.hidden) rememberShownNotifications();
       renderBadge();
-      list.innerHTML = items.length ? items.map((item) => {
-        const date = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: window.ValuxTime?.timeZone || "Asia/Kolkata", timeZoneName: "short" }).format(new Date(item.createdAt));
-        return `<article class="notification-item${item.read ? "" : " unread"}"><a href="/tasks/detail?id=${encodeURIComponent(item.taskCode)}" data-notification-id="${escape(item.id)}"><strong>${escape(item.taskCode)} · ${escape(item.customer)}</strong><span>${escape(item.message)}</span><small>${escape(item.actor)} · ${escape(date)}</small></a><button type="button" class="notification-read" data-read-id="${escape(item.id)}" ${item.read ? "hidden" : ""} title="Mark as read" aria-label="Mark notification as read">✓</button></article>`;
-      }).join("") : '<p class="notification-empty">You’re all caught up. New task updates will appear here.</p>';
+      ValuxUI.paintNotifications(list, items, window.ValuxTime?.timeZone || "Asia/Kolkata");
     }
     function load(append = false, badgeOnly = false) {
       if (loading) return loading;

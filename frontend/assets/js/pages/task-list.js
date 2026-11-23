@@ -40,10 +40,38 @@
   const storage = TaskStore.storageStatus();
   if (!storage.ok) {
     WorkflowUI.fatal(storage.error);
-    list.innerHTML = WorkflowUI.empty("Tasks cannot be shown until the authenticated workflow service is available.");
+    ValuxUI.paintEmpty(list, "Tasks cannot be shown until the authenticated workflow service is available.");
     loadMore.hidden = true;
     return;
   }
+
+  const filterControls = window.ValuxAssignmentFilters.mount({
+    switcher: document.getElementById("task-period-switch"),
+    picker: document.getElementById("task-period-picker"),
+    dateBasis: dateBasisControl,
+  }, {
+    choosePeriod(next) {
+      if (next === fields.period.value) return;
+      fields.period.value = next;
+      renderPeriodFilter();
+      reset();
+    },
+    chooseDate(activePeriod, value) {
+      const date = activePeriod === "monthly"
+        ? ValuxTime.parseDate(`${value}-01`)
+        : activePeriod === "yearly"
+          ? ValuxTime.parseDate(`${value}-01-01`)
+          : ValuxTime.parseDate(value);
+      if (date) periodReference = date;
+      renderPeriodFilter();
+      reset();
+    },
+    chooseDateBasis(next) {
+      if (dateBasisControl.hidden || dateBasis === next) return;
+      dateBasis = next;
+      reset();
+    },
+  });
 
   // Filter state, query construction, and task-row rendering.
   function populateFilters() {
@@ -54,7 +82,7 @@
     if (WorkflowAccess.currentRole() === "father" && ["payment-received", "payment-outstanding"].includes(view)) {
       paymentView = view;
     }
-    TaskStore.STATUSES.forEach((item) => fields.status.add(new Option(item, item)));
+    window.ValuxAssignmentFilters.populateStatuses(fields.status, TaskStore.STATUSES);
     fields.assignee.innerHTML = '<option value="">Everyone</option>';
     TaskStore.EMPLOYEES.forEach((employee) => fields.assignee.add(new Option(employee.name, employee.name)));
     fields.institution.add(new Option("All banks", "type:Bank"));
@@ -110,16 +138,9 @@
     const typeFilter = document.getElementById("valuation-type-filter-wrap");
     typeFilter.hidden = !["valuation", "revaluation"].includes(fields.group.value);
     if (!typeFilter.hidden) typeFilter.firstElementChild.textContent = `${GROUP_LABELS[fields.group.value]} type`;
-    dateBasisControl.hidden = !TaskStore.STATUS_DATE_FIELDS[fields.status.value];
     const basis = selectedDateBasis();
-    dateBasisControl.querySelectorAll("[data-date-basis]").forEach((button) => {
-      const active = button.dataset.dateBasis === basis;
-      button.classList.toggle("active", active);
-      button.setAttribute("aria-pressed", String(active));
-      if (button.dataset.dateBasis === "status" && !dateBasisControl.hidden) {
-        button.textContent = `${fields.status.value} during`;
-      }
-    });
+    filterControls.showDateBasis(TaskStore.STATUS_DATE_FIELDS[fields.status.value]
+      ? { active: basis, label: `${fields.status.value} during` } : null);
     document.getElementById("task-period-label-text").textContent = periodBasisLabel();
 
     const dashboard = document.getElementById("tasks-dashboard-link");
@@ -145,28 +166,13 @@
   }
 
   function renderPeriodFilter() {
-    const switcher = document.getElementById("task-period-switch");
-    const picker = document.getElementById("task-period-picker");
     const activePeriod = fields.period.value;
     const options = [
       ["", "All time"], ["daily", "Daily"], ["weekly", "Weekly"], ["monthly", "Monthly"], ["yearly", "Yearly"],
     ];
-    switcher.innerHTML = options.map(([value, label]) => `<button type="button" data-task-period="${value}" class="${value === activePeriod ? "active" : ""}" aria-pressed="${value === activePeriod}">${label}</button>`).join("");
-    switcher.querySelectorAll("[data-task-period]").forEach((button) => button.addEventListener("click", () => {
-      const next = button.dataset.taskPeriod;
-      if (next === fields.period.value) return;
-      fields.period.value = next;
-      renderPeriodFilter();
-      reset();
-    }));
-    picker.hidden = !activePeriod;
-    if (!activePeriod) {
-      picker.innerHTML = "";
-      return;
-    }
-    const inputId = "task-period-picker-value";
+    let picker = null;
     if (activePeriod === "daily") {
-      picker.innerHTML = `<label>Date<input id="${inputId}" type="date" value="${isoDate(periodReference)}" /></label>`;
+      picker = { label: "Date", type: "date", value: isoDate(periodReference) };
     } else if (activePeriod === "weekly") {
       const weeks = weekOptions();
       let selectedMonday = isoDate(TaskStore.periodBounds("weekly", periodReference).start);
@@ -174,23 +180,18 @@
         selectedMonday = weeks[0].value;
         periodReference = ValuxTime.parseDate(selectedMonday);
       }
-      picker.innerHTML = `<label>Week<select id="${inputId}">${weeks.map((week) => `<option value="${week.value}"${week.value === selectedMonday ? " selected" : ""}>${week.label}</option>`).join("")}</select></label>`;
+      picker = { label: "Week", value: selectedMonday, options: weeks };
     } else if (activePeriod === "monthly") {
-      picker.innerHTML = `<label>Month<input id="${inputId}" type="month" value="${isoDate(periodReference).slice(0, 7)}" /></label>`;
-    } else {
+      picker = { label: "Month", type: "month", value: isoDate(periodReference).slice(0, 7) };
+    } else if (activePeriod) {
       const year = periodReference.getUTCFullYear();
-      picker.innerHTML = `<label>Year<select id="${inputId}">${Array.from({ length: 7 }, (_, index) => year - 3 + index).map((value) => `<option value="${value}"${value === year ? " selected" : ""}>${value}</option>`).join("")}</select></label>`;
+      const years = Array.from({ length: 7 }, (_, index) => {
+        const value = String(year - 3 + index);
+        return { value, label: value };
+      });
+      picker = { label: "Year", value: String(year), options: years };
     }
-    document.getElementById(inputId).addEventListener("change", (event) => {
-      const value = event.target.value;
-      periodReference = activePeriod === "monthly"
-        ? ValuxTime.parseDate(`${value}-01`)
-        : activePeriod === "yearly"
-          ? ValuxTime.parseDate(`${value}-01-01`)
-          : ValuxTime.parseDate(value);
-      renderPeriodFilter();
-      reset();
-    });
+    filterControls.showPeriod({ active: activePeriod, options, picker });
   }
 
   function queryOptions(limit = visible) {
@@ -304,14 +305,13 @@
   }
 
   function renderRows(tasks) {
-    if (!tasks.length) return WorkflowUI.empty("No assignments match the selected search and filters.");
-    if (fields.status.value !== "On Hold" || WorkflowAccess.currentRole() !== "father") {
-      return tasks.map((task) => WorkflowUI.taskRow(task, { variant: "table" })).join("");
-    }
-    const review = tasks.filter((task) => task.holdReason === "Awaiting Review");
-    const other = tasks.filter((task) => task.holdReason !== "Awaiting Review");
-    return `${review.length ? `<section class="task-list-group"><div class="task-list-group-heading"><h3>Awaiting my review</h3><span>${review.length}</span></div>${review.map((task) => WorkflowUI.taskRow(task, { variant: "table" })).join("")}</section>` : ""}
-      ${other.length ? `<section class="task-list-group"><div class="task-list-group-heading"><h3>Other on-hold tasks</h3><span>${other.length}</span></div>${other.map((task) => WorkflowUI.taskRow(task, { variant: "table" })).join("")}</section>` : ""}`;
+    const groups = fields.status.value === "On Hold" && WorkflowAccess.currentRole() === "father" ? [
+      { title: "Awaiting my review", tasks: tasks.filter(task => task.holdReason === "Awaiting Review") },
+      { title: "Other on-hold tasks", tasks: tasks.filter(task => task.holdReason !== "Awaiting Review") },
+    ] : undefined;
+    ValuxUI.paintTaskRows(list, tasks, {
+      variant: "table", groups, empty: "No assignments match the selected search and filters.",
+    });
   }
 
   function selectedInstitution() {
@@ -334,27 +334,13 @@
     const bars = paymentView === "payment-outstanding"
       ? [outstandingBar, receivedBar, earnedBar]
       : [receivedBar, outstandingBar, earnedBar];
-    const scale = Math.max(earned, received, outstanding) || 1;
-    const chart = document.getElementById("payment-summary-bars");
-    const focusedFilter = document.activeElement?.dataset.paymentBarFilter;
-    chart.innerHTML = bars.map(({ label, amount, color, filter }) => {
-      const selected = filter === fields.payment.value;
-      return `<li><button type="button" class="payment-summary-bar" data-payment-bar-filter="${filter}" aria-pressed="${selected}">
-        <span>${label}</span><span class="horizontal-track" aria-hidden="true"><i style="--width:${amount / scale * 100}%;--chart-color:${color}"></i></span>
-        <strong>${WorkflowUI.currency(amount)}</strong>
-      </button></li>`;
-    }).join("");
-    if (focusedFilter !== undefined) {
-      Array.from(chart.querySelectorAll("[data-payment-bar-filter]"))
-        .find((button) => button.dataset.paymentBarFilter === focusedFilter)?.focus({ preventScroll: true });
-    }
+    ValuxUI.paintPaymentBars(document.getElementById("payment-summary-bars"), bars, fields.payment.value);
     const statuses = ["Received", "Partially Received", "Pending"];
     for (const status of ["Overdue", "Not Set"]) {
       if (counts.has(status)) statuses.push(status);
     }
-    document.getElementById("payment-status-counts").innerHTML = statuses.map((status) =>
-      `<div><dt>${status}</dt><dd>${counts.get(status) || 0}</dd></div>`,
-    ).join("");
+    ValuxUI.paintPairs(document.getElementById("payment-status-counts"),
+      statuses.map(status => [status, counts.get(status) || 0]));
   }
 
   function paymentScopeTasks(options) {
@@ -398,14 +384,11 @@
       ? `${tasks.length} assignments · ${summaryBasis}${InstitutionMetrics.periodLabel(fields.period.value, periodReference)}`
       : `${tasks.length} assignments · all dates`;
     if (!paymentView) {
-      const mix = InstitutionMetrics.workflowMix(tasks);
-      const maximum = Math.max(1, ...mix.map((item) => item.count));
-      workflowChart.innerHTML = mix.map((item) => {
-        const width = item.count ? Math.max(5, Math.round((item.count / maximum) * 100)) : 0;
-        return `<button type="button" data-workflow-state="${WorkflowUI.escape(item.key)}"${item.count ? "" : " disabled"}>
-          <span>${WorkflowUI.escape(item.label)}</span><i><b style="--width:${width}%;--state-color:${item.color}"></b></i><strong>${item.count}</strong>
-        </button>`;
-      }).join("");
+      ValuxUI.paintWorkflowMix(workflowChart, InstitutionMetrics.workflowMix(tasks), status => {
+        fields.status.value = status;
+        reset();
+        document.querySelector(".task-list-card").scrollIntoView({ behavior: "smooth", block: "start" });
+      });
     }
     const billable = tasks.filter((task) => task.status !== "Cancelled");
     let earned = 0, received = 0, outstanding = 0;
@@ -426,11 +409,6 @@
     document.getElementById("institution-received-percent").textContent = percent(received);
     document.getElementById("institution-outstanding").textContent = WorkflowUI.currency(outstanding);
     document.getElementById("institution-outstanding-percent").textContent = percent(outstanding);
-    workflowChart.querySelectorAll("[data-workflow-state]").forEach((button) => button.addEventListener("click", () => {
-      fields.status.value = button.dataset.workflowState;
-      reset();
-      document.querySelector(".task-list-card").scrollIntoView({ behavior: "smooth", block: "start" });
-    }));
   }
 
   function renderInstitutionDirectory() {
@@ -438,13 +416,16 @@
     host.hidden = !directoryMode || Boolean(selectedInstitution());
     if (host.hidden) return;
     const allTasks = TaskStore.all().filter(WorkflowAccess.visible);
-    document.getElementById("institution-directory-list").innerHTML = InstitutionMetrics.configured().map((institution) => {
-      const institutionTasks = allTasks.filter((task) => task.institutionCode === institution.code);
-      const inProgress = institutionTasks.filter((task) => task.status === "In Progress").length;
-      const onHold = institutionTasks.filter((task) => task.status === "On Hold").length;
-      const outstanding = institutionTasks.reduce((sum, task) => sum + Number(TaskStore.paymentSummary(task).outstanding || 0), 0);
-      return `<a class="institution-directory-row" href="/tasks?institution=${encodeURIComponent(institution.code)}&period=monthly"><span class="institution-monogram" style="--institution-color:${WorkflowUI.escape(institution.color)}">${WorkflowUI.escape(institution.code.slice(0, 4))}</span><span><strong>${WorkflowUI.escape(institution.code)} · ${WorkflowUI.escape(institution.name)}</strong><small>${WorkflowUI.escape(institution.type)}</small></span><span><small>Total</small><strong>${institutionTasks.length}</strong></span><span><small>In progress</small><strong>${inProgress}</strong></span><span><small>On hold</small><strong>${onHold}</strong></span><span><small>Outstanding</small><strong>${WorkflowUI.currency(outstanding)}</strong></span><b aria-hidden="true">›</b></a>`;
-    }).join("");
+    const entries = InstitutionMetrics.configured().map(institution => {
+      const institutionTasks = allTasks.filter(task => task.institutionCode === institution.code);
+      return {
+        ...institution, total: institutionTasks.length,
+        inProgress: institutionTasks.filter(task => task.status === "In Progress").length,
+        onHold: institutionTasks.filter(task => task.status === "On Hold").length,
+        outstanding: institutionTasks.reduce((sum, task) => sum + Number(TaskStore.paymentSummary(task).outstanding || 0), 0),
+      };
+    });
+    ValuxUI.paintInstitutionDirectory(document.getElementById("institution-directory-list"), entries);
   }
 
   function renderContext() {
@@ -524,14 +505,14 @@
     } catch (error) {
       if (sequence !== renderSequence) return;
       WorkflowUI.fatal(error.message || "Assignments could not be loaded.");
-      list.innerHTML = WorkflowUI.empty("Assignments could not be loaded. Refresh the page and try again.");
+      ValuxUI.paintEmpty(list, "Assignments could not be loaded. Refresh the page and try again.");
       loadMore.hidden = true;
       return;
     } finally {
       if (sequence === renderSequence) list.removeAttribute("aria-busy");
     }
     if (sequence !== renderSequence) return;
-    list.innerHTML = renderRows(result.items);
+    renderRows(result.items);
     document.getElementById("result-count").textContent = `${result.total} ${result.total === 1 ? "task" : "tasks"}`;
     loadMore.hidden = !result.hasMore;
     renderContext();
@@ -587,12 +568,6 @@
   document.getElementById("task-filters").classList.toggle("has-preparation-filter", preparationFilterEnabled);
   populateFilters();
   renderPeriodFilter();
-  dateBasisControl.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-date-basis]");
-    if (!button || dateBasisControl.hidden || dateBasis === button.dataset.dateBasis) return;
-    dateBasis = button.dataset.dateBasis;
-    reset();
-  });
   Object.entries(fields).forEach(([key, field]) => {
     if (key !== "period") field.addEventListener(key === "search" ? "input" : "change", () => {
       if (key === "institution") {

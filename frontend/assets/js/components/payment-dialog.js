@@ -4,26 +4,12 @@
 
   let activeTaskId = "";
 
-  function template() {
-    return `<div class="workflow-modal" id="shared-payment-modal" hidden>
-      <section class="workflow-dialog" role="dialog" aria-modal="true" aria-labelledby="shared-payment-title">
-        <div class="dialog-heading"><div><h2 id="shared-payment-title">Payment update</h2><p id="shared-payment-task"></p></div><button type="button" class="modal-x" data-close-shared-payment aria-label="Close">×</button></div>
-        <form id="shared-payment-form" class="stack-form">
-          <div class="form-grid"><div class="field"><label for="shared-payment-estimated">Estimated fee</label><input id="shared-payment-estimated" inputmode="decimal" /></div><div class="field"><label for="shared-payment-agreed">Agreed fee</label><input id="shared-payment-agreed" inputmode="decimal" /></div><div class="field"><label for="shared-payment-received">Amount received</label><input id="shared-payment-received" inputmode="decimal" /></div><div class="field"><label for="shared-payment-due">Payment due date</label><input id="shared-payment-due" type="date" /><small>Standard period: seven calendar days after completion.</small></div></div>
-          <div class="payment-summary"><span>Outstanding</span><strong id="shared-payment-outstanding">N/A</strong><small id="shared-payment-state">Not Set</small></div>
-          <p id="shared-payment-warning" class="payment-warning" hidden></p>
-          <div class="field"><label for="shared-payment-note">Work note</label><textarea id="shared-payment-note" placeholder="Optional note appended to the task activity"></textarea></div>
-          <p class="form-error" id="shared-payment-error" role="alert" hidden></p>
-          <div class="dialog-actions"><button class="secondary" type="button" data-close-shared-payment>Cancel</button><button class="secondary" type="submit">Save update</button><span class="disabled-action"><button class="primary" id="shared-close-request" type="button" disabled>Close request</button><small id="shared-close-reason">Complete the report and settle payment before closing.</small></span></div>
-        </form>
-      </section>
-    </div>`;
-  }
-
   function modal() {
     let element = document.getElementById("shared-payment-modal");
     if (!element) {
-      document.body.insertAdjacentHTML("beforeend", template());
+      const host = document.createElement("div");
+      document.body.append(host);
+      ValuxUI.paintPaymentDialog(host);
       element = document.getElementById("shared-payment-modal");
       bindModal(element);
     }

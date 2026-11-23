@@ -191,21 +191,13 @@
     const card = element("revaluation-links");
     const list = element("revaluation-links-list");
     const title = element("revaluation-links-title");
-    const taskLink = (id) => `<a class="quiet-link" href="/tasks/detail?id=${encodeURIComponent(id)}">${WorkflowUI.escape(id)}</a>`;
     card.hidden = !["valuation", "revaluation"].includes(task.reportGroup);
     if (task.reportGroup === "revaluation" && task.linkedValuationId) {
-      const source = task.linkedValuationId;
-      const artifact = task.linkedValuationArtifactId;
       title.textContent = "Original valuation";
-      list.innerHTML = `<p>${taskLink(source)}${artifact ? ` · <a class="quiet-link" href="/api/tasks/${encodeURIComponent(source)}/artifacts/${encodeURIComponent(artifact)}/download">Download source report</a>` : ""}</p>${task.revaluationManualEntry ? "<p>Manual entry required for details available only in the original report.</p>" : ""}`;
+      ValuxUI.paintRevaluations(list, task);
     } else if (task.reportGroup === "valuation") {
-      const children = task.revaluations || [];
-      title.textContent = `Re-Valuations (${children.length})`;
-      list.innerHTML = children.length ? `<table class="revaluation-history" aria-labelledby="revaluation-links-title">
-        <thead><tr><th scope="col">Task ID</th><th scope="col">Assigned on</th><th scope="col">Status</th></tr></thead>
-        <tbody>${children.map((child) => `<tr><td>${taskLink(child.id)}</td><td>${WorkflowUI.date(child.assignedDate)}</td><td><span class="status-badge ${WorkflowUI.statusClass(child.status)}">${WorkflowUI.escape(child.status)}</span></td></tr>`).join("")}</tbody>
-      </table>`
-        : "<p>No linked Re-Valuations.</p>";
+      title.textContent = `Re-Valuations (${(task.revaluations || []).length})`;
+      ValuxUI.paintRevaluations(list, task);
     }
   }
 
@@ -224,12 +216,7 @@
 
   // Assignment detail rendering and page-level event handlers.
   function renderBadges() {
-    const assigneeLabel = task.assignee ? `Assigned to ${WorkflowUI.escape(task.assignee)}` : "Unassigned";
-    const assignee = assignmentAccess()
-      ? `<button type="button" class="soft-badge assignee-badge-action" id="assignment-badge">${assigneeLabel}<span aria-hidden="true">›</span></button>`
-      : `<span class="soft-badge">${assigneeLabel}</span>`;
-    element("task-badges").innerHTML = `<span class="status-badge ${WorkflowUI.statusClass(task.status)}">Task: ${WorkflowUI.escape(task.status)}</span><span class="soft-badge">${WorkflowUI.escape(task.priority)} priority</span>${assignee}<span class="payment-badge ${WorkflowUI.paymentClass(task.payment.status)}">Payment: ${WorkflowUI.escape(task.payment.status)}</span>`;
-    element("assignment-badge")?.addEventListener("click", openAssignmentModal);
+    ValuxUI.paintTaskBadges(element("task-badges"), task, assignmentAccess(), openAssignmentModal);
   }
 
   function render() {
@@ -255,7 +242,7 @@
       const preparationLabel = { online: "Online", retrospective: "Retrospective" }[task.ownPreparationSource];
       if (preparationLabel) assignmentDetails.splice(6, 0, ["Report preparation", preparationLabel]);
     }
-    element("assignment-details").innerHTML = assignmentDetails.map(([label, value]) => `<div><dt>${WorkflowUI.escape(label)}</dt><dd>${WorkflowUI.escape(value)}</dd></div>`).join("");
+    ValuxUI.paintPairs(element("assignment-details"), assignmentDetails);
 
     renderRevaluationLinks();
     configureReportLink();
@@ -270,7 +257,7 @@
     element("payment-status").textContent = summary.status;
     element("payment-warning").hidden = !summary.outsideStandard;
     element("payment-warning").textContent = summary.outsideStandard ? "This payment due date is beyond the standard seven-day period after completion." : "";
-    element("activity-list").innerHTML = task.activity.slice().reverse().map((event) => `<li><span class="activity-dot activity-${WorkflowUI.escape(event.type)}"></span><div><p>${WorkflowUI.escape(event.text)}</p><small>${WorkflowUI.escape(event.author)} · ${WorkflowUI.date(event.createdAt)}</small></div></li>`).join("");
+    ValuxUI.paintActivity(element("activity-list"), task.activity);
     element("reopen-title").textContent = `Reopen ${task.status.toLowerCase()} task`;
     element("reopen-artifact-message").textContent = `The task returns to In Progress and requires a newly generated or attached ${TaskStore.requiredArtifactLabel(task)} before completion.`;
     if (task.reportGroup === "estimation" && task.linkedReports?.length) {

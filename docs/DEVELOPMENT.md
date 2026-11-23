@@ -2,6 +2,17 @@
 
 ## Run automated checks
 
+For source-mounted development and frontend checks, build the Assignments
+controls after installing the locked frontend dependencies:
+
+```sh
+npm --prefix frontend/ui ci --ignore-scripts
+npm --prefix frontend/ui run build
+```
+
+Docker builds run the same steps in a Node build stage. The runtime image serves
+the resulting browser bundle from ValuX's existing origin.
+
 The Python report checks and the task-store check are executable regression
 scripts. Run them directly as shown; they are not collected by a test runner.
 
@@ -297,3 +308,45 @@ cannot guarantee Google's Safe Browsing or hosting-abuse decisions. A cleared
 Search Console report does not clear a separate Cloud hosting suspension.
 Use the published application URL for `APP_BASE_URL` so recovery links resolve;
 retain any existing hosting appeal rather than submitting duplicate appeals.
+
+### WhatsApp rollout
+
+The default mode is disabled. Apply the additive business migration before
+enabling the feature. For local checks only, use `WHATSAPP_MODE=mock`,
+a loopback `APP_BASE_URL` such as `http://127.0.0.1:4180`, and Mailpit.
+The mock code is delivered only to the local Mailpit address
+`whatsapp-verification@valux.test`. `WHATSAPP_REQUIRE_VERIFICATION=true` gates
+workspace access until a number is verified. Leave the requirement off during
+the live provider pilot.
+
+Live mode requires `WHATSAPP_GRAPH_VERSION`, `WHATSAPP_SENDER_ID`,
+`WHATSAPP_TEMPLATE_LANGUAGE`, `WHATSAPP_OTP_TEMPLATE` and
+`WHATSAPP_ASSIGNMENT_TEMPLATE`. Supply `WHATSAPP_ACCESS_TOKEN`,
+`WHATSAPP_APP_SECRET` and `WHATSAPP_VERIFY_TOKEN` through Secret Manager.
+Use the approved Copy Code authentication template. The assignment template's
+body variables, in order, are report type, institution and branch, assigned
+date, due date and masked applicant. The URL button appends its variable
+to `<APP_BASE_URL>/alerts/assignment/`. Test both templates with the actual
+sender before requiring the verification step for either role.
+
+Register `/api/integrations/whatsapp/webhook` for signed message events and
+status updates. Keep the setup verification token out of request log exports,
+including the Cloud Run request URL. For manual opt-outs received through an
+operator, use `python -m backend.app.whatsapp.worker --opt-out-user USER_ID`
+under the app's operator context.
+
+Run `python -m backend.app.whatsapp.worker` as a separate Cloud Run service
+from the same image. Require authentication at Cloud Run and grant
+`roles/run.invoker` only to its Scheduler service account. The Scheduler uses
+OIDC and calls `POST /dispatch`. Use a separate worker database login with
+schema usage, the required reads of tasks and assignment contacts, the
+`auth.users` ID and status columns, and read/update access to the WhatsApp
+outbox and challenges. Supply the phone encryption key and Meta sender settings
+under the worker's service account. Keep the worker private and verify that
+unauthenticated requests fail before scheduling it. Run the batch locally
+with `python -m backend.app.whatsapp.worker --once`.
+
+Disable mandatory verification using the WhatsApp-capable revision before
+rolling back to a revision predating enrollment. This allows any activation
+in progress to finish when the user returns. Pause the worker before turning
+off the live provider.

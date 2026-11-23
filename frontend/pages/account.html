@@ -42,13 +42,33 @@
           <div class="account-session-note"><h3>Session limits</h3><p>You’re signed out after 1 hour of inactivity or 24 hours from sign-in. Activity extends the inactivity timer.</p></div>
         </section>
       </div>
+      <section id="whatsapp-settings" class="work-card account-card account-whatsapp-card" aria-labelledby="whatsapp-heading" hidden>
+        <h2 id="whatsapp-heading">WhatsApp assignment alerts</h2>
+        <p id="whatsapp-status" class="field-help"></p>
+        <button id="whatsapp-change" type="button" class="secondary">Manage number</button>
+        <button id="whatsapp-stop" type="button" class="secondary" hidden>Turn off alerts</button>
+        <form id="whatsapp-number-form" class="account-password-form" hidden>
+          <label>WhatsApp number with country code<input name="number" type="tel" autocomplete="tel" maxlength="28" required placeholder="+91" /></label>
+          <label>Authenticator code<input name="authenticator" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required /></label>
+          <label class="whatsapp-opt-in"><input name="alerts" type="checkbox" /> Send SLN assignment alerts to this number on WhatsApp.</label>
+          <p class="field-help">Sending the code requests one WhatsApp message. We switch numbers only after verification.</p>
+          <button type="submit" class="primary">Send verification code</button>
+        </form>
+        <form id="whatsapp-verify-form" class="account-password-form" hidden>
+          <label>WhatsApp code<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required /></label>
+          <button type="submit" class="primary">Verify number</button>
+        </form>
+        <p id="whatsapp-message" class="account-message" role="status"></p>
+      </section>
     </main>
     <script src="/assets/js/core/business-api.js"></script>
     <script src="/assets/js/core/time.js"></script>
     <script src="/assets/js/components/report-calculator.js"></script>
     <script src="/assets/js/core/app-shell.js"></script>
+    <script src="/assets/built/assignment-filters.js"></script>
     <script src="/assets/js/components/account-chrome.js"></script>
     <script src="/assets/js/core/workflow-access.js"></script>
     <script src="/assets/js/pages/account.js"></script>
+    <script src="/assets/js/pages/account-whatsapp.js"></script>
   </body>
 </html>

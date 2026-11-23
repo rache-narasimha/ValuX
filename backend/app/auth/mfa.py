@@ -147,6 +147,8 @@ def verify_enrollment(session, code: str) -> list[str]:
 
 
 def confirm_recovery_codes(session) -> str:
+    from ..whatsapp.contacts import finish_authentication
+
     if session["scope"] != "activation" or session["activation_step"] != "recovery_codes":
         raise AuthError("Recovery-code confirmation is not available.", 403)
     with connection() as database:
@@ -154,15 +156,11 @@ def confirm_recovery_codes(session) -> str:
             "SELECT * FROM auth.users WHERE id = %s FOR UPDATE", (session["user_id"],)
         ).fetchone()
         if user["email_verified_at"]:
-            database.execute(
-                "UPDATE auth.sessions SET scope = 'full', activation_step = NULL WHERE id = %s",
-                (session["id"],),
+            if user["status"] == "disabled":
+                raise AuthError("This account is disabled.", 403, "disabled")
+            return finish_authentication(
+                database, session["user_id"], session["id"], activate=user["status"] != "active",
             )
-            database.execute(
-                "UPDATE auth.users SET status = 'active', updated_at = NOW() WHERE id = %s",
-                (session["user_id"],),
-            )
-            return "complete"
         database.execute(
             "UPDATE auth.sessions SET activation_step = 'email_setup' WHERE id = %s",
             (session["id"],),
@@ -170,10 +168,17 @@ def confirm_recovery_codes(session) -> str:
     return "email_setup"
 
 
-def verify_login(session, code: str) -> dict[str, Any]:
+def verify_login(session, code: str) -> tuple[dict[str, Any], str]:
+    from ..whatsapp.contacts import finish_authentication
+
     if session["scope"] != "mfa" or session["activation_step"] != "mfa_login":
         raise AuthError("MFA verification is not available for this session.", 403)
     with connection() as database:
+        user = database.execute(
+            "SELECT * FROM auth.users WHERE id = %s FOR UPDATE", (session["user_id"],)
+        ).fetchone()
+        if not user or user["status"] not in {"active", "activating"} or not user["email_verified_at"]:
+            raise AuthError("This account is not available for sign-in.", 403, "inactive")
         _assert_session_available(database, session)
         credential = database.execute(
             "SELECT * FROM auth.mfa_credentials WHERE user_id = %s AND confirmed_at IS NOT NULL",
@@ -187,16 +192,12 @@ def verify_login(session, code: str) -> dict[str, Any]:
             audit(database, "mfa_login_failed", session["user_id"])
             database.commit()
             raise AuthError("That authenticator code is incorrect.", 401, "invalid_totp")
-        database.execute(
-            "UPDATE auth.sessions SET scope = 'full', activation_step = NULL WHERE id = %s",
-            (session["id"],),
+        next_step = finish_authentication(
+            database, session["user_id"], session["id"], activate=user["status"] != "active",
         )
         _clear_failures(database, session["id"])
-        user = database.execute(
-            "SELECT * FROM auth.users WHERE id = %s", (session["user_id"],)
-        ).fetchone()
         audit(database, "login_succeeded", session["user_id"])
-        return public_user(user)
+        return public_user(user), next_step
 
 
 def use_recovery_code(session, code: str) -> str:

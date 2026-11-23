@@ -157,7 +157,7 @@ assert.match(taskListSource, /\["", "All time"\]/, "Assignment lists must label 
 assert.match(taskListSource, /function weekOptions\(\)/, "Assignment lists must provide selectable week ranges");
 assert.match(taskListSource, /index < 52/, "Assignment weekly filters must offer the current and preceding 51 weeks");
 assert.match(taskListSource, /ValuxTime\.todayDate\(\)/, "Assignment periods must use the tenant calendar");
-assert.match(taskListSource, /type="month"/, "Assignment lists must provide a month picker beyond the current month");
+assert.match(taskListSource, /type:\s*"month"/, "Assignment lists must provide a month picker beyond the current month");
 
 const newTaskPage = fs.readFileSync(path.join(root, "frontend", "pages", "new-task.html"), "utf8");
 const newTaskSource = fs.readFileSync(path.join(root, "frontend", "assets", "js", "pages", "new-task.js"), "utf8");
@@ -176,9 +176,9 @@ assert.doesNotMatch(institutionStoreSource, /localStorage|sessionStorage/, "Inst
 const appShellSource = fs.readFileSync(path.join(root, "frontend", "assets", "js", "core", "app-shell.js"), "utf8");
 assert.doesNotMatch(appShellSource, /sln\.workflow\.tasks/, "The shared shell must not read the retired browser task repository");
 
-const workflowUiSource = fs.readFileSync(path.join(root, "frontend", "assets", "js", "components", "workflow-ui.js"), "utf8");
-assert.match(workflowUiSource, /function openTaskControl\(task\)/, "Task rows must use one consistent open-task control");
-assert.match(workflowUiSource, /class="task-row-action"/, "Dashboard rows must reserve a consistent action column");
+const taskViewsSource = fs.readFileSync(path.join(root, "frontend", "ui", "task-views.js"), "utf8");
+assert.match(taskViewsSource, /function rowAction\(task\)/, "Task rows must use one consistent open-task control");
+assert.match(taskViewsSource, /class: "task-row-action"/, "Dashboard rows must reserve a consistent action column");
 
 const estimationController = fs.readFileSync(
   path.join(root, "frontend", "assets", "js", "pages", "estimation.js"),

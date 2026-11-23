@@ -151,10 +151,14 @@
         element("status").textContent = reportErrorMessage(error, "Other estimation reports could not be loaded.");
       }
     }
-    select.innerHTML = '<option value="">Select an estimation report</option>'
-      + `<option value="${practiceEstimate.id}">${escape(practiceEstimate.title)} · ${currency(practiceEstimate.estimationSummary.totalEstimatedCost)}</option>`
-      + candidates.map((candidate) => `<option value="${escape(candidate.id)}">${escape(candidate.id)} · ${escape(candidate.customerName)} · ${escape(currency(candidate.estimationSummary?.totalEstimatedCost || 0))}</option>`).join("");
-    select.value = state.linkedEstimationId;
+    ValuxUI.paintReportOptions(select, [
+      { value: "", label: "Select an estimation report" },
+      { value: practiceEstimate.id, label: `${practiceEstimate.title} · ${currency(practiceEstimate.estimationSummary.totalEstimatedCost)}` },
+      ...candidates.map(candidate => ({
+        value: candidate.id,
+        label: `${candidate.id} · ${candidate.customerName} · ${currency(candidate.estimationSummary?.totalEstimatedCost || 0)}`,
+      })),
+    ], state.linkedEstimationId);
   }
 
   function loadProgressHistory(estimationId) {
@@ -180,11 +184,17 @@
   }
 
   function renderComponents() {
-    element("component-rows").innerHTML = state.components.length ? state.components.map((component, index) => {
+    const rows = state.components.map(component => {
       const current = calculation(component);
-      const completedValue = component.manualCompleted ? component.completedCost : current.calculated;
-      return `<tr><td>${index + 1}</td><td>${escape(component.label)}</td><td>${escape(current.estimated.toFixed(2))}</td><td><input type="number" min="0" max="100" step="any" value="${escape(component.completionPercent)}" data-progress-percent="${index}"${component.percentFromPreviousReport && component.completionPercent !== "" ? " data-tab-autofilled" : ""} aria-label="Completion percentage for ${escape(component.label)}"></td><td><input type="number" min="0" max="${escape(current.estimated)}" step="any" value="${escape(completedValue)}" data-progress-completed="${index}"${component.manualCompleted ? "" : " data-tab-autofilled"} aria-label="Completed cost for ${escape(component.label)}"></td><td data-progress-balance>${escape(current.balance.toFixed(2))}</td><td><button type="button" class="reset-calculation" data-reset-completed="${index}" ${component.manualCompleted ? "" : "hidden"}>Use calculated</button></td></tr>`;
-    }).join("") : '<tr><td colspan="7">No linked estimation components are available.</td></tr>';
+      return {
+        label: component.label, percent: component.completionPercent,
+        inherited: component.percentFromPreviousReport && component.completionPercent !== "",
+        estimate: current.estimated,
+        completed: component.manualCompleted ? component.completedCost : current.calculated,
+        manual: component.manualCompleted, balance: current.balance,
+      };
+    });
+    ValuxUI.paintProgressComponents(element("component-rows"), rows);
     renderComponentTotals();
   }
 
@@ -200,8 +210,7 @@
   }
 
   function renderReleases() {
-    const releases = state.bank.releases || [];
-    element("release-rows").innerHTML = releases.length ? releases.map((release, index) => `<div class="release-row"><div class="field"><label for="release-date-${index}">Release date</label><input id="release-date-${index}" type="date" value="${escape(release.date || "")}" data-release-date="${index}"></div><div class="field"><label for="release-amount-${index}">Amount (Rs.)</label><input id="release-amount-${index}" type="number" min="0" step="any" value="${escape(release.amount ?? "")}" data-release-amount="${index}"></div><button type="button" class="secondary" data-remove-release="${index}">Remove</button></div>`).join("") : '<p class="hint">No previous loan releases entered.</p>';
+    ValuxUI.paintBankReleases(element("release-rows"), state.bank.releases || []);
     renderBankCalculations();
   }
 
@@ -213,7 +222,8 @@
     const eligible = marginPercent || String(state.bank.marginPercent || "").trim() ? Math.max(0, current.totalValue - margin) : null;
     const instalment = eligible === null ? null : Math.max(0, eligible - released);
     const cards = [["Cost incurred", current.totalValue], ["Margin", marginPercent || String(state.bank.marginPercent || "").trim() ? margin : null], ["Loan eligible", eligible], ["Already released", released], ["Instalment eligible now", instalment]];
-    element("bank-calculations").innerHTML = cards.map(([label, value]) => `<article><span>${escape(label)}</span><strong>${value === null ? "—" : escape(currency(value))}</strong></article>`).join("");
+    ValuxUI.paintBankCalculations(element("bank-calculations"), cards.map(([label, value]) =>
+      [label, value === null ? "—" : currency(value)]));
   }
 
   function canChoosePreparation() {
@@ -237,8 +247,9 @@
     const keys = sections();
     state.current = Math.max(0, Math.min(index, keys.length - 1));
     document.querySelectorAll("[data-section]").forEach((panel) => panel.classList.toggle("active", panel.dataset.section === keys[state.current]));
-    element("nav").innerHTML = keys.map((key, itemIndex) => `<button type="button" data-section-index="${itemIndex}" class="${itemIndex === state.current ? "active" : ""}">${escape(sectionLabels[key])}</button>`).join("");
-    element("nav").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => showSection(Number(button.dataset.sectionIndex), true)));
+    ValuxUI.paintReportNav(element("nav"), keys.map(key => ({ label: sectionLabels[key] })), {
+      active: state.current, onSelect: itemIndex => showSection(itemIndex, true),
+    });
     element("progress").textContent = `Section ${state.current + 1} of ${keys.length}`;
     element("previous").disabled = state.current === 0;
     element("next").disabled = state.current === keys.length - 1;
@@ -271,16 +282,16 @@
     const current = currentTask();
     box.hidden = !current?.estimationCorrectionPending && !current?.estimationReviewRequired;
     if (box.hidden) return;
-    if (current.estimationCorrectionPending) {
-      box.textContent = "The linked estimation is being revised. Finalize it first, then reload this report to review updated component totals.";
-      return;
-    }
-    const notes = state.components.filter((item) => item.estimationReviewReason).map((item) => `${item.label}: ${item.estimationReviewReason}`);
-    const removed = state.details.estimationRemovedComponents || [];
-    box.innerHTML = `<strong>Review the revised estimation</strong><p>Completion percentages were retained. Completed amounts now use the revised estimates. Review manual amounts and changed components.</p>${notes.length ? `<p>${notes.map(escape).join("; ")}</p>` : ""}${removed.length ? `<p>Removed components: ${removed.map(escape).join(", ")}</p>` : ""}<label><input type="checkbox" id="estimation-revision-reviewed" ${state.details.estimationRevisionReviewed === current.linkedEstimationSnapshotId ? "checked" : ""}> I reviewed the revised component totals and completion amounts.</label>`;
-    element("estimation-revision-reviewed").addEventListener("change", (event) => {
-      state.details.estimationRevisionReviewed = event.target.checked ? current.linkedEstimationSnapshotId : "";
-      markDirty(); scheduleSave();
+    ValuxUI.paintEstimateCorrection(box, {
+      pending: current.estimationCorrectionPending,
+      notes: state.components.filter(item => item.estimationReviewReason).map(item => `${item.label}: ${item.estimationReviewReason}`),
+      removed: state.details.estimationRemovedComponents || [],
+      reviewed: state.details.estimationRevisionReviewed === current.linkedEstimationSnapshotId,
+      onReview(event) {
+        state.details.estimationRevisionReviewed = event.target.checked ? current.linkedEstimationSnapshotId : "";
+        markDirty();
+        scheduleSave();
+      },
     });
   }
 
@@ -448,7 +459,7 @@
     if (!element("processing").hidden) return;
     const issues = validate();
     element("validation-message").hidden = !issues.length;
-    element("validation-message").innerHTML = issues.length ? `<strong>Complete these items first</strong><ul>${issues.map((issue) => `<li>${escape(issue)}</li>`).join("")}</ul>` : "";
+    ValuxUI.paintReportIssues(element("validation-message"), issues, "Complete these items first");
     if (issues.length) { showSection(sections().indexOf("photos"), true); return; }
     if (mode === "generate" && !previewId) {
       window.alert("Please preview the latest report before downloading the DOCX.");
@@ -498,21 +509,19 @@
   }
 
   function renderPhotos() {
-    element("photo-preview").innerHTML = state.photos.map((photo, index) => `<figure><img src="${escape(photo.data)}" alt="Site photograph ${index + 1}"><button type="button" data-remove-photo="${index}" aria-label="Remove photograph ${index + 1}">×</button></figure>`).join("");
-    document.querySelectorAll("[data-remove-photo]").forEach((button) => button.addEventListener("click", () => {
+    const options = { progress: true };
+    ValuxUI.paintReportPhotos(element("photo-preview"), state.photos, (index) => {
       if (!confirmReportInvalidation()) return;
-      state.photos.splice(Number(button.dataset.removePhoto), 1);
+      state.photos.splice(index, 1);
       renderPhotos();
       reportInputChanged();
-    }));
-    const mapPreview = element("map-preview");
-    mapPreview.innerHTML = state.map ? `<img src="${escape(state.map.data)}" alt="Location map preview"><button type="button" class="secondary" data-remove-map>Remove map</button>` : "";
-    mapPreview.querySelector("[data-remove-map]")?.addEventListener("click", () => {
+    }, options);
+    ValuxUI.paintReportMap(element("map-preview"), state.map, "Location map preview", () => {
       if (!confirmReportInvalidation()) return;
       state.map = null;
       renderPhotos();
       reportInputChanged();
-    });
+    }, options);
   }
 
   function wire() {

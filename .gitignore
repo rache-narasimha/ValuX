@@ -3,6 +3,8 @@
 development-credentials.txt
 __pycache__/
 *.pyc
+node_modules/
+frontend/assets/built/
 ~$*.xlsx
 outputs/generated_reports/*
 outputs/test_artifacts/*

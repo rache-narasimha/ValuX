@@ -128,12 +128,7 @@ function renderDocuments(saved = {}) {
   const existing = { ...collectValues(), ...saved };
   host.innerHTML = "";
   for (let index = 1; index <= state.documentCount; index++) {
-    const card = document.createElement("div");
-    card.className = "document-card";
-    const isLast = index === state.documentCount;
-    const addIcon = window.AppShell?.icons?.add || "+";
-    const trashIcon = window.AppShell?.icons?.trash || "×";
-    card.innerHTML = `<div class="document-head"><h4>Document ${index}</h4><div class="document-actions">${isLast ? `<button type="button" class="document-icon-button add-document" data-add-document title="Add another document" aria-label="Add another document">${addIcon}</button>` : ""}${index > 1 ? `<button type="button" class="document-icon-button remove-document" data-remove-document="${index}" title="Remove document ${index}" aria-label="Remove document ${index}">${trashIcon}</button>` : ""}</div></div><div class="grid"></div>`;
+    const card = ValuxUI.valuationDocumentCard(index, index === state.documentCount);
     const grid = card.querySelector(".grid");
     const typeId = `documents.${index}.type`,
       customId = `documents.${index}.custom_type`,
@@ -250,12 +245,10 @@ function addDocumentSection(panel) {
 }
 function addSubgroup(panel, label, fields, group) {
   if (!fields.length) return;
-  const block = document.createElement("section");
-  block.className = "subgroup";
   const fillablePrefix = ["extra.", "amenity.", "misc.", "service."].find((prefix) =>
     fields.some((field) => field.id.startsWith(prefix)),
   );
-  block.innerHTML = `<div class="subgroup-heading"><h3>${label}</h3>${fillablePrefix ? '<button type="button" class="secondary fill-included">Fill blank items as Included</button>' : ""}</div><div class="grid"></div>`;
+  const block = ValuxUI.valuationGroup(label, Boolean(fillablePrefix), true);
   fields.forEach((f) => {
     const control = f.calculated && f.id !== "abstract.machinery"
       ? calculatedField(f.id, f.label)
@@ -474,10 +467,7 @@ function renderFloors(saved = {}) {
   const existing = { ...collectValues(), ...saved };
   host.innerHTML = "";
   for (let i = 1; i <= state.floorCount; i++) {
-    const card = document.createElement("div");
-    card.className = "floor-card";
-    card.innerHTML = `<div class="floor-head"><h4>${i === 1 ? "Ground floor" : `Additional floor ${i - 1}`}</h4>${i > 1 ? `<button type="button" class="remove-floor" data-remove-floor="${i}">Remove</button>` : ""}</div><div class="grid"></div>`;
-    card.querySelector("h4").textContent = existing[`building.floors.${i}.name`] || floorName(i);
+    const card = ValuxUI.valuationFloorCard(i, existing[`building.floors.${i}.name`] || floorName(i));
     const grid = card.querySelector(".grid");
     [
       { key: "name", label: "Floor name" },
@@ -564,41 +554,14 @@ function addMedia(panel) {
   };
 }
 function renderPreviews() {
-  const p = byId("photo-preview");
-  if (p) {
-    p.classList.remove("one-column");
-    p.classList.add("three-columns");
-    p.replaceChildren(...state.photos.map((photo, index) => {
-      const tile = document.createElement("div");
-      tile.className = "photo-tile";
-      const image = document.createElement("img");
-      image.src = photo.data;
-      image.alt = photo.name || `Property photograph ${index + 1}`;
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.dataset.removePhoto = String(index);
-      remove.setAttribute("aria-label", `Remove ${photo.name || `photograph ${index + 1}`}`);
-      remove.textContent = "Remove";
-      tile.append(image, remove);
-      return tile;
-    }));
-    p.querySelectorAll("[data-remove-photo]").forEach(
-      (button) =>
-        (button.onclick = () => {
-          if (!confirmReportInvalidation()) return;
-          state.photos.splice(Number(button.dataset.removePhoto), 1);
-          renderPreviews();
-          markDirty();
-          saveDraft();
-        }),
-    );
-  }
-  const m = byId("map-preview");
-  if (m)
-    m.innerHTML = state.map
-      ? `<div class="media-preview-item"><img src="${state.map.data}" alt="Map preview"><button type="button" class="secondary remove-map">Remove map</button></div>`
-      : "";
-  m?.querySelector(".remove-map")?.addEventListener("click", () => {
+  ValuxUI.paintReportPhotos(byId("photo-preview"), state.photos, (index) => {
+    if (!confirmReportInvalidation()) return;
+    state.photos.splice(index, 1);
+    renderPreviews();
+    markDirty();
+    saveDraft();
+  });
+  ValuxUI.paintReportMap(byId("map-preview"), state.map, "Map preview", () => {
     if (!confirmReportInvalidation()) return;
     state.map = null;
     const upload = byId("map-upload");
@@ -926,10 +889,7 @@ async function init() {
         practiceChanged: async (value) => { state.practiceOffline = value; await persistDraftNow(); },
       });
     } else {
-      panel = document.createElement("div");
-      panel.className = "panel";
-      panel.dataset.group = section.id;
-      panel.innerHTML = `<h2>${section.label}</h2>`;
+      panel = ValuxUI.valuationPanel(section.label, { "data-group": section.id });
     }
     if (section.id === "setup") {
       if (revaluation) RetrospectiveValuation.displayRevaluationSource(panel, currentTask());
@@ -964,13 +924,8 @@ async function init() {
     if (section.id === "property") renderDocuments(initialValues);
     if (section.id === "building_floors") renderFloors(initialValues);
     state.sections.push(panel);
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = section.label;
-    b.dataset.sectionIndex = index;
-    b.onclick = () => show(index);
-    byId("nav").append(b);
   });
+  ValuxUI.paintReportNav(byId("nav"), sectionPlan, { onSelect: show });
   const valuationPanel = state.sections[sectionPlan.findIndex((section) => section.id === "valuation")],
     abstractBlock = valuationPanel.querySelector(".subgroup");
   if (abstractBlock) {

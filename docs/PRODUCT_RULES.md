@@ -843,7 +843,9 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
 - Activation requires a permanent password, authenticator-app enrollment,
   recovery-code acknowledgement, and verified recovery email.
 - An account is not fully activated without a verified recovery email.
-- Once active, users may sign in with User ID or verified email.
+- Once active, users may sign in with User ID or verified email. Where WhatsApp
+  is enabled, they may also use their verified mobile number with its country
+  code. Alert consent is independent of sign-in.
 - Every fresh login requires TOTP. There is no trusted-device bypass under the
   current policy.
 - Passwords must satisfy the configured strength policy and none of the last 5
@@ -895,6 +897,22 @@ Unassigned -> In Progress -> On Hold -> In Progress -> Completed -> Closed
   Repeated/no-op updates and ordinary work notes do not create notifications.
 - Notification polling runs only on visible pages, approximately every 30 seconds.
   These are in-app notifications, without browser push, sound or notification emails.
+- When the WhatsApp verification requirement is enabled, new and existing CEO
+  and Employee accounts verify one WhatsApp number before accessing the
+  workspace. The verification code is solely for that number. Password and
+  authenticator sign-in, recovery codes and assisted recovery retain their
+  existing purposes.
+- Assignment alerts are a separate optional consent. Only new assignments and
+  transfers to another active, consenting assignee queue a WhatsApp alert.
+  Messages contain report type, institution/branch, assigned and due dates,
+  a masked applicant label and a recipient-bound sign-in link. The applicant's
+  full name, task code, property, financial information and notes stay in ValuX.
+- My Account allows a verified number to be replaced using a fresh authenticator
+  code and a verification code to the new number. Verification replaces the old
+  number and requires fresh consent to resume alerts. Opting out in the app,
+  through WhatsApp, or via the operator cancels queued alerts while preserving
+  account access and in-app notifications. Provider failures do not undo task
+  changes.
 
 ## 9. Current deferred scope
 

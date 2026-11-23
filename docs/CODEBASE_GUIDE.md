@@ -9,10 +9,14 @@ The approved durable business-data rollout is tracked separately in
 
 ## Read this first
 
-The application is intentionally a small, dependency-light Python web server
-and browser JavaScript application. It does not use a JavaScript bundler or
-framework. Browser scripts communicate through documented `window.*` globals,
-and the order in which a page loads scripts is therefore significant.
+The application serves its pages and API through FastAPI and Uvicorn.
+The dashboard charts and period picker, assignment filters and rows, task
+detail sections, shared controls, and report-form views use Vue built by Vite
+from `frontend/ui/`. Report views include valuation schema fields, document and
+floor cards, report navigation and media, Progress/Completion assessment and
+bank rows, and Estimation setup, worksheets, and preview. Existing page
+controllers still own data, permissions, calculations, and report actions. Load the built bundle before
+`account-chrome.js` and any page controller that calls `ValuxUI`.
 
 Before changing a feature:
 
@@ -34,7 +38,7 @@ Before changing a feature:
 | Change authenticator behavior | `backend/app/auth/mfa.py` | `security.py`, auth migrations |
 | Change password reuse rules | `backend/app/auth/password_policy.py` | `config.py`, `security.py` |
 | Change durable business schema or grants | `backend/app/persistence/migrations.py` | `persistence/migrations/`, `backend/app/migrations.py` |
-| Add or change a report field | `resources/<type>/form_schema.json` | matching page controller and mapping |
+| Add or change a report field | `resources/<type>/form_schema.json` | matching page controller, mapping, and `frontend/ui/report-views.js` |
 | Change report placeholder placement | `resources/<type>/template_mapping.json` | `backend/app/valuation/ooxml.py` |
 | Change calculations or depreciation | `backend/app/valuation/calculations.py` | `frontend/assets/js/pages/general.js` when the live form also displays it |
 | Change DOCX assembly | `backend/app/valuation/reports.py` | `backend/app/valuation/ooxml.py`, `backend/app/valuation/media.py` |
@@ -46,13 +50,14 @@ Before changing a feature:
 | Change institution persistence | `backend/app/reference/service.py` | `core/institutions.js`, `pages/institution-settings.js` |
 | Change workflow API transport | `backend/app/workflow/routes.py` | `core/business-api.js`, `core/task-store.js` |
 | Change task-linked report drafts or local-file registration | `backend/app/reports/service.py` | `reports/routes.py`, `core/report-data.js` |
-| Change dashboard totals or charts | `frontend/assets/js/components/institution-metrics.js` | `pages/home.js` |
-| Change assignment list/filter behavior | `frontend/assets/js/pages/task-list.js` | `components/workflow-ui.js` |
+| Change dashboard totals or charts | `frontend/assets/js/components/institution-metrics.js` | `pages/home.js`, `frontend/ui/dashboard-views.js` |
+| Change assignment list/filter behavior | `frontend/assets/js/pages/task-list.js` | `frontend/ui/assignment-filters.js`, `frontend/ui/task-views.js`, `frontend/ui/assignment-summary.js` |
 | Change one task's workspace | `frontend/assets/js/pages/task-detail.js` | `components/payment-dialog.js`, `components/employee-picker.js` |
 | Change form workflow context | `frontend/assets/js/components/task-context.js` | general/agricultural page controller |
 | Change global page chrome | `frontend/assets/js/core/app-shell.js` | `workflow.css` imports |
 | Change My Account or its photo/password controls | `backend/app/auth/account.py` | `auth/routes.py`, `pages/account.js`, `workflow/account.css` |
 | Change durable task notifications | `backend/app/workflow/notifications.py` | `workflow/service.py`, `workflow/routes.py`, `components/account-chrome.js` |
+| Change WhatsApp enrollment or alerts | `backend/app/whatsapp/` | `auth/routes.py`, `workflow/notifications.py`, `pages/account-whatsapp.js` |
 | Change report-form visual primitives | `frontend/assets/css/styles.css` | matching page HTML |
 | Change dashboard/task visual styling | `frontend/assets/css/workflow.css` | matching workflow page |
 
@@ -64,7 +69,7 @@ Browser page
   ├─ components/                reusable UI and workflow components
   └─ pages/                     one controller per HTML page
 
-Python HTTP server
+FastAPI / Uvicorn
   ├─ auth/                     users, sessions, MFA, email, migration and CLI
   ├─ workflow/                 authoritative assignments, transitions and payments
   ├─ reference/                durable institution directory
@@ -89,7 +94,7 @@ script tags rather than imports. Their public names are integration boundaries:
 | `WorkflowAccess` | `core/workflow-access.js` | Current role and presentation-level action visibility |
 | `Institutions` / `INSTITUTIONS` | `core/institutions.js` | Institution API adapter and compatibility view |
 | `InstitutionMetrics` | `components/institution-metrics.js` | Workload, finance, period and report-mix aggregation |
-| `WorkflowUI` | `components/workflow-ui.js` | Escaping, display formatting and shared task rows |
+| `WorkflowUI` | `frontend/ui/assignment-filters.js`, `frontend/ui/task-views.js`, `frontend/ui/assignment-summary.js` | Escaping, display formatting and shared task rows |
 | `EmployeePicker` | `components/employee-picker.js` | Assignment/transfer employee selector |
 | `PaymentDialog` | `components/payment-dialog.js` | Completed-task payment popup |
 | `ValuationUI` | `core/shared.js` | Shared report-form controls, parsing, dates and file reading |
@@ -149,7 +154,11 @@ than by HTTP endpoint:
 - `exports/workbook.py`: validates approved browser-table export payloads and
   creates typed, filter-aware A4 Excel workbooks inside the existing Python
   application container.
-- `web/handler.py`: HTTP parsing, validation, static delivery, previews and downloads.
+- `server.py`: FastAPI entry point, startup checks, and database pool lifecycle.
+- `web/handler.py`: adapts each FastAPI request to the existing routes and owns
+  bounded request reads, static delivery, previews and downloads. Database and
+  report work run in FastAPI's thread pool. Existing routes retain their own
+  validation, status codes and security policy.
 - `web/browser_security.py`: response CSP/HSTS and trusted bootstrap-script
   nonces; allows existing first-party/blob report previews without external
   executable sources. Authentication/account permissions remain in `auth/`.
@@ -167,6 +176,9 @@ than by HTTP endpoint:
   Dependant source tags join the current parent method; immutable cost snapshots
   advance only through the explicit reopen/finalize/review correction workflow.
   `workflow/routes.py` is its authenticated HTTP adapter.
+- `whatsapp/`: verified contacts, consent, bounded number verification, assignment
+  outbox, provider API and signed callbacks. A private scheduled worker sends
+  queued messages separately from the task transaction.
 - `reference/service.py`: durable bank/NBFC directory and CEO-only mutations.
 - `reports/service.py`: durable task-linked drafts, task-scoped image files,
   report revisions, generated/uploaded artifacts and immutable estimation

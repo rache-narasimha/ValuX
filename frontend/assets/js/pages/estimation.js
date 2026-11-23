@@ -179,38 +179,40 @@
     return { ...component, buildingConfig, sheets };
   }
 
-  function inputField(id, label, value = "", options = {}) {
-    const attributes = [options.required ? "required" : "", autofilled(value, options.autofilled === true), options.min != null ? `min="${options.min}" step="any"` : "", options.max ? `max="${escapeHtml(options.max)}"` : "", options.placeholder ? `placeholder="${escapeHtml(options.placeholder)}"` : ""].filter(Boolean).join(" ");
-    const control = options.textarea
-      ? `<textarea id="${id}" data-detail="${escapeHtml(options.key || id)}" ${attributes}>${escapeHtml(value)}</textarea>`
-      : `<input id="${id}" data-detail="${escapeHtml(options.key || id)}" type="${options.type || "text"}" value="${escapeHtml(value)}" ${attributes}>`;
-    return `<div class="field ${options.full ? "full" : ""}"><label class="${options.required ? "required" : ""}" for="${id}">${escapeHtml(label)}</label>${control}${options.help ? `<small class="field-help">${escapeHtml(options.help)}</small>` : ""}<small class="field-error" id="${id}-error" hidden></small></div>`;
-  }
-
   function setupPanel() {
-    return `<div class="panel" data-key="setup"><h2>Report Setup</h2><section class="subgroup"><h3>Report details</h3><div class="grid">
-      ${inputField("estimate-date", "Date of Estimation", state.details.estimateDate, { type: "date", required: true, key: "estimateDate" })}
-      ${inputField("place", "Place", state.details.place, { required: true, key: "place" })}
-      ${inputField("applicant-name", "Name of the Applicant", state.details.applicantName, { required: true, key: "applicantName", autofilled: state.details.applicantName === currentTask()?.customerName, help: "Enter the applicant name and place, for example: Customer Name, Adoni." })}
-      ${inputField("work-description", "Name of the Work", state.details.workDescription, { textarea: true, full: true, required: true, key: "workDescription", help: "Enter the overall proposed work without its address. Put the site address in Address of the Work; the report combines them once." })}
-      ${inputField("work-address", "Address of the Work", state.details.workAddress, { textarea: true, full: true, required: true, key: "workAddress" })}
-    </div></section><section class="notice"><strong>Next:</strong> choose Preparation Method. Online entry and an optional workbook template use Property Configuration and Component Selection; retrospective uploads need only the report and reviewed component totals.</section></div>`;
-  }
-
-  function choiceCard(name, value, label, help, checked, disabled = false) {
-    return `<label class="choice-card ${disabled ? "is-disabled" : ""}"><input type="radio" name="${name}" value="${value}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""}><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(help)}</small></span></label>`;
+    const details = state.details;
+    return ValuxUI.estimationSetupPanel([
+      { id: "estimate-date", label: "Date of Estimation", detail: "estimateDate", value: details.estimateDate, type: "date" },
+      { id: "place", label: "Place", detail: "place", value: details.place },
+      { id: "applicant-name", label: "Name of the Applicant", detail: "applicantName", value: details.applicantName,
+        autofilled: details.applicantName === currentTask()?.customerName,
+        help: "Enter the applicant name and place, for example: Customer Name, Adoni." },
+      { id: "work-description", label: "Name of the Work", detail: "workDescription", value: details.workDescription, type: "textarea",
+        help: "Enter the overall proposed work without its address. Put the site address in Address of the Work; the report combines them once." },
+      { id: "work-address", label: "Address of the Work", detail: "workAddress", value: details.workAddress, type: "textarea" },
+    ]);
   }
 
   function configurationPanel() {
     const profile = propertyProfile();
-    const constructionChoices = [["rcc", "RCC roof", "RCC buildings and approved floor sheets."], ["shed", "Shed roof", "Shed halls and shed-roof buildings."], ["hybrid", "Hybrid", "RCC and shed components in one estimate."]];
-    return `<div class="panel" data-key="configuration"><h2>Property Configuration</h2>
-      <section class="subgroup"><h3>Property type</h3><div class="setup-choice-grid">${[["industrial", "Industrial"], ["commercial", "Commercial"], ["residential", "Residential"]].map(([value, label]) => choiceCard("property-type", value, label, PROPERTY_TYPES[value].description, state.propertyType === value)).join("")}</div></section>
-      ${profile ? `<section class="subgroup construction-section"><h3>Construction configuration</h3><div class="setup-choice-grid construction-choice-grid">${constructionChoices.map(([value, label, help]) => choiceCard("construction", value, label, help, state.construction === value, !profile.construction.includes(value))).join("")}</div>${state.propertyType === "residential" ? `<p class="residential-construction-note">Residential templates currently use the approved RCC format only. Shed roof and Hybrid are unavailable for this property type.</p>` : ""}</section>` : ""}
-      ${profile ? `<section class="subgroup"><h3>Property subtype</h3><div class="field"><label class="required" for="property-subtype">Subtype</label><select id="property-subtype" required><option value="">Select subtype</option>${profile.subtypes.map((type) => `<option value="${type.value}" ${state.subtype === type.value ? "selected" : ""}>${escapeHtml(type.label)}</option>`).join("")}</select></div></section>` : ""}
-      ${supportsCentreLineMethod() ? `<section class="subgroup"><h3>Measurement method for RCC components</h3><p class="hint">This changes only detailed measurement rows. Main estimate items and final report sections remain the same.</p><div class="setup-choice-grid measurement-method-grid">${choiceCard("measurement-method", "long_wall_short_wall", "Long Wall / Short Wall", "Enter separate long-wall and short-wall measurements.", selectedMeasurementMethod() === "long_wall_short_wall")}${choiceCard("measurement-method", "centre_line", "Centre Line", state.propertyType === "industrial" ? "Prepare the estimate offline and upload the completed report." : "Enter all-round and centre-wall measurement segments.", selectedMeasurementMethod() === "centre_line")}</div></section>` : ""}
-      <div class="configuration-summary"><p>${profile && state.construction && state.subtype ? `<strong>Selected:</strong> ${escapeHtml(profile.label)} · ${escapeHtml(state.construction.toUpperCase())} · ${escapeHtml(profile.subtypes.find((type) => type.value === state.subtype)?.label || "")}` : "Select property type, construction configuration, and subtype before adding components."}</p></div>
-    </div>`;
+    const types = [["industrial", "Industrial"], ["commercial", "Commercial"], ["residential", "Residential"]]
+      .map(([value, label]) => ({ value, label, help: PROPERTY_TYPES[value].description }));
+    const constructionChoices = [
+      ["rcc", "RCC roof", "RCC buildings and approved floor sheets."],
+      ["shed", "Shed roof", "Shed halls and shed-roof buildings."],
+      ["hybrid", "Hybrid", "RCC and shed components in one estimate."],
+    ].map(([value, label, help]) => ({ value, label, help, disabled: !profile?.construction.includes(value) }));
+    const methods = supportsCentreLineMethod() ? [
+      { value: "long_wall_short_wall", label: "Long Wall / Short Wall",
+        help: "Enter separate long-wall and short-wall measurements." },
+      { value: "centre_line", label: "Centre Line", help: state.propertyType === "industrial"
+        ? "Prepare the estimate offline and upload the completed report."
+        : "Enter all-round and centre-wall measurement segments." },
+    ] : [];
+    return ValuxUI.estimationConfigurationPanel({
+      types, constructionChoices, profile, methods, propertyType: state.propertyType,
+      construction: state.construction, subtype: state.subtype, measurementMethod: selectedMeasurementMethod(),
+    });
   }
 
   function compatibleComponent(definition) { return definition.roofType === "custom" || state.construction === "hybrid" || definition.roofType === state.construction; }
@@ -226,9 +228,15 @@
   }
 
   function reportModePanel() {
-    const mode = state.details.workMode || "";
     const offlineOnly = industrialCentreLine();
-    return `<section class="subgroup report-mode-panel"><h3>Choose preparation method</h3><p class="hint">Choose how the report will be prepared. Your entered component data is retained when changing methods.</p><div class="setup-choice-grid">${choiceCard("work-mode", "online", "Fill online", offlineOnly ? "Industrial Centre Line estimates must be prepared offline." : "Enter measurements here, preview the rendered workbook, then generate the completed Excel report.", mode === "online" && !offlineOnly, offlineOnly)}${choiceCard("work-mode", "offline", "Complete offline and upload", offlineOnly ? "Attach your completed industrial Centre Line report and review its component totals." : "Attach a completed template or an existing report, review component totals, then submit it.", mode === "offline")}</div></section>`;
+    return ValuxUI.estimationPreparationPanel([
+      { value: "online", label: "Fill online", disabled: offlineOnly, help: offlineOnly
+        ? "Industrial Centre Line estimates must be prepared offline."
+        : "Enter measurements here, preview the rendered workbook, then generate the completed Excel report." },
+      { value: "offline", label: "Complete offline and upload", help: offlineOnly
+        ? "Attach your completed industrial Centre Line report and review its component totals."
+        : "Attach a completed template or an existing report, review component totals, then submit it." },
+    ], offlineOnly && state.details.workMode === "online" ? "" : state.details.workMode);
   }
 
   async function setWorkMode(mode, measurementMethod = selectedMeasurementMethod()) {
@@ -713,11 +721,13 @@
     return { items, calculations, calculatedAmount, overrideAmount, amount };
   }
 
-  function inputControl(entry, field, data, component, sheet) {
-    const value = data.rows[entry.instanceId]?.[field] ?? "";
-    const linked = data.dimensionSetup?.rows?.[entry.instanceId]?.[field];
-    const labels = { no: "No.", length: "L", breadth: "B", depth: "D", rate: "Rate", amount: "Amount" };
-    return `<input aria-label="${escapeHtml(`${entry.label} ${labels[field]}`)}" type="number" step="any" inputmode="decimal" value="${escapeHtml(decimalInput(value))}"${autofilled(value, value === linked)} data-measurement-input="1" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}" data-field="${field}">`;
+  function measurementField(label, field, value, linked, identity, attributes) {
+    return {
+      "aria-label": label, value: decimalInput(value), ...identity, "data-field": field,
+      "data-measurement-input": "1",
+      "data-tab-autofilled": linked && value != null && value !== "" ? "" : undefined,
+      ...attributes,
+    };
   }
 
   function rowInputFields(calculation) {
@@ -750,16 +760,7 @@
     return amount == null ? null : displayedNumber(amount);
   }
 
-  function quantityControl(entry, value, data, component, sheet) {
-    const derived = ["derived", "derived_expression"].includes(entry.calculation);
-    const manual = entry.calculation === "manual_quantity_rate"
-      && !["galvalume-roofing", "heavy-foundation"].includes(entry.baseId);
-    const field = derived || manual ? "quantity" : "directQuantity";
-    const entered = data.rows[entry.instanceId]?.[field];
-    return `<input aria-label="${escapeHtml(`${entry.label} Qty`)}" type="number" step="any" inputmode="decimal" value="${decimalInput(value.quantity)}"${autofilled(value.quantity, numberOrBlank(entered) == null)}${field === "directQuantity" ? ' min="0"' : ""} data-measurement-input="1" data-quantity-input data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}" data-field="${field}">`;
-  }
-
-  function calculationInfo(entry, data, component, sheet) {
+  function measurementInfo(entry, data, componentId, sheetId) {
     const factor = numberOrBlank(data.rows[entry.instanceId]?.factor);
     const { slabDepth, steelRate } = data.rows[entry.instanceId] || {};
     const message = entry.calculation === "derived"
@@ -767,43 +768,60 @@
       : slabDepth != null && steelRate != null
         ? `Roof slab area × ${slabDepth} m thickness × ${steelRate} kg/m³. Edit the thickness or factor in Dimensions & Defaults.`
         : `Roof slab area × ${factor ?? 10} kg/m². Edit the thickness or factor in Dimensions & Defaults.`;
-    const id = escapeHtml(`calc-info-${component.id}-${sheet?.id || "component"}-${entry.instanceId}`);
-    return `<span class="calculation-info"><button type="button" class="info-button" aria-label="How ${escapeHtml(entry.label)} is calculated" aria-describedby="${id}" aria-pressed="false" data-action="toggle-calculation-info">i</button><span class="calculation-info-popover" id="${id}" role="tooltip">${escapeHtml(message)}</span></span>`;
+    return { id: `calc-info-${componentId}-${sheetId}-${entry.instanceId}`, label: entry.label, message };
   }
 
-  function measurementRowHtml(entry, calculation, data, component, sheet) {
+  function measurementRow(entry, calculation, data, identity, multiplier) {
+    const rowIdentity = { ...identity, "data-row": entry.instanceId };
+    const row = {
+      label: entry.label, usesItemLabel: entry.usesItemLabel,
+      labelInput: entry.isCustom && !entry.setupRow
+        ? { "aria-label": "Custom row description", value: entry.label, "data-row-label": "1", ...rowIdentity }
+        : null,
+      heading: entry.calculation === "heading", subtotal: entry.calculation === "subtotal", custom: entry.isCustom,
+    };
+    if (row.heading) return row;
+
+    const stored = data.rows[entry.instanceId] || {};
+    const linked = data.dimensionSetup?.rows?.[entry.instanceId];
     const value = calculation.values[entry.instanceId] || {};
-    const inputs = rowInputFields(entry.calculation);
-    const label = entry.isCustom && !entry.setupRow
-      ? `<input class="custom-row-label" aria-label="Custom row description" value="${escapeHtml(entry.label)}" data-row-label="1" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}">`
-      : entry.usesItemLabel ? `<span data-custom-item-display>${escapeHtml(entry.label)}</span>` : escapeHtml(entry.label);
-    if (entry.calculation === "heading") return `<tr class="worksheet-heading-row"><td></td><td colspan="8">${label}</td><td></td></tr>`;
-    const cells = ["no", "length", "breadth", "depth"].map((field) => `<td>${inputs.includes(field) ? inputControl(entry, field, data, component, sheet) : ""}</td>`).join("");
-    const quantityInput = entry.calculation === "lump_sum" ? "" : quantityControl(entry, value, data, component, sheet);
-    const amountInput = entry.calculation === "lump_sum" ? inputControl(entry, "amount", data, component, sheet) : "";
-    const quantity = ["derived", "derived_expression"].includes(entry.calculation)
-      ? `<span class="derived-quantity-wrap">${quantityInput}${calculationInfo(entry, data, component, sheet)}</span>`
-      : quantityInput;
-    const rate = entry.rate ? inputControl(entry, "rate", data, component, sheet) : (entry.calculation === "lump_sum" ? "LS" : "");
-    const displayedAmount = `<span class="calculated-value" data-calculated-value="amount" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}">${formatNumber(value.amount)}</span>`;
-    const amount = amountInput ? `${amountInput}${typicalMultiplier(sheet) > 1 ? displayedAmount : ""}` : displayedAmount;
-    const action = entry.setupRow ? "" : entry.isCustom
-      ? `<button type="button" class="row-icon-button" title="Remove custom row" data-action="remove-custom-row" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-row="${entry.instanceId}" data-parent-row="${entry.baseId}">×</button>`
-      : entry.customizable
-        ? `<button type="button" class="row-icon-button" title="Add a matching custom row" data-action="add-custom-row" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-parent-row="${entry.baseId}">+</button>`
-        : "";
-    return `<tr class="worksheet-row ${entry.calculation === "subtotal" ? "worksheet-subtotal-row" : ""} ${entry.isCustom ? "worksheet-custom-row" : ""}"><td></td><td class="description-cell">${label}</td>${cells}<td>${quantity}</td><td>${rate}</td><td>${amount}</td><td class="custom-row-action">${action}</td></tr>`;
+    const inputNames = rowInputFields(entry.calculation);
+    const labels = { no: "No.", length: "L", breadth: "B", depth: "D", rate: "Rate", amount: "Amount" };
+    const input = field => measurementField(`${entry.label} ${labels[field]}`, field, stored[field], stored[field] === linked?.[field], rowIdentity);
+    const derived = ["derived", "derived_expression"].includes(entry.calculation);
+    const manual = entry.calculation === "manual_quantity_rate" && !["galvalume-roofing", "heavy-foundation"].includes(entry.baseId);
+    const quantityKey = derived || manual ? "quantity" : "directQuantity";
+    const lumpSum = entry.calculation === "lump_sum";
+    const quantity = lumpSum ? null : measurementField(`${entry.label} Qty`, quantityKey, value.quantity,
+      numberOrBlank(stored[quantityKey]) == null, rowIdentity, {
+        "data-quantity-input": "", min: quantityKey === "directQuantity" ? 0 : undefined,
+      });
+
+    let action;
+    if (!entry.setupRow && (entry.isCustom || entry.customizable)) {
+      action = {
+        label: entry.isCustom ? "×" : "+",
+        attributes: {
+          title: entry.isCustom ? "Remove custom row" : "Add a matching custom row",
+          "data-action": entry.isCustom ? "remove-custom-row" : "add-custom-row",
+          ...identity, "data-parent-row": entry.baseId, "data-row": entry.isCustom ? entry.instanceId : undefined,
+        },
+      };
+    }
+    return {
+      ...row, dimensions: ["no", "length", "breadth", "depth"].map(field => inputNames.includes(field) ? input(field) : null),
+      quantity, info: derived ? measurementInfo(entry, data, identity["data-component"], identity["data-sheet"]) : null,
+      rate: entry.rate ? input("rate") : null, rateLabel: lumpSum ? "LS" : "",
+      amount: lumpSum ? input("amount") : null, showAmount: !lumpSum || multiplier > 1,
+      amountLabel: formatNumber(value.amount), amountDisplay: { "data-calculated-value": "amount", ...rowIdentity }, action,
+    };
   }
 
-
-  function editableFinalAmount(value, calculatedValue, attributes, resetAttributes, label, calculatedAttributes) {
-    const finalValue = value ?? calculatedValue;
-    return `<label class="final-amount-control"><span>${escapeHtml(label)}</span><input type="number" step="any" inputmode="decimal" value="${decimalInput(finalValue)}"${autofilled(finalValue, value == null)} ${attributes}><small>Calculated: ₹ <span ${calculatedAttributes}>${formatNumber(calculatedValue)}</span></small>${value != null ? `<button type="button" class="text-button" ${resetAttributes}>Use calculated</button>` : ""}</label>`;
-  }
-
-  function customItemDetails(item, component, sheet) {
-    if (!item.isCustomItem) return "";
-    return `<div class="custom-item-details"><div class="field"><label>Short description (form)</label><input value="${escapeHtml(item.label)}" data-custom-item-short="1" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-item="${item.itemKey}"></div><div class="field full"><label>Detailed description (generated report)</label><textarea data-custom-item-detail="1" data-component="${component.id}" data-sheet="${sheet?.id || "component"}" data-item="${item.itemKey}" placeholder="Enter the full technical description for the report">${escapeHtml(item.detailedDescription)}</textarea></div></div>`;
+  function finalAmountView(override, calculated, input, reset, label, display) {
+    return {
+      value: decimalInput(override ?? calculated), calculated: formatNumber(calculated),
+      input, reset: override != null ? reset : null, label, display,
+    };
   }
 
   function dimensionEntries() {
@@ -1213,7 +1231,7 @@
       if (arithmeticError) throw new Error(arithmeticError);
       const savedSetup = data.dimensionSetup;
       if (ReportData.readOnly && !savedSetup) {
-        target.innerHTML = '<p class="hint">See the worksheet for the retained measurements.</p>';
+        ValuxUI.paintDimensionReview(target, [], "See the worksheet for the retained measurements.");
         return;
       }
       const derived = ReportData.readOnly ? savedSetup : makeDimensionUpdate(entry, values, sources);
@@ -1234,51 +1252,64 @@
             : ReportData.readOnly ? "Retained setup"
             : applied.slabDepth != null ? "Slab thickness for the steel calculation"
             : sources[row.id] || (applied.setupLabel || row.id.startsWith("setup-") ? "Worksheet schedule" : "Dimensions & Defaults");
-          return [`<tr><th scope="row">${escapeHtml(description)}</th>${columns.map((column, index) => {
+          const measurements = columns.map((column, index) => {
             const value = manual[index] ?? applied[column];
-            return `<td>${column === "depth" && applied.slabDepth != null ? applied.slabDepth : value == null ? "—" : decimalInput(value)}</td>`;
-          }).join("")}<td>${escapeHtml(source)}</td></tr>`];
+            return column === "depth" && applied.slabDepth != null ? applied.slabDepth : value == null ? "—" : decimalInput(value);
+          });
+          return [[description, ...measurements, source]];
         });
       });
-      target.innerHTML = `<table class="worksheet-table dimension-review-table"><thead><tr><th>Item</th><th>Count</th><th>Length (m)</th><th>Width (m)</th><th>Depth / Height (m)</th><th>Source</th></tr></thead><tbody>${body.join("")}</tbody></table>`;
+      ValuxUI.paintDimensionReview(target, body);
     } catch (error) {
-      target.innerHTML = `<p class="hint">${escapeHtml(error.message)} The review will appear when the worksheet dimensions are ready.</p>`;
+      ValuxUI.paintDimensionReview(target, [], `${error.message} The review will appear when the worksheet dimensions are ready.`);
     }
   }
 
-  function omittedItemsControl(schema, data, componentId, sheetId) {
-    if (ReportData.readOnly) return "";
-    const removed = schema.items().flatMap((item, index) => {
-      const key = `standard-${index}`;
-      if (!data.omittedItems?.[key]) return [];
-      return [`<li>${escapeHtml(item.label)} <button type="button" class="text-button" data-action="restore-standard-item" data-component="${componentId}" data-sheet="${sheetId}" data-item="${key}">Restore</button></li>`];
-    });
-    return removed.length ? `<details class="dimension-group"><summary>Removed items (${removed.length})</summary><ul>${removed.join("")}</ul></details>` : "";
+  function worksheetItemView(item, calculation, data, identity, multiplier) {
+    const actions = [];
+    if (item.isCustomItem) {
+      actions.push({ label: "Remove custom field", className: "text-button danger-text",
+        attributes: { "data-action": "remove-custom-item", ...identity, "data-item": item.itemKey } });
+    } else {
+      if (item.displaySno != null) actions.push({
+        label: "Add custom field", className: "text-button",
+        attributes: { "data-action": "add-custom-item", ...identity, "data-parent-item": item.itemKey },
+      });
+      if (!ReportData.readOnly) actions.push({ label: "Remove item", className: "text-button danger-text",
+        attributes: { "data-action": "remove-standard-item", ...identity, "data-item": item.itemKey } });
+    }
+    const itemIdentity = { ...identity, "data-item": item.itemKey };
+    return {
+      key: item.itemKey, label: item.label, custom: item.isCustomItem, description: item.detailedDescription,
+      serial: item.displaySno == null ? "" : `${item.displaySno}. `, actions,
+      final: item.displaySno == null ? null : finalAmountView(calculation.perFloorOverride, calculation.calculatedAmount / multiplier,
+        { "data-item-final-input": "1", ...itemIdentity }, { "data-action": "reset-item-total", ...itemIdentity },
+        multiplier > 1 ? "Final amount per floor" : "Final amount", { "data-item-calculated": item.itemKey, ...identity }),
+      rows: calculation.rows.map(row => measurementRow(row, calculation, data, identity, multiplier)),
+    };
   }
 
   function measurementPanel(entry) {
     const templateKey = measurementTemplateKey(entry.component, entry.sheet);
-    if (!templateKey) return `<div class="panel" data-key="${entry.key}"><h2>${escapeHtml(entry.label)}</h2><div class="notice"><strong>Online measurements are not available for this component yet.</strong> Select a finalized Industrial component or use the future offline workbook route for a custom component.</div></div>`;
+    if (!templateKey) return ValuxUI.unsupportedEstimationWorksheet(entry.key, entry.label);
     const schema = ESTIMATION_WORKSHEETS[templateKey];
     const data = measurementData(entry.component, entry.sheet);
     const multiplier = typicalMultiplier(entry.sheet);
     const totals = sheetCalculations(schema, data, multiplier);
-    return `<div class="panel" data-key="${entry.key}"><h2>${escapeHtml(entry.label)}</h2><p class="hint">Qty calculates from the dimensions. Edit Qty to enter or adjust it directly, or clear it to restore the calculation. For grouped measurements within an item, use its total quantity row to price the entire item.${multiplier > 1 ? ` Enter quantities, rates and lump sums for one floor. Line amounts shown include all ${multiplier} floors.` : ""}</p><div class="worksheet-summary"><button type="button" class="text-button" data-action="edit-dimensions" data-section-key="${escapeHtml(entry.key)}">Edit dimensions &amp; defaults</button><span>Approved template: <strong>${escapeHtml(schema.label)}</strong></span><span>Report amount${!ReportData.readOnly || state.details.roundingBasis === "thousands" ? " (rounded to ₹1,000)" : ""}: <strong data-sheet-adopted data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}">${formatNumber(totals.amount)}</strong></span>${editableFinalAmount(totals.overrideAmount, totals.calculatedAmount, `data-sheet-final-input="1" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, `data-action="reset-sheet-total" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`, "Final sheet total", `data-sheet-calculated data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`)}</div><div class="field worksheet-plinth-area"><label for="plinth-${entry.key}">Plinth Area (sft.)</label><input id="plinth-${entry.key}" type="text" value="${escapeHtml(data.plinthArea ?? "")}" data-plinth-area data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"><small class="hint">Enter the area for all floors represented on this sheet. Optional. Text or notes may be included.</small></div>${omittedItemsControl(schema, data, entry.component.id, entry.sheet?.id || "component")}<div class="worksheet-item-list">${totals.calculations.map(({ item, calculation }) => {
-      const serial = item.displaySno == null ? "" : `${item.displaySno}. `;
-      const label = item.isCustomItem ? `<span data-custom-item-display>${escapeHtml(item.label)}</span>` : escapeHtml(item.label);
-      const actions = item.isCustomItem
-        ? `<button type="button" class="text-button danger-text" data-action="remove-custom-item" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}" data-item="${item.itemKey}">Remove custom field</button>`
-        : item.displaySno != null
-          ? `<button type="button" class="text-button" data-action="add-custom-item" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}" data-parent-item="${item.itemKey}">Add custom field</button>`
-          : "";
-      const remove = !ReportData.readOnly && !item.isCustomItem
-        ? `<button type="button" class="text-button danger-text" data-action="remove-standard-item" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}" data-item="${item.itemKey}">Remove item</button>`
-        : "";
-      const itemFinalAmount = item.displaySno != null
-        ? editableFinalAmount(calculation.perFloorOverride, calculation.calculatedAmount / multiplier, `data-item-final-input="1" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}" data-item="${item.itemKey}"`, `data-action="reset-item-total" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}" data-item="${item.itemKey}"`, multiplier > 1 ? "Final amount per floor" : "Final amount", `data-item-calculated="${item.itemKey}" data-component="${entry.component.id}" data-sheet="${entry.sheet?.id || "component"}"`)
-        : "";
-      return `<section class="worksheet-item"><div class="worksheet-item-title"><span>${serial}${label}</span><div class="item-title-actions">${itemFinalAmount}${actions}${remove}</div></div>${customItemDetails(item, entry.component, entry.sheet)}<div class="worksheet-table-wrap"><table class="worksheet-table"><thead><tr><th>S.No.</th><th>Description of Item</th><th>No.</th><th>L (m)</th><th>B (m)</th><th>D (m)</th><th>Qty<br>(cum/sqm)</th><th>Unit Rate<br>(Rs.)</th><th>${multiplier > 1 ? "Group amount" : "Amount"}<br>(Rs.)</th><th aria-label="Custom row"></th></tr></thead><tbody>${calculation.rows.map((rowEntry) => measurementRowHtml(rowEntry, calculation, data, entry.component, entry.sheet)).join("")}</tbody></table></div></section>`;
-    }).join("")}</div></div>`;
+    const identity = { "data-component": entry.component.id, "data-sheet": entry.sheet?.id || "component" };
+    const removed = ReportData.readOnly ? [] : schema.items().flatMap((item, index) => {
+      const key = `standard-${index}`;
+      return data.omittedItems?.[key] ? [{ key, label: item.label }] : [];
+    });
+    return ValuxUI.estimationWorksheet({
+      key: entry.key, label: entry.label, template: schema.label, identity, multiplier,
+      rounded: !ReportData.readOnly || state.details.roundingBasis === "thousands",
+      total: formatNumber(totals.amount), plinthArea: data.plinthArea ?? "", removed,
+      final: finalAmountView(totals.overrideAmount, totals.calculatedAmount,
+        { "data-sheet-final-input": "1", ...identity }, { "data-action": "reset-sheet-total", ...identity },
+        "Final sheet total", { "data-sheet-calculated": "", ...identity }),
+      items: totals.calculations.map(({ item, calculation }) => worksheetItemView(item, calculation, data, identity, multiplier)),
+    });
   }
 
   const COMMON_EXTERNAL_WORKS = [
@@ -1374,14 +1405,10 @@
     return { allowed: true };
   }
 
-  function lockedPanel(key, label, gate) {
-    return `<div class="panel locked-panel" data-key="${escapeHtml(key)}"><div class="locked-panel-icon" aria-hidden="true">!</div><h2>${escapeHtml(label)}</h2><div class="locked-panel-card"><strong>Complete previous sections first</strong><p>${escapeHtml(gate.message)}</p><button type="button" class="primary" data-action="go-to-section" data-section-key="${escapeHtml(gate.target)}">${escapeHtml(gate.targetLabel)}</button></div></div>`;
-  }
-
   function sectionDefinitions() {
-    const setup = [{key: "setup", label: "Report Setup", html: setupPanel()},
-      {key: "preparation", label: "Preparation Method", html: `<div class="panel" data-key="preparation"><h2>Preparation Method</h2>${reportModePanel()}</div>`}];
-    const configuration = [{key: "configuration", label: "Property Configuration", html: configurationPanel()}, {key: "components", label: "Component Selection", html: componentSelectionPanel()}];
+    const setup = [{key: "setup", label: "Report Setup", view: setupPanel()},
+      {key: "preparation", label: "Preparation Method", view: reportModePanel()}];
+    const configuration = [{key: "configuration", label: "Property Configuration", view: configurationPanel()}, {key: "components", label: "Component Selection", html: componentSelectionPanel()}];
     const offlineOnly = industrialCentreLine() && !ReportData.readOnly;
     if (state.details.workMode === "offline") {
       const offlineConfiguration = offlineOnly ? configuration.slice(0, 1) : state.details.templateSetup ? configuration : [];
@@ -1391,11 +1418,11 @@
     if (state.details.workMode !== "online") return setup;
     const dimensionSheets = dimensionEntries();
     const dimensions = dimensionSheets.length ? [{ key: "dimensions", label: "Dimensions & Defaults", html: dimensionsPanel(dimensionSheets) }] : [];
-    const measurements = state.propertyType ? componentMeasurementEntries().map((entry) => ({key: entry.key, label: entry.label, html: measurementPanel(entry)})) : [];
+    const measurements = state.propertyType ? componentMeasurementEntries().map((entry) => ({key: entry.key, label: entry.label, view: measurementPanel(entry)})) : [];
     const abstract = state.propertyType && state.components.length ? [{key: "abstract", label: EstimationNaming.groundOnly(state) ? "Estimate summary" : requiresSeparateAbstract() ? "Abstract" : "Compact Abstract", html: abstractPanel()}] : [];
     return [...setup, ...configuration, ...dimensions, ...measurements, ...abstract, {key: "review", label: "Configuration Review", html: reviewPanel()}].map((section) => {
       const gate = sectionGate(section.key);
-      return gate.allowed ? {...section, locked: false} : {...section, locked: true, html: lockedPanel(section.key, section.label, gate)};
+      return gate.allowed ? {...section, locked: false} : {...section, locked: true, view: ValuxUI.estimationLockedPanel(section.key, section.label, gate)};
     });
   }
 
@@ -1406,8 +1433,16 @@
     const desiredKey = options.sectionKey || currentKey();
     const scrollPosition = window.scrollY;
     const sections = sectionDefinitions();
-    $("sections").innerHTML = sections.map((section) => section.html).join("");
-    $("nav").innerHTML = sections.map((section, index) => `<button type="button" data-section-index="${index}" data-section-key="${escapeHtml(section.key)}" class="${section.locked ? "nav-locked" : ""}">${escapeHtml(section.label)}${section.locked ? `<span class="nav-lock" aria-label="Requires earlier sections">!</span>` : ""}</button>`).join("");
+    const template = document.createElement("template");
+    $("sections").replaceChildren(...sections.map(section => {
+      if (section.view) return section.view;
+      // Measurement and offline widgets still use controller-owned markup.
+      template.innerHTML = section.html;
+      return template.content.firstElementChild;
+    }));
+    ValuxUI.paintReportNav($("nav"), sections, {
+      onSelect: index => showSection(index, { scroll: true }),
+    });
     const nextIndex = sections.findIndex((section) => section.key === desiredKey);
     state.current = nextIndex < 0 ? 0 : nextIndex;
     wireEvents();
@@ -1600,10 +1635,9 @@
     const local = new Map(browserTotals.map((item) => [item.id, item.estimatedCost]));
     const changed = local.size !== summary.components.length
       || summary.components.some((item) => local.get(item.id) !== item.estimatedCost);
-    $("estimation-server-totals").innerHTML = `${changed
-      ? '<p class="notice">The server calculation differs from the form. Review the corrected amounts below before generating Excel.</p>'
-      : ""}<table class="review-table"><thead><tr><th>Component or work</th><th>Server amount (Rs.)</th></tr></thead><tbody>${summary.components.map((item) =>
-      `<tr><td>${escapeHtml(item.label)}</td><td>₹ ${formatNumber(item.estimatedCost)}</td></tr>`).join("")}</tbody><tfoot><tr><th>Total estimated project cost</th><th>₹ ${formatNumber(summary.totalEstimatedCost)}</th></tr></tfoot></table>`;
+    ValuxUI.paintServerTotals($("estimation-server-totals"), summary.components.map(item => ({
+      label: item.label, amount: `₹ ${formatNumber(item.estimatedCost)}`,
+    })), `₹ ${formatNumber(summary.totalEstimatedCost)}`, changed);
   }
 
   async function showReview() {
@@ -1615,7 +1649,14 @@
     const previewDescription = previewMode === "offline"
       ? "Previewing the configured blank workbook that will be downloaded for completion in Excel."
       : "Previewing the completed workbook generated from the current online entries.";
-    $("review-content").innerHTML = `${issues.length ? `<div class="notice"><strong>${issues.length} item${issues.length === 1 ? "" : "s"} need attention</strong><ul>${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul></div>` : `<div class="notice"><strong>${escapeHtml(previewDescription)}</strong></div>`}<div class="review-grid"><div class="review-stat"><small>Draft scope</small><strong>${escapeHtml(draftScope)}</strong></div><div class="review-stat"><small>Property</small><strong>${escapeHtml(propertyProfile()?.label || "—")}</strong></div><div class="review-stat"><small>Worksheets</small><strong>${worksheets.length}</strong></div><div class="review-stat"><small>Abstract</small><strong>${worksheets.length ? (EstimationNaming.groundOnly(state) ? "Not needed for Ground Floor only" : requiresSeparateAbstract() ? "Separate" : "Compact") : "—"}</strong></div></div>${worksheets.length ? `<p><strong>Workbook order:</strong> ${worksheets.map(escapeHtml).join(" → ")}</p><div id="estimation-server-totals"></div>` : ""}<div id="workbook-preview" class="workbook-preview"><p class="hint">${issues.length ? "Resolve the listed items to render the workbook preview." : "Rendering the workbook…"}</p></div>`;
+    const abstract = worksheets.length
+      ? (EstimationNaming.groundOnly(state) ? "Not needed for Ground Floor only" : requiresSeparateAbstract() ? "Separate" : "Compact")
+      : "—";
+    const stats = [
+      ["Draft scope", draftScope], ["Property", propertyProfile()?.label || "—"],
+      ["Worksheets", worksheets.length], ["Abstract", abstract],
+    ];
+    ValuxUI.paintEstimatePreview($("review-content"), { issues, description: previewDescription, stats, worksheets });
     $("review-modal").hidden = false;
     if (issues.length) return;
     const restoredPreview = ReportData.preview();
@@ -1639,7 +1680,7 @@
         }
         if (preview.summary) showServerTotals(preview.summary, browserTotals);
         const url = restore ? restoredPreview.url : preview.preview;
-        $("workbook-preview").innerHTML = `<iframe class="workbook-preview-frame" src="${escapeHtml(url)}" title="Rendered estimation workbook preview"></iframe>`;
+        ValuxUI.paintWorkbookFrame($("workbook-preview"), { url });
         ReportData.setPreview({ id: restore ? restoredPreview.id : preview.preview_id, url, totalsReviewed: true });
         $("status").textContent = restore ? "Latest workbook preview restored" : "Workbook preview ready";
         updateOutputControls();
@@ -1647,11 +1688,11 @@
       }, "Cancel preview");
     } catch (error) {
       if (error.name === "AbortError") {
-        $("workbook-preview").innerHTML = '<p class="hint">Preview cancelled.</p>';
+        ValuxUI.paintWorkbookFrame($("workbook-preview"), { message: "Preview cancelled." });
         $("status").textContent = "Preview cancelled";
         return;
       }
-      $("workbook-preview").innerHTML = `<div class="notice"><strong>Workbook preview could not be rendered.</strong><br>${escapeHtml(workbookErrorMessage(error))}</div>`;
+      ValuxUI.paintWorkbookFrame($("workbook-preview"), { error: workbookErrorMessage(error) });
       $("status").textContent = "Workbook preview failed";
     }
   }
@@ -2037,7 +2078,6 @@
     $("dimension-copy-all")?.addEventListener("change", (event) => {
       document.querySelectorAll("[data-dimension-copy-target]:not(:disabled)").forEach((target) => { target.checked = event.target.checked; });
     });
-    document.querySelectorAll("#nav button").forEach((button) => button.addEventListener("click", () => showSection(Number(button.dataset.sectionIndex), { scroll: true })));
     document.querySelectorAll('[name="property-type"]').forEach((input) => input.addEventListener("change", () => setPropertyType(input.value)));
     document.querySelectorAll('[name="construction"]').forEach((input) => input.addEventListener("change", () => setConstruction(input.value)));
     document.querySelectorAll('[name="measurement-method"]').forEach((input) => input.addEventListener("change", () => setMeasurementMethod(input.value)));

@@ -74,11 +74,13 @@
   }
 
   function loginView(note = "") {
+    const label = context?.mobileSignInEnabled ? "Email, User ID or verified mobile number" : "Email or User ID";
+    const placeholder = context?.mobileSignInEnabled ? "Include the country code for mobile numbers" : "Enter your email or User ID";
     render(`${head("Welcome to ValuX", "Sign in to access your role-based dashboard tools.", "VX")}
       ${message(note, note ? "success" : "")}
       <form class="auth-form" id="login-form">
         <span data-form-message></span>
-        <div class="auth-field"><label for="identifier">Email or User ID</label><input id="identifier" name="identifier" autocomplete="username" required placeholder="Enter your email or User ID" /></div>
+        <div class="auth-field"><label for="identifier">${label}</label><input id="identifier" name="identifier" autocomplete="username" required placeholder="${placeholder}" /></div>
         <div class="auth-field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required placeholder="Enter your password" /></div>
         <div class="auth-form-row"><button class="auth-link" id="forgot-link" type="button">Forgot password?</button></div>
         <button class="auth-primary" type="submit">Sign in securely</button>
@@ -90,7 +92,7 @@
       submit(event.currentTarget, async () => {
         const form = new FormData(event.currentTarget);
         const result = await request("/api/auth/login", { identifier: form.get("identifier"), password: form.get("password") });
-        context = { user: result.user, next: result.next };
+        context = { ...context, user: result.user, next: result.next };
         routeStep(result.next);
       });
     });
@@ -256,13 +258,76 @@
     render(`<div class="auth-loading"><span></span><strong>Verifying your recovery email…</strong></div>`);
     try {
       const result = await request("/api/auth/email/verify", { token });
-      history.replaceState(null, "", "/auth");
+      history.replaceState(null, "", location.pathname + location.search);
       if (result.signedIn) location.assign(safeDestination());
-      else loginView("Recovery email verified. Your account is active; sign in to continue.");
+      else if (result.next === "whatsapp_setup") routeStep(result.next);
+      else loginView("Recovery email verified. Sign in to continue.");
     } catch (error) {
       render(`${head("Verification unsuccessful", "The link may have expired or already been used.", "!")}${message(error.message, "error")}<button class="auth-secondary" id="return-login" type="button">Return to sign in</button>`);
       document.getElementById("return-login").addEventListener("click", () => loginView());
     }
+  }
+
+  function whatsappSetupView(ending = null, info = "") {
+    const title = head("Verify your WhatsApp number", "Verify a mobile number to finish setup. Assignment alerts are optional.", "WA");
+    const controls = ending
+      ? `<form class="auth-form" id="whatsapp-form">
+          <span data-form-message></span>
+          <div class="auth-field"><label for="whatsapp-code">WhatsApp code for number ending ${escape(ending)}</label><input id="whatsapp-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required /></div>
+          <button type="submit" class="auth-primary">Verify number</button>
+          <button type="button" id="whatsapp-use-other-number" class="auth-link">Request another code</button>
+        </form>`
+      : `<form class="auth-form" id="whatsapp-form">
+          <span data-form-message></span>
+          <div class="auth-field"><label for="whatsapp-number">WhatsApp number with country code</label><input id="whatsapp-number" name="number" type="tel" autocomplete="tel" maxlength="28" required placeholder="+91" /></div>
+          <label class="auth-whatsapp-consent"><input type="checkbox" name="alerts" /> Send SLN assignment alerts to this number on WhatsApp. I can stop alerts in My Account.</label>
+          <p class="auth-note">Sending the code requests one WhatsApp message to verify your number.</p>
+          <button type="submit" class="auth-primary">Send verification code</button>
+        </form>`;
+    render(title + message(info, "success") + controls + '<button type="button" id="whatsapp-exit" class="auth-link">Return to sign in</button>');
+    document.getElementById("whatsapp-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const values = new FormData(form);
+      submit(form, async () => {
+        if (ending) {
+          await request("/api/auth/whatsapp/confirm", { code: values.get("code") });
+          location.assign(safeDestination());
+          return;
+        }
+        const sent = await request("/api/auth/whatsapp/start", {
+          number: values.get("number"), alerts: values.has("alerts"), requestCode: true,
+        });
+        whatsappSetupView(sent.ending, sent.uncertain
+          ? "If your code arrives, enter it below. Otherwise request another code in one minute."
+          : "Verification code sent.");
+      });
+    });
+    document.getElementById("whatsapp-use-other-number")?.addEventListener("click", () => whatsappSetupView());
+    document.getElementById("whatsapp-exit").addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        await request("/api/auth/logout");
+        loginView();
+      } catch (error) {
+        const notice = card.querySelector("[data-form-message]");
+        notice.textContent = error.message;
+        button.disabled = false;
+      }
+    });
+  }
+
+  async function loadWhatsAppSetup() {
+    try {
+      const response = await fetch("/api/auth/whatsapp", { credentials: "same-origin", cache: "no-store" });
+      const result = await response.json();
+      if (response.ok && result.enabled) {
+        whatsappSetupView(result.pendingEnding);
+        return;
+      }
+    } catch (_error) { /* The form shows a retryable error when submitted. */ }
+    whatsappSetupView();
   }
 
   function routeStep(step) {
@@ -271,6 +336,7 @@
     else if (step === "recovery_codes") recoveryCodesView(JSON.parse(sessionStorage.getItem(RECOVERY_STORAGE) || "null"));
     else if (step === "email_setup") emailSetupView();
     else if (step === "email_verify") emailVerifyView(context?.pendingEmail);
+    else if (step === "whatsapp_setup") loadWhatsAppSetup();
     else if (step === "mfa_login") mfaLoginView();
     else if (step === "complete") location.assign(safeDestination());
     else loginView();

@@ -4,11 +4,14 @@ import uuid
 
 from ..auth.database import connection
 from ..auth.models import AuthError
+from ..whatsapp import outbox
 
 
 def record(database, task_id, activity_id, actor_id, event):
     task = database.execute("SELECT assignee_user_id FROM app.tasks WHERE id = %s", (task_id,)).fetchone()
     assignee = task["assignee_user_id"]
+    if event == "assigned":
+        outbox.enqueue(database, task_id, activity_id, assignee if assignee != actor_id else None)
     recipients = database.execute(
         "SELECT id FROM auth.users WHERE status = 'active' AND id <> %s AND "
         "(%s = 'unassigned' OR (%s = 'assigned' AND id = %s) OR "

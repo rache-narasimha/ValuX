@@ -1,0 +1,14 @@
+{
+  "name": "valux-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "vue": "3.5.46"
+  },
+  "devDependencies": {
+    "vite": "8.3.8"
+  }
+}

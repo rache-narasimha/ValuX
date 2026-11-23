@@ -31,9 +31,6 @@
   }
 
   function preparationPanel(reportKey, selectedMode, onSelect) {
-    const panel = document.createElement("div");
-    panel.className = "panel preparation-method-panel";
-    panel.dataset.group = "preparation";
     const progress = reportKey === "progress" || reportKey === "completion";
     const reportLabel = progress ? reportKey : taskFor(reportKey)?.reportGroup === "revaluation" ? "revaluation" : "valuation";
     const onlineHint = progress
@@ -42,19 +39,13 @@
     const offlineHint = progress
       ? "Review the work assessment, then attach a filled template or an existing completed report with a work note."
       : "Download the clean template or use an existing completed report, then attach the finished DOCX or PDF with a work note.";
-    panel.innerHTML = `<h2>Preparation Method</h2>
-      <p class="section-intro">Choose how this ${reportLabel} report will be prepared. The remaining steps will adapt to this selection.</p>
-      <div class="preparation-choice-grid" role="radiogroup" aria-label="Report preparation method">
-        <label class="preparation-choice-card">
-          <input type="radio" name="${MODE_NAME}" value="online" data-preparation-method ${selectedMode === "online" ? "checked" : ""}>
-          <span><strong>Fill online</strong><small>${onlineHint}</small></span>
-        </label>
-        <label class="preparation-choice-card">
-          <input type="radio" name="${MODE_NAME}" value="offline" data-preparation-method ${selectedMode === "offline" ? "checked" : ""}>
-          <span><strong>Complete offline and upload</strong><small>${offlineHint}</small></span>
-        </label>
-      </div>
-      <p class="preparation-selection-status" data-preparation-status aria-live="polite">${selectedMode ? "Preparation method selected." : "Select a preparation method to continue."}</p>`;
+    const panel = ValuxUI.reportPreparationPanel({
+      reportLabel, name: MODE_NAME, selected: selectedMode,
+      options: [
+        { value: "online", label: "Fill online", help: onlineHint },
+        { value: "offline", label: "Complete offline and upload", help: offlineHint },
+      ],
+    });
 
     panel.querySelectorAll("[data-preparation-method]").forEach((input) => {
       input.addEventListener("change", async () => {

@@ -31,7 +31,7 @@
             <div id="link-error" class="notice error-notice" hidden></div>
             <div class="linked-estimate-card">
               <div><small>Linked estimation report</small><strong id="linked-estimate-name">Not selected</strong><span id="linked-estimate-meta"></span></div>
-              <div class="field" id="practice-estimation-wrap" hidden><label class="required" for="practice-estimation">Estimation report</label><select id="practice-estimation"><option value="">Select an estimation report</option></select></div>
+              <div class="field" id="practice-estimation-wrap" hidden><label class="required" for="practice-estimation">Estimation report</label><select id="practice-estimation"></select></div>
             </div>
             <div class="grid">
               <div class="field" id="practice-type-wrap" hidden><label class="required" for="practice-report-type">Report type</label><select id="practice-report-type"><option value="progress">Progress report</option><option value="completion">Completion report</option></select></div>
@@ -47,7 +47,7 @@
           <section class="panel" data-section="preparation" id="progress-preparation"></section>
 
           <section class="panel" data-section="assessment">
-            <section id="estimation-correction-review" class="notice" hidden><input id="estimation-revision-reviewed" type="checkbox"></section>
+            <section id="estimation-correction-review" class="notice" hidden></section>
             <div class="section-title-row"><div><h2>Work progress assessment</h2><p>The estimated costs come from the linked estimation. Completion amounts calculate automatically and remain editable.</p></div><span id="derived-report-type" class="report-type-badge">Progress report</span></div>
             <div class="progress-table-wrap">
               <table class="progress-table">
@@ -121,6 +121,7 @@
     <script src="/assets/js/core/report-data.js"></script>
     <script src="/assets/js/core/time.js"></script>
     <script src="/assets/js/core/app-shell.js"></script>
+    <script src="/assets/built/assignment-filters.js"></script>
     <script src="/assets/js/components/account-chrome.js"></script>
     <script src="/assets/js/core/workflow-access.js"></script>
     <script src="/assets/js/core/task-store.js"></script>

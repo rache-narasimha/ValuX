@@ -6,6 +6,7 @@ import smtplib
 from http.cookies import SimpleCookie
 from pathlib import Path
 
+from ..whatsapp import config as whatsapp_config, contacts as whatsapp
 from . import account, mailer, service
 from .config import (
     COOKIE_SECURE,
@@ -72,11 +73,14 @@ def verify_csrf(handler) -> None:
 
 def current_session(handler, required_scope: str | None = None, refresh: bool = True):
     session = service.session_for_token(cookie_value(handler, SESSION_COOKIE), refresh=refresh)
+    session = whatsapp.enforce_session(session)
     if not session:
         if required_scope:
             raise service.AuthError("Your session has expired. Sign in again.", 401, "session_expired")
         return None
     if required_scope and session["scope"] != required_scope:
+        if required_scope == "full" and session["activation_step"] == whatsapp.SETUP:
+            raise service.AuthError("Verify your WhatsApp number to continue.", 401, "whatsapp_required")
         raise service.AuthError("This action is not available for the current session.", 403, "forbidden")
     return session
 
@@ -98,7 +102,7 @@ def read_payload(handler, limit: int = 64 * 1024) -> dict:
     if size <= 0 or size > limit:
         raise service.AuthError("Invalid request body.")
     try:
-        payload = json.loads(handler.rfile.read(size))
+        payload = json.loads(handler.read_body(size))
     except (json.JSONDecodeError, UnicodeDecodeError) as error:
         raise service.AuthError("Invalid JSON request.") from error
     if not isinstance(payload, dict):
@@ -124,6 +128,15 @@ def _auth_state(session):
 
 
 def handle_get(handler, path: str) -> bool:
+    if path == "/api/auth/whatsapp":
+        try:
+            session = current_session(handler)
+            if not session:
+                raise service.AuthError("Sign in to manage WhatsApp settings.", 401, "session_expired")
+            handler.send_json({"ok": True, **whatsapp.status(session)})
+        except service.AuthError as error:
+            handler.send_json({"ok": False, "error": str(error), "code": error.code}, error.status)
+        return True
     if path == "/api/auth/profile/photo":
         content = account.photo(require_full_session(handler, refresh=False))
         handler.send_file(Path("profile.jpg"), data=content)
@@ -140,7 +153,7 @@ def handle_get(handler, path: str) -> bool:
     if path == "/api/auth/context":
         csrf, headers = csrf_context(handler)
         state = _auth_state(current_session(handler))
-        handler.send_json({**state, "csrf": csrf}, headers=headers)
+        handler.send_json({**state, "csrf": csrf, "mobileSignInEnabled": whatsapp_config.enabled()}, headers=headers)
         return True
     if path == "/api/auth/me":
         session = require_full_session(handler)
@@ -157,6 +170,20 @@ def handle_post(handler, path: str) -> bool:
         verify_csrf(handler)
         payload = read_payload(handler, 3 * 1024 * 1024 if path == "/api/auth/profile/photo" else 64 * 1024)
         ip, user_agent = _client(handler)
+
+        if path in {"/api/auth/whatsapp/start", "/api/auth/whatsapp/confirm", "/api/auth/whatsapp/opt-out"}:
+            session = current_session(handler)
+            if not session or not whatsapp_config.enabled():
+                raise service.AuthError("WhatsApp settings are unavailable.", 403, "forbidden")
+            if path.endswith("/start"):
+                handler.send_json({"ok": True, **whatsapp.start(session, payload)})
+            elif path.endswith("/confirm"):
+                whatsapp.confirm(session, payload.get("code"))
+                handler.send_json({"ok": True, "next": "complete"})
+            else:
+                whatsapp.opt_out(session)
+                handler.send_json({"ok": True})
+            return True
 
         if path == "/api/auth/activity":
             require_full_session(handler)
@@ -221,8 +248,8 @@ def handle_post(handler, path: str) -> bool:
 
         if path == "/api/auth/mfa/verify":
             session = current_session(handler, "mfa")
-            user = service.verify_login_mfa(session, str(payload.get("code", "")))
-            handler.send_json({"ok": True, "next": "complete", "user": user})
+            user, next_step = service.verify_login_mfa(session, str(payload.get("code", "")))
+            handler.send_json({"ok": True, "next": next_step, "user": user})
             return True
 
         if path == "/api/auth/mfa/recover":
@@ -260,8 +287,8 @@ def handle_post(handler, path: str) -> bool:
 
         if path == "/api/auth/email/verify":
             session = current_session(handler)
-            user, signed_in = service.verify_email_token(str(payload.get("token", "")), session)
-            handler.send_json({"ok": True, "user": user, "signedIn": signed_in})
+            user, signed_in, next_step = service.verify_email_token(str(payload.get("token", "")), session)
+            handler.send_json({"ok": True, "user": user, "signedIn": signed_in, "next": next_step})
             return True
 
         if path == "/api/auth/forgot-password":

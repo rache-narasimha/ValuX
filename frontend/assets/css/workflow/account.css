@@ -70,6 +70,10 @@ body:not(.workflow-page) main > aside .powered-by { color: #f6d4c3; order: 1000;
 .account-password-form { display: grid; gap: 16px; }
 .account-password-form .field-help { margin-top: -8px; }
 .account-password-form > button { justify-self: start; width: auto; }
+.account-whatsapp-card { margin-top: 22px; }
+.account-whatsapp-card form { margin-top: 16px; }
+.account-whatsapp-card .whatsapp-opt-in { display: flex; align-items: flex-start; gap: 0.55rem; }
+.account-whatsapp-card .whatsapp-opt-in input { width: auto; margin-top: 0.2em; }
 .account-session-note { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
 .account-session-note p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--muted); }
 .account-message { margin: 12px 0; font-size: 13px; line-height: 1.5; color: var(--green, #25683e); overflow-wrap: anywhere; }

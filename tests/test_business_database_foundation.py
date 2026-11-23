@@ -18,6 +18,9 @@ EXPECTED_APP_TABLES = {
     "task_artifacts",
     "task_payments",
     "tasks",
+    "whatsapp_challenges",
+    "whatsapp_contacts",
+    "whatsapp_outbox",
 }
 
 EXPECTED_INDEXES = {

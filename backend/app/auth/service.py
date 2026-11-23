@@ -7,6 +7,7 @@ from typing import Any
 
 from psycopg.errors import UniqueViolation
 
+from ..whatsapp import config as whatsapp_config, contacts as whatsapp_contacts
 from . import security
 from .config import (
     ACTIVATION_DAYS,
@@ -246,15 +247,57 @@ def _next_activation_step(database, user) -> str:
 
 def login(identifier: str, password: str, ip: str, user_agent: str):
     identifier = identifier.strip().lower()
-    hashed_identifier = security.identifier_hash(identifier)
+    phone_key = None
+    if whatsapp_config.enabled() and identifier.startswith("+"):
+        try:
+            phone = whatsapp_contacts.normalize_phone(identifier)
+        except AuthError:
+            pass  # A verified email address may also start with '+'.
+        else:
+            phone_key = whatsapp_contacts.phone_lookup_key(phone)
+    submitted_key = phone_key or security.identifier_hash(identifier)
+
     with connection() as database:
+        if phone_key:
+            user = database.execute(
+                """
+                SELECT u.* FROM auth.users u
+                JOIN app.whatsapp_contacts c ON c.user_id = u.id
+                WHERE c.phone_key = %s AND u.status = 'active' AND u.email_verified_at IS NOT NULL
+                FOR UPDATE OF u
+                """,
+                (phone_key,),
+            ).fetchone()
+            # Number replacement locks the same account. Recheck the binding
+            # in case it changed while this transaction waited for that lock.
+            if user and not database.execute(
+                "SELECT 1 FROM app.whatsapp_contacts WHERE user_id = %s AND phone_key = %s",
+                (user["id"], phone_key),
+            ).fetchone():
+                user = None
+        else:
+            user = database.execute(
+                """
+                SELECT * FROM auth.users
+                WHERE user_id = %s OR (email = %s AND email_verified_at IS NOT NULL)
+                FOR UPDATE
+                """,
+                (identifier, identifier),
+            ).fetchone()
+
+        # Share the attempt limit across account identifiers and count older
+        # attempts recorded under the verified email before this change.
+        account_key = security.identifier_hash(user["user_id"]) if user else submitted_key
+        attempt_keys = {account_key}
+        if user and user["email_verified_at"] and user["email"]:
+            attempt_keys.add(security.identifier_hash(user["email"]))
         recent_failures = database.execute(
             """
             SELECT COUNT(*) AS count FROM auth.login_attempts
-            WHERE identifier_hash = %s AND succeeded = FALSE
+            WHERE identifier_hash = ANY(%s::char(64)[]) AND succeeded = FALSE
               AND attempted_at > NOW() - make_interval(mins => %s)
             """,
-            (hashed_identifier, LOGIN_WINDOW_MINUTES),
+            (list(attempt_keys), LOGIN_WINDOW_MINUTES),
         ).fetchone()["count"]
         if recent_failures >= LOGIN_MAX_FAILURES:
             raise AuthError(
@@ -262,13 +305,6 @@ def login(identifier: str, password: str, ip: str, user_agent: str):
                 429,
                 "rate_limited",
             )
-        user = database.execute(
-            """
-            SELECT * FROM auth.users
-            WHERE user_id = %s OR (email = %s AND email_verified_at IS NOT NULL)
-            """,
-            (identifier, identifier),
-        ).fetchone()
         password_valid = security.verify_password(
             password, user["password_hash"] if user else DUMMY_PASSWORD_HASH
         )
@@ -279,7 +315,7 @@ def login(identifier: str, password: str, ip: str, user_agent: str):
                 (id, identifier_hash, user_id, ip_address, succeeded)
             VALUES (%s, %s, %s, %s, %s)
             """,
-            (uuid.uuid4(), hashed_identifier, user["id"] if user else None, ip, valid),
+            (uuid.uuid4(), account_key, user["id"] if user else None, ip, valid),
         )
         if not valid:
             audit(database, "login_failed", user["id"] if user else None, ip=ip)
@@ -292,7 +328,7 @@ def login(identifier: str, password: str, ip: str, user_agent: str):
             # Persist the failed-attempt and lockout records before returning a
             # controlled authentication error from the surrounding transaction.
             database.commit()
-            raise AuthError("Incorrect User ID/email or password.", 401, "invalid_credentials")
+            raise AuthError("Incorrect sign-in details.", 401, "invalid_credentials")
         if user["status"] == "disabled":
             raise AuthError("This account is disabled. Contact the account operator.", 403, "disabled")
         if user["locked_until"] and user["locked_until"] > now():
@@ -306,7 +342,9 @@ def login(identifier: str, password: str, ip: str, user_agent: str):
         ):
             raise AuthError("The activation password has expired. Contact the account operator.", 403, "activation_expired")
         step = _next_activation_step(database, user)
-        scope = "mfa" if user["status"] == "active" and step == "complete" else "activation"
+        if phone_key and step != "complete":
+            raise AuthError("Incorrect sign-in details.", 401, "invalid_credentials")
+        scope = "mfa" if step == "complete" else "activation"
         step = "mfa_login" if scope == "mfa" else step
         audit(database, "primary_login_succeeded", user["id"], ip=ip)
     token = create_session(user["id"], scope, step, ip, user_agent)
@@ -414,6 +452,8 @@ def resend_email_verification(session):
 
 
 def verify_email_token(raw_token: str, current_session=None):
+    from ..whatsapp import contacts
+
     with connection() as database:
         record = database.execute(
             """
@@ -427,31 +467,31 @@ def verify_email_token(raw_token: str, current_session=None):
             """,
             (security.token_hash(raw_token),),
         ).fetchone()
-        if not record or record["target_email"] != record["pending_email"]:
+        if not record or record["status"] == "disabled" or record["target_email"] != record["pending_email"]:
             raise AuthError("This verification link is invalid or has expired.")
         database.execute("UPDATE auth.account_tokens SET used_at = NOW() WHERE id = %s", (record["token_id"],))
+        pending_phone = contacts.needs_setup(database, record["token_user_id"])
         database.execute(
             """
             UPDATE auth.users SET email = %s, pending_email = NULL,
-                email_verified_at = NOW(), status = 'active', updated_at = NOW()
+                email_verified_at = NOW(), status = %s, updated_at = NOW()
             WHERE id = %s
             """,
-            (record["target_email"], record["token_user_id"]),
+            (record["target_email"], "activating" if pending_phone else "active", record["token_user_id"]),
         )
         same_session = bool(
             current_session
             and current_session["user_id"] == record["token_user_id"]
             and current_session["scope"] == "activation"
         )
+        next_step = None
         if same_session:
-            database.execute(
-                "UPDATE auth.sessions SET scope = 'full', activation_step = NULL WHERE id = %s",
-                (current_session["id"],),
-            )
+            next_step = contacts.finish_authentication(database, record["token_user_id"], current_session["id"])
         audit(database, "email_verified", record["token_user_id"])
-        audit(database, "activation_completed", record["token_user_id"])
+        if not pending_phone:
+            audit(database, "activation_completed", record["token_user_id"])
         user = database.execute("SELECT * FROM auth.users WHERE id = %s", (record["token_user_id"],)).fetchone()
-        return public_user(user), same_session
+        return public_user(user), next_step == "complete", next_step
 
 
 def request_password_reset(identifier: str):
@@ -460,7 +500,7 @@ def request_password_reset(identifier: str):
         user = database.execute(
             """
             SELECT * FROM auth.users
-            WHERE status = 'active' AND email_verified_at IS NOT NULL
+            WHERE status IN ('active','activating') AND email_verified_at IS NOT NULL
               AND (user_id = %s OR email = %s)
             """,
             (identifier, identifier),
@@ -481,7 +521,7 @@ def reset_password(raw_token: str, new_password: str) -> None:
             JOIN auth.users u ON u.id = t.user_id
             WHERE t.token_hash = %s AND t.token_type = 'password_reset'
               AND t.used_at IS NULL AND t.expires_at > NOW()
-              AND u.status = 'active'
+              AND u.status IN ('active','activating') AND u.email_verified_at IS NOT NULL
             FOR UPDATE OF t, u
             """,
             (security.token_hash(raw_token),),

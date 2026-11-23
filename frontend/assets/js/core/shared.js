@@ -48,57 +48,17 @@
   }
 
   function fieldControl(field, defaults = {}, optionLabel = title) {
-    const wrapper = document.createElement("div");
-    wrapper.className = `field${field.type === "textarea" ? " full" : ""}`;
-    wrapper.dataset.field = field.id;
-
-    const label = document.createElement("label");
-    label.textContent = field.label || title(field.id);
-    label.htmlFor = field.id;
-    if (field.required) label.classList.add("required");
-
-    let input;
-    if (field.type === "select") {
-      input = document.createElement("select");
-      const placeholder = document.createElement("option");
-      placeholder.value = "";
-      placeholder.textContent = "Select";
-      input.append(placeholder);
-      (field.options || []).forEach((value) => {
-        const option = document.createElement("option");
-        option.value = value;
-        option.textContent = optionLabel(value);
-        input.append(option);
-      });
-    } else if (field.type === "textarea") {
-      input = document.createElement("textarea");
-    } else {
-      input = document.createElement("input");
-      input.type =
-        field.type === "boolean"
-          ? "checkbox"
-          : field.type === "date"
-            ? "date"
-            : "text";
-      if (field.type === "boolean") wrapper.classList.add("check");
-      if (["currency", "currency_rate", "number"].includes(field.type)) {
-        input.inputMode = "decimal";
-      }
-    }
-
-    input.id = field.id;
-    input.name = field.id;
-    input.required = Boolean(field.required);
     let value = field.default ?? defaults[field.id] ?? "";
-    if (input.type === "date") value = isoDate(value);
-    if (input.type === "checkbox") {
-      input.checked = String(value).toLowerCase() === "yes" || value === true;
-    } else {
-      input.value = value;
-      global.FormTabOrder?.mark(input);
-    }
-
-    wrapper.append(label, input);
+    if (field.type === "date") value = isoDate(value);
+    if (field.type === "boolean") value = String(value).toLowerCase() === "yes" || value === true;
+    const options = field.type === "select"
+      ? [{ value: "", label: "Select" }, ...(field.options || []).map(value => ({ value, label: optionLabel(value) }))]
+      : undefined;
+    const wrapper = global.ValuxUI.reportField({
+      id: field.id, label: field.label || title(field.id), type: field.type,
+      required: Boolean(field.required), value, options,
+    });
+    if (field.type !== "boolean") global.FormTabOrder?.mark(wrapper.lastElementChild);
     return wrapper;
   }
 

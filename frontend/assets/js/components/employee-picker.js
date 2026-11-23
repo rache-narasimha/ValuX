@@ -22,20 +22,15 @@
   function mount(host, options = {}) {
     const listId = `${host.id || "employee"}-options`;
     host.classList.add("employee-reference");
-    host.innerHTML = `<span class="employee-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg></span>
-      <input type="search" list="${listId}" autocomplete="off" placeholder="Search employee ID or name" aria-label="${options.label || "Assign to"}">
-      <datalist id="${listId}"></datalist>
-      <small class="employee-reference-help">Search by employee ID or name</small>`;
-    const input = host.querySelector("input");
-    const list = host.querySelector("datalist");
     const allowed = options.allowed || employees();
-    if (options.includeUnassigned) list.append(new Option("Leave unassigned", "Unassigned"));
-    allowed.forEach((employee) => list.append(new Option(employee.name, display(employee))));
-    if (options.value) {
-      const selected = employees().find((employee) => employee.name === options.value || employee.id === options.value);
-      input.value = display(selected);
-    }
-    input.required = Boolean(options.required);
+    const choices = allowed.map(employee => ({ label: employee.name, value: display(employee) }));
+    if (options.includeUnassigned) choices.unshift({ label: "Leave unassigned", value: "Unassigned" });
+    ValuxUI.paintEmployeePicker(host, {
+      listId, choices, label: options.label || "Assign to", required: Boolean(options.required),
+    });
+    const input = host.querySelector("input");
+    const selected = employees().find(employee => employee.name === options.value || employee.id === options.value);
+    input.value = display(selected);
 
     return {
       input,

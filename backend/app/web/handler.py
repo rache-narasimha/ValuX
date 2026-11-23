@@ -3,6 +3,7 @@
 import json
 import base64
 import hashlib
+import logging
 import mimetypes
 import os
 import re
@@ -12,13 +13,15 @@ import subprocess
 import time
 from datetime import date
 from functools import lru_cache
+from http import HTTPStatus
 from tempfile import TemporaryDirectory
 from zipfile import BadZipFile, ZipFile
 from io import BytesIO
-from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
+from anyio import from_thread
+from fastapi import Request, Response
 from openpyxl.utils.exceptions import InvalidFileException
 
 from ..auth import routes as auth_routes
@@ -40,12 +43,15 @@ from ..valuation.reports import generate_agricultural_docx, generate_docx, gener
 from ..valuation.schemas import agricultural_schema_payload, schema_payload, validate_report_values
 from ..workflow import routes as workflow_routes
 from ..workflow import service as workflow_service
+from ..whatsapp import outbox as whatsapp_outbox, webhook as whatsapp_webhook
 from .browser_security import response_headers, trusted_inline_script
 
 
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 ASSET_RELEASE = os.environ.get("K_REVISION", "")
 ASSET_RELEASE_PREFIX = "/assets/_release/"
+LOGGER = logging.getLogger(__name__)
+PRIVACY_PAGE = PAGES_DIR / "privacy.html"
 
 
 def valuation_schema_script(kind: str) -> bytes:
@@ -151,49 +157,96 @@ def validate_online_estimation(state):
             raise ValueError("Review the estimation floor configuration.")
 
 
-class Handler(BaseHTTPRequestHandler):
-    server_version = "ValuX"
-    sys_version = ""
+class Handler:
+    """Adapt the existing ValuX routes to one FastAPI request and response."""
+
+    def __init__(self, request: Request):
+        self.request = request
+        self.headers = request.headers
+        self.client_address = request.client or ("", 0)
+        scope = request.scope
+        raw_path = scope.get("raw_path")
+        path = raw_path.decode("latin-1") if raw_path is not None else quote(scope["path"])
+        if path.startswith("//"):
+            path = "/" + path.lstrip("/")
+        query = scope["query_string"].decode("latin-1")
+        self.path = f"{path}?{query}" if query else path
+        self.response: Response | None = None
+        self._browser_nonce: str | None = None
+
+    def dispatch(self) -> Response:
+        routes = {"GET": self.do_GET, "HEAD": self.do_HEAD, "POST": self.do_POST, "DELETE": self.do_DELETE}
+        routes[self.request.method]()
+        if self.response is None:
+            raise RuntimeError("A ValuX route returned without a response")
+        return self.response
+
+    def read_body(self, size: int) -> bytes:
+        # Callers check their own size and session requirements before reading.
+        # Return to the event loop only to receive bytes from the ASGI server.
+        return from_thread.run(self._read_body, size) if size > 0 else b""
+
+    async def _read_body(self, size: int) -> bytes:
+        body = BytesIO()
+        async for chunk in self.request.stream():
+            if body.tell() + len(chunk) > size:
+                raise ValueError("Invalid request length.")
+            body.write(chunk)
+        if body.tell() != size:
+            raise ValueError("Invalid request length.")
+        return body.getvalue()
 
     def _response_nonce(self):
-        if not getattr(self, "_browser_nonce", None):
+        if self._browser_nonce is None:
             self._browser_nonce = secrets.token_urlsafe(24)
         return self._browser_nonce
 
-    def end_headers(self):
-        for name, value in response_headers(self._response_nonce(), secure_transport=COOKIE_SECURE):
-            self.send_header(name, value)
-        super().end_headers()
-        self._browser_nonce = None
+    def _send(self, status, body=b"", headers=()):
+        response = Response(body, status_code=status)
+        # Keep repeated fields, particularly session and CSRF Set-Cookie values.
+        security_headers = response_headers(self._response_nonce(), secure_transport=COOKIE_SECURE)
+        for name, value in [("Server", "ValuX"), *headers, *security_headers]:
+            if name.lower() == "content-length":
+                response.headers[name] = value
+            else:
+                response.headers.append(name, value)
+        self.response = response
+        return response
 
     def send_json(self, payload, status=200, headers=None):
         data = json.dumps(payload).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Cache-Control", "no-store")
-        for name, value in headers or []:
-            self.send_header(name, value)
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+        self._send(status, data, [
+            ("Content-Type", "application/json"), ("Cache-Control", "no-store"), *(headers or ()),
+        ])
 
     def send_file(self, file_path, cache="no-store", data=None, headers=None):
         content = file_path.read_bytes() if data is None else data
-        self.send_response(200)
-        self.send_header("Content-Type", mimetypes.guess_type(file_path.name)[0] or "application/octet-stream")
-        self.send_header("Cache-Control", cache)
-        for name, value in headers or []:
-            self.send_header(name, value)
-        self.send_header("Content-Length", str(len(content)))
-        self.end_headers()
-        self.wfile.write(content)
+        self._send(200, content, [
+            ("Content-Type", mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"),
+            ("Cache-Control", cache), *(headers or ()),
+        ])
 
     def send_redirect(self, location, status=303):
-        self.send_response(status)
-        self.send_header("Location", location)
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Length", "0")
-        self.end_headers()
+        self._send(status, headers=[("Location", location), ("Cache-Control", "no-store")])
+
+    def send_error(self, status) -> Response:
+        description = HTTPStatus(status)
+        body = (
+            '<!DOCTYPE HTML>\n<html lang="en">\n'
+            '    <head>\n        <meta charset="utf-8">\n'
+            '        <title>Error response</title>\n    </head>\n    <body>\n'
+            f'        <h1>Error response</h1>\n        <p>Error code: {status}</p>\n'
+            f'        <p>Message: {description.phrase}.</p>\n'
+            f'        <p>Error code explanation: {status} - {description.description}.</p>\n'
+            '    </body>\n</html>\n'
+        ).encode("utf-8")
+        return self._send(
+            status, b"" if self.request.method == "HEAD" else body,
+            [("Content-Type", "text/html;charset=utf-8"), ("Content-Length", str(len(body)))],
+        )
+
+    def log_error(self, message, *args):
+        LOGGER.error(message, *args)
 
     def send_internal_error(self, error, message):
         """Log operational details server-side without exposing them to the browser."""
@@ -201,8 +254,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json({"ok": False, "error": message}, 500)
 
     def do_HEAD(self):
-        """Support lightweight availability checks for retained report files."""
+        """Support availability checks for the privacy policy and retained files."""
         path = urlparse(self.path).path
+        if path == "/privacy":
+            self.send_file(PRIVACY_PAGE, data=b"", headers=[
+                ("Content-Length", str(PRIVACY_PAGE.stat().st_size)),
+            ])
+            return
         if not path.startswith("/downloads/"):
             self.send_error(404)
             return
@@ -218,14 +276,20 @@ class Handler(BaseHTTPRequestHandler):
         if not file_path.exists() or not file_path.is_file():
             self.send_error(404)
             return
-        self.send_response(200)
-        self.send_header("Content-Type", report_content_type(file_path))
-        self.send_header("Content-Length", str(file_path.stat().st_size))
-        self.end_headers()
+        self._send(200, headers=[
+            ("Content-Type", report_content_type(file_path)),
+            ("Content-Length", str(file_path.stat().st_size)),
+        ])
 
     def do_GET(self):
         path = urlparse(self.path).path
         try:
+            if path == "/privacy":
+                self.send_file(PRIVACY_PAGE)
+                return
+            if path == whatsapp_webhook.PATH:
+                whatsapp_webhook.verify_callback(self)
+                return
             if re.fullmatch(r"/google[0-9a-f]{16}\.html", path):
                 proof = PAGES_DIR / path[1:]
                 if proof.is_file():
@@ -259,6 +323,14 @@ class Handler(BaseHTTPRequestHandler):
             session = auth_routes.require_full_session(
                 self, role="father" if path.startswith("/settings/") else None
             )
+            if path.startswith("/alerts/assignment/"):
+                reference = path.removeprefix("/alerts/assignment/")
+                task = whatsapp_outbox.task_reference(reference, session["user_id"])
+                if task:
+                    self.send_redirect(f"/tasks/detail?id={quote(task, safe='')}")
+                else:
+                    self.send_error(404)
+                return
             if path == "/api/schema":
                 self.send_json(schema_payload())
                 return
@@ -274,12 +346,10 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_error(404)
                     return
                 data = file_path.read_bytes()
-                self.send_response(200)
-                self.send_header("Content-Type", report_content_type(file_path))
-                self.send_header("Content-Disposition", f'attachment; filename="{file_path.name}"')
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
+                self._send(200, data, [
+                    ("Content-Type", report_content_type(file_path)),
+                    ("Content-Disposition", f'attachment; filename="{file_path.name}"'),
+                ])
                 return
             if path.startswith("/previews/"):
                 file_path = OUTPUT_DIR / Path(unquote(path)).name
@@ -377,6 +447,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         request_path = urlparse(self.path).path
+        if request_path == whatsapp_webhook.PATH:
+            whatsapp_webhook.receive_callback(self)
+            return
         if auth_routes.handle_post(self, request_path):
             return
         if report_routes.handle_post(self, request_path):
@@ -414,7 +487,7 @@ class Handler(BaseHTTPRequestHandler):
             size = int(self.headers.get("Content-Length", "0"))
             if size > 60 * 1024 * 1024:
                 raise ValueError("Upload is too large. Please reduce the photo file sizes.")
-            payload = json.loads(self.rfile.read(size))
+            payload = json.loads(self.read_body(size))
             task_code = task_code_from(self, payload)
             if task_code:
                 auth_routes.verify_csrf(self)
@@ -535,7 +608,7 @@ class Handler(BaseHTTPRequestHandler):
             size = int(self.headers.get("Content-Length", "0"))
             if size > 20 * 1024 * 1024:
                 raise ValueError("The estimation form payload is too large.")
-            payload = json.loads(self.rfile.read(size))
+            payload = json.loads(self.read_body(size))
             task_code = task_code_from(self, payload)
             if task_code:
                 auth_routes.verify_csrf(self)
@@ -637,7 +710,7 @@ class Handler(BaseHTTPRequestHandler):
             size = int(self.headers.get("Content-Length", "0"))
             if size <= 0 or size > 36 * 1024 * 1024:
                 raise ValueError("Select a completed report up to 25 MB.")
-            raw = self.rfile.read(size)
+            raw = self.read_body(size)
             metadata = {}
             if "application/json" in self.headers.get("Content-Type", ""):
                 metadata = json.loads(raw)
@@ -723,7 +796,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Select the completed report file to attach.")
             if size > 25 * 1024 * 1024:
                 raise ValueError("The report file is larger than the 25 MB limit.")
-            content = self.rfile.read(size)
+            content = self.read_body(size)
             if institution == "kvb":
                 file_name = safe_upload_name(self.headers.get("X-File-Name"), {".xlsx"}, "completed-kvb-valuation.xlsx")
                 if len(content) < 4 or content[:2] != b"PK":
@@ -796,7 +869,7 @@ class Handler(BaseHTTPRequestHandler):
             size = int(self.headers.get("Content-Length", "0"))
             if size <= 0 or size > 25 * 1024 * 1024:
                 raise ValueError("Select a DOCX or PDF report up to 25 MB.")
-            content = self.rfile.read(size)
+            content = self.read_body(size)
             file_name = safe_upload_name(self.headers.get("X-File-Name"), {".docx", ".pdf"}, "completed-valuation-report.pdf")
             suffix = Path(file_name).suffix.lower()
             if suffix == ".pdf" and not content.startswith(b"%PDF-"):
@@ -886,7 +959,7 @@ class Handler(BaseHTTPRequestHandler):
             size = int(self.headers.get("Content-Length", "0"))
             if size > 60 * 1024 * 1024:
                 raise ValueError("Upload is too large. Please reduce the photograph file sizes.")
-            payload = json.loads(self.rfile.read(size))
+            payload = json.loads(self.read_body(size))
             if not isinstance(payload, dict):
                 raise ValueError("The progress/completion report data is missing.")
             task_code = task_code_from(self, payload)
@@ -974,7 +1047,7 @@ class Handler(BaseHTTPRequestHandler):
             size = int(self.headers.get("Content-Length", "0"))
             if size <= 0 or size > 5 * 1024 * 1024:
                 raise ValueError("The export request is empty or too large.")
-            payload = json.loads(self.rfile.read(size))
+            payload = json.loads(self.read_body(size))
             exported = generate_table_export(payload)
             self.send_file(
                 Path(exported.file_name),

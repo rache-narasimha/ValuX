@@ -84,6 +84,11 @@ html[data-theme="dark"] .auth-story {
 
 .auth-promise { width: 100%; }
 
+.auth-footnote a {
+  color: var(--auth-ink);
+  text-underline-offset: 0.15em;
+}
+
 .auth-access {
   position: relative;
   display: grid;

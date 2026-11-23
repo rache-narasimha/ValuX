@@ -18,11 +18,13 @@ from backend.app.auth import security, service
 from backend.app.auth.config import EMAIL_MODE
 from backend.app.auth.database import connection
 from backend.app.auth.service import provision_user
+from backend.app.whatsapp import config as whatsapp_config
 
 
 APP = "http://localhost:4173"
 MAILPIT = "http://mailpit:8025"
 PREFIX = f"qa{uuid.uuid4().hex[:8]}"
+TEST_NUMBER_SEED = int(PREFIX[-4:], 16) % 40
 
 if EMAIL_MODE != "mailpit":
     print("SKIP: authentication email-flow regression requires EMAIL_MODE=mailpit")
@@ -100,6 +102,92 @@ def token_from(text: str, marker: str) -> str:
     return match.group(1).strip()
 
 
+def test_number(offset):
+    return f"+120255501{TEST_NUMBER_SEED * 2 + offset:02d}"
+
+
+def whatsapp_code(number):
+    assert whatsapp_config.MODE == "mock", "Never send test codes through the live provider"
+    code = mail_text(
+        "whatsapp-verification@valux.test", f"Local WhatsApp test code for number ending {number[-4:]}"
+    ).strip()
+    assert re.fullmatch("[0-9]{6}", code)
+    return code
+
+
+def verify_whatsapp(browser, number, *, alerts, authenticator=None):
+    payload = {"number": number, "alerts": alerts, "requestCode": True}
+    if authenticator:
+        payload["authenticator"] = authenticator
+    result = browser.post("/api/auth/whatsapp/start", payload)
+    assert result["ending"] == number[-4:] and "code" not in result
+    assert browser.get_json("/api/auth/whatsapp")["pendingEnding"] == number[-4:]
+    browser.post("/api/auth/whatsapp/start", payload, expected=429)
+    code = whatsapp_code(number)
+    wrong = "000000" if code != "000000" else "000001"
+    assert browser.post("/api/auth/whatsapp/confirm", {"code": wrong}, expected=400)["code"] == "invalid_whatsapp_code"
+    assert browser.post("/api/auth/whatsapp/confirm", {"code": code})["next"] == "complete"
+    browser.post("/api/auth/whatsapp/confirm", {"code": code}, expected=400)
+    state = browser.get_json("/api/auth/whatsapp")
+    assert state["verified"] and state["ending"] == number[-4:] and state["alerts"] is alerts
+    assert number not in json.dumps(state)
+
+
+def sign_in_with_mobile(number, password, secret):
+    browser = Browser()
+    assert browser.context()["mobileSignInEnabled"] is True
+    assert browser.post("/api/auth/login", {"identifier": number, "password": password})["next"] == "mfa_login"
+    assert browser.get_error("/api/auth/me", 403)["code"] == "forbidden"
+    assert browser.post("/api/auth/mfa/verify", {"code": security.totp_code(secret)})["next"] == "complete"
+    return browser
+
+
+def verify_existing_whatsapp():
+    login = PREFIX + "existing"
+    password = strong_password()
+    provision_user(login, "Existing WhatsApp fixture", "employee", password, actor="integration-test")
+    secret = security.new_totp_secret()
+    with connection() as database:
+        identifier = database.execute(
+            "UPDATE auth.users SET status='active', must_change_password=FALSE, email=%s, "
+            "email_verified_at=NOW() WHERE user_id=%s RETURNING id", (login + "@valux.test", login),
+        ).fetchone()["id"]
+        database.execute(
+            "INSERT INTO auth.mfa_credentials (user_id,secret_encrypted,confirmed_at) VALUES (%s,%s,NOW())",
+            (identifier, security.encrypt_secret(secret)),
+        )
+    browser = Browser()
+    browser.context()
+    assert browser.post("/api/auth/login", {"identifier": login, "password": password})["next"] == "mfa_login"
+    assert browser.post("/api/auth/mfa/verify", {"code": security.totp_code(secret)})["next"] == "whatsapp_setup"
+    assert browser.get_error("/api/auth/me", 401)["code"] == "whatsapp_required"
+    number = f"+120255501{80 + TEST_NUMBER_SEED % 10}"
+    mobile = Browser()
+    mobile.context()
+    assert mobile.post("/api/auth/login", {"identifier": number, "password": password}, expected=401)["code"] == "invalid_credentials"
+    verify_whatsapp(browser, number, alerts=False)
+    assert browser.get_json("/api/auth/me")["user"]["userId"] == login
+
+    formatted_number = f"+1 (202) 555-{number[-4:]}"
+    mobile = sign_in_with_mobile(formatted_number, password, secret)
+    assert mobile.get_json("/api/auth/me")["user"]["userId"] == login
+    assert mobile.get_json("/api/auth/whatsapp")["alerts"] is False
+    mobile.post("/api/auth/logout", {})
+    mobile.context()
+
+    # Seeds an older failure recorded under the email identifier.
+    with connection() as database:
+        database.execute(
+            "INSERT INTO auth.login_attempts (id, identifier_hash, user_id, ip_address, succeeded) "
+            "VALUES (%s, %s, %s, '127.0.0.1', FALSE)",
+            (uuid.uuid4(), security.identifier_hash(login + "@valux.test"), identifier),
+        )
+    for alias in (login, login + "@valux.test", number, formatted_number):
+        assert mobile.post("/api/auth/login", {"identifier": alias, "password": "incorrect"}, expected=401)["code"] == "invalid_credentials"
+    for alias in (formatted_number, login, login + "@valux.test"):
+        assert mobile.post("/api/auth/login", {"identifier": alias, "password": password}, expected=429)["code"] == "rate_limited"
+
+
 def activate(role: str):
     user_id = f"{PREFIX}{'f' if role == 'father' else 'e'}"
     email = f"{user_id}@valux.test"
@@ -107,7 +195,7 @@ def activate(role: str):
     permanent = strong_password()
     provision_user(user_id, f"QA {role.title()}", role, temporary, actor="integration-test")
     browser = Browser()
-    browser.context()
+    assert browser.context()["mobileSignInEnabled"] is whatsapp_config.enabled()
     assert browser.post("/api/auth/login", {"identifier": user_id, "password": temporary})["next"] == "change_password"
     assert browser.post("/api/auth/change-password", {"password": permanent})["next"] == "mfa_setup"
     setup = browser.post("/api/auth/mfa/setup", {})
@@ -119,7 +207,12 @@ def activate(role: str):
         mail_text(email, "Verify your ValuX recovery email"), "#verify-email="
     )
     verified = browser.post("/api/auth/email/verify", {"token": verification})
-    assert verified["signedIn"] is True
+    if whatsapp_config.REQUIRE_VERIFICATION:
+        assert verified["signedIn"] is False and verified["next"] == "whatsapp_setup"
+        assert browser.get_error("/api/auth/me", 401)["code"] == "whatsapp_required"
+        verify_whatsapp(browser, test_number(0 if role == "father" else 1), alerts=role == "father")
+    else:
+        assert verified["signedIn"] is True
     assert browser.get_json("/api/auth/me")["user"]["role"] == role
     return browser, user_id, email, permanent, recovery_codes
 
@@ -150,6 +243,34 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 try:
     father, father_id, father_email, father_password, recovery_codes = activate("father")
+    if whatsapp_config.REQUIRE_VERIFICATION:
+        father.post("/api/auth/whatsapp/opt-out", {})
+        assert father.get_json("/api/auth/whatsapp")["alerts"] is False
+        assert father.get_json("/api/auth/me")["user"]["role"] == "father"
+        mobile = sign_in_with_mobile(test_number(0), father_password, current_totp_secret(father_id))
+        assert mobile.get_json("/api/auth/whatsapp")["alerts"] is False
+        mobile.post("/api/auth/logout", {})
+        with connection() as database:
+            database.execute(
+                "UPDATE app.whatsapp_challenges SET sent_at=NOW()-INTERVAL '2 minutes' WHERE user_id="
+                "(SELECT id FROM auth.users WHERE user_id=%s)", (father_id,),
+            )
+        replacement_number = f"+120255501{90 + TEST_NUMBER_SEED % 10}"
+        father.post("/api/auth/whatsapp/start", {
+            "number": replacement_number, "requestCode": True, "alerts": True, "authenticator": "invalid",
+        }, expected=400)
+        verify_whatsapp(
+            father, replacement_number, alerts=True, authenticator=security.totp_code(current_totp_secret(father_id)),
+        )
+        mobile = Browser()
+        mobile.context()
+        assert mobile.post("/api/auth/login", {"identifier": test_number(0), "password": father_password}, expected=401)["code"] == "invalid_credentials"
+        mobile = sign_in_with_mobile(replacement_number, father_password, current_totp_secret(father_id))
+        assert mobile.get_json("/api/auth/me")["user"]["userId"] == father_id
+        mobile.post("/api/auth/logout", {})
+        verify_existing_whatsapp()
+        print("PASS: mandatory WhatsApp setup, optional consent, wrong and replayed codes, opt-out, and authenticated number replacement")
+        print("PASS: verified mobile sign-in requires MFA, survives opting out, and shares password attempt limits")
     with father.opener.open(APP + "/settings/institutions", timeout=10) as response:
         assert response.status == 200
     father.post("/api/auth/logout", {})

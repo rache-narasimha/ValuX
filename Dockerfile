@@ -1,6 +1,13 @@
 # An optional named build context supplies verified wheels for offline builds.
 FROM scratch AS wheelhouse
 
+FROM --platform=$BUILDPLATFORM node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS frontend-build
+WORKDIR /ui
+COPY frontend/ui/package.json frontend/ui/package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY frontend/ui/ ./
+RUN npm run build
+
 FROM ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db AS python-build
 
 RUN apt-get update \
@@ -79,6 +86,7 @@ RUN /opt/python/bin/python3 -m pip uninstall --yes pip \
 
 COPY backend /app/backend
 COPY frontend /app/frontend
+COPY --from=frontend-build /assets/built /app/frontend/assets/built
 COPY resources /app/resources
 
 ARG VALUX_SOURCE_FINGERPRINT
